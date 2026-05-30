@@ -32,11 +32,11 @@
       USE IOUNT1, ONLY                :  WRT_ERR, ERR,     F06,     SEQ,     L1B
       USE IOUNT1, ONLY                :  WRT_ERR, SEQFIL
       USE IOUNT1, ONLY                :  WRT_ERR, SEQSTAT
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, DATA_NAM_LEN, FATAL_ERR, NGRID, NSEQ, PROG_NAME, WARN_ERR
-      USE PARAMS, ONLY                :  EPSIL, GRIDSEQ
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, DATA_NAM_LEN, FATAL_ERR, NELE, NGRID, NSEQ, PROG_NAME, WARN_ERR
+      USE PARAMS, ONLY                :  BANDEDOPT, EPSIL, GRIDSEQ, SOLLIB
       USE TIMDAT, ONLY                :  TSEC
       USE PARAMS, ONLY                :  SUPINFO, SUPWARN
-      USE MODEL_STUF, ONLY            :  GRID_ID, GRID_SEQ, INV_GRID_SEQ, SEQ1, SEQ2
+      USE MODEL_STUF, ONLY            :  ETYPE, GRID_ID, GRID_SEQ, INV_GRID_SEQ, SEQ1, SEQ2
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
 
       USE SEQ_PROC_USE_IFs
@@ -49,20 +49,32 @@
       INTEGER(LONG)                   :: I,J               ! DO loop indices
       INTEGER(LONG)                   :: IERROR            ! Error count
       INTEGER(LONG)                   :: IGRID             ! Internal grid ID
-      INTEGER(LONG)                   :: TMP_GRID_ID(NGRID)! Set to array GRID_ID for aid in sorting GRID_SEQ
-      INTEGER(LONG)                   :: TMP_GRD_SEQ(NGRID)! Set to array GRID_SEQ so we can sort it and get array INV_GRID_SEQ
+      INTEGER(LONG)                   :: NSEQ_SAVE         ! Save of incoming SEQ count (for diagnostics)
+      INTEGER(LONG), ALLOCATABLE      :: TMP_GRID_ID(:)    ! Set to array GRID_ID for aid in sorting GRID_SEQ
+      INTEGER(LONG), ALLOCATABLE      :: TMP_GRD_SEQ(:)    ! Set to array GRID_SEQ so we can sort it and get array INV_GRID_SEQ
 !                                                            without disturbing GRID_SEQ sequence
 
 
-      REAL(DOUBLE)                    :: R_GSEQ(NGRID)     ! Real sequence numbers (since SEQGP cards can have real no's). In the
+      REAL(DOUBLE), ALLOCATABLE       :: R_GSEQ(:)         ! Real sequence numbers (since SEQGP cards can have real no's). In the
 !                                                            end, the sequence array that will be used is integer array GRID_SEQ
 
       INTRINSIC                       :: DBLE
+      LOGICAL                         :: DO_RCM            ! Activate in-core RCM sequencing add-on
+      LOGICAL                         :: RCM_OK            ! True if RCM graph build/order succeeded
 
 
 
 ! **********************************************************************************************************************************
 ! Coming in to this subr, GRID_SEQ is in the order of the grids as read in the input data deck.
+
+      ALLOCATE ( R_GSEQ(NGRID), TMP_GRID_ID(NGRID), TMP_GRD_SEQ(NGRID) )
+      NSEQ_SAVE = NSEQ
+      DO_RCM = .FALSE.
+      RCM_OK = .FALSE.
+
+      IF ((GRIDSEQ(1:3) == 'RCM') .OR. ((BANDEDOPT == 'Y') .AND. (SOLLIB == 'BANDED  ') .AND. (GRIDSEQ(1:6) /= 'BANDIT'))) THEN
+         DO_RCM = .TRUE.
+      ENDIF
 
 ! Generate initial R_GSEQ based on the GRID_SEQ value. R_GSEQ(I) is  the (real) sequence number for Grid Point GRID_ID(I).
 ! If there are no SEQGP sequencing cards, then this will be the final grid point sequence order (as a real number).
@@ -72,30 +84,48 @@
 !       resequencing is necessary) and then proceed with that complete set of SEQGP cards. Need to do it this way because we have to
 !       get INV_GRID_SEQ (later) and to write the seq arrays to L1B.
 
-      IF       (GRIDSEQ(1:6) == 'BANDIT') THEN             ! Call subr AUTO_SEQ_PROC to generate SEQ1, SEQ2 from SEQGP card images
-         CALL AUTO_SEQ_PROC
-         IF (NSEQ == NGRID) THEN                           ! Bandit did reseq grids. Set R_GSEQ to the SEQ2 from Bandit SEQGP cards
-            DO I=1,NGRID
-!              R_GSEQ(I) = DBLE(SEQ2(I))                   ! Shouldn't need this, SEQ2 is REAL(DOUBLE)
-               R_GSEQ(I) = SEQ2(I)
-            ENDDO
-         ELSE                                              ! AUTO_SEQ_PROC didn't reseq all grids so reset GRIDSEQ = 'GRID'
-            WRITE(ERR,101) NGRID,NSEQ,PROG_NAME
+      IF (DO_RCM) THEN
+         CALL RCM_SEQ_PROC ( R_GSEQ, RCM_OK )
+         IF (RCM_OK) THEN
+            NSEQ = 0
+            WRITE(ERR,102) NGRID, NSEQ_SAVE, GRIDSEQ, BANDEDOPT, SOLLIB
             IF (SUPINFO == 'N') THEN
-               WRITE(F06,101) NGRID,NSEQ,PROG_NAME
+               WRITE(F06,102) NGRID, NSEQ_SAVE, GRIDSEQ, BANDEDOPT, SOLLIB
             ENDIF
-            GRIDSEQ = 'GRID    '                           ! Need this to cover case where AUTO_SEQ_PROC returned without completing
+         ELSE
+            WRITE(ERR,103) GRIDSEQ, BANDEDOPT, SOLLIB
+            IF (SUPINFO == 'N') THEN
+               WRITE(F06,103) GRIDSEQ, BANDEDOPT, SOLLIB
+            ENDIF
          ENDIF
       ENDIF
 
-      IF (GRIDSEQ(1:4) == 'GRID'  ) THEN                   ! Sequence grids in numerical order, but include SEQGP entries (later)
-         DO I=1,NGRID
-            R_GSEQ(I) = DBLE(I)
-         ENDDO
-      ELSE IF (GRIDSEQ(1:5) == 'INPUT')  THEN              ! Sequence grids in input order, but include SEQGP entries (later)
-         DO I=1,NGRID
-           R_GSEQ(I) = DBLE(GRID_SEQ(I))
-         ENDDO
+      IF (.NOT. RCM_OK) THEN
+         IF       (GRIDSEQ(1:6) == 'BANDIT') THEN             ! Call subr AUTO_SEQ_PROC to generate SEQ1, SEQ2 from SEQGP card images
+            CALL AUTO_SEQ_PROC
+            IF (NSEQ == NGRID) THEN                           ! Bandit did reseq grids. Set R_GSEQ to the SEQ2 from Bandit SEQGP cards
+               DO I=1,NGRID
+!                 R_GSEQ(I) = DBLE(SEQ2(I))                   ! Shouldn't need this, SEQ2 is REAL(DOUBLE)
+                  R_GSEQ(I) = SEQ2(I)
+               ENDDO
+            ELSE                                              ! AUTO_SEQ_PROC didn't reseq all grids so reset GRIDSEQ = 'GRID'
+               WRITE(ERR,101) NGRID,NSEQ,PROG_NAME
+               IF (SUPINFO == 'N') THEN
+                  WRITE(F06,101) NGRID,NSEQ,PROG_NAME
+               ENDIF
+               GRIDSEQ = 'GRID    '                           ! Need this to cover case where AUTO_SEQ_PROC returned without completing
+            ENDIF
+         ENDIF
+
+         IF (GRIDSEQ(1:4) == 'GRID'  ) THEN                   ! Sequence grids in numerical order, but include SEQGP entries (later)
+            DO I=1,NGRID
+               R_GSEQ(I) = DBLE(I)
+            ENDDO
+         ELSE IF ((GRIDSEQ(1:5) == 'INPUT') .OR. (GRIDSEQ(1:3) == 'RCM'))  THEN
+            DO I=1,NGRID
+              R_GSEQ(I) = DBLE(GRID_SEQ(I))
+            ENDDO
+         ENDIF
       ENDIF
 
 ! Check to make sure that all grid points on SEQGP cards are defined
@@ -236,11 +266,28 @@
 
 
 
+      IF (ALLOCATED(R_GSEQ)) THEN
+         DEALLOCATE ( R_GSEQ )
+      ENDIF
+      IF (ALLOCATED(TMP_GRID_ID)) THEN
+         DEALLOCATE ( TMP_GRID_ID )
+      ENDIF
+      IF (ALLOCATED(TMP_GRD_SEQ)) THEN
+         DEALLOCATE ( TMP_GRD_SEQ )
+      ENDIF
+
       RETURN
 
 ! **********************************************************************************************************************************
   101 FORMAT(' *INFORMATION: SUBR AUTO_SEQ_PROC DID NOT SEQUENCE ALL OF THE ',I8,' GRIDS. ONLY ',I8,' GRIDS WERE SEQUENCED.'       &
                   ,/,15X,A,' WILL DEFAULT TO A SEQUENCE THAT IS IN GRID NUMERICAL ORDER',/)
+! --- BANDED_optimizisation -begin-- !
+  102 FORMAT(' *INFORMATION: IN-CORE RCM GRID SEQUENCING APPLIED TO ',I8,' GRIDS (IGNORED ',I8,' INPUT/AUTO SEQGP ENTRY(IES)).'    &
+                  ,/,15X,' PARAM GRIDSEQ=',A8,' BANDEDOPT=',A1,' SOLLIB=',A8                                                    &
+                  ,/,15X,' RCM UPDATES GRID_SEQ/INV_GRID_SEQ BEFORE DOF NUMBERING, SO MASS AND STIFFNESS MATRICES SHARE ORDER.')
+! --- BANDED_optimizisation -end-- !
+  103 FORMAT(' *WARNING    : IN-CORE RCM SEQUENCING REQUESTED BUT A VALID CONNECTIVITY GRAPH COULD NOT BE BUILT.'                  &
+                  ,/,15X,' FALLING BACK TO EXISTING GRIDSEQ FLOW. PARAM GRIDSEQ=',A8,' BANDEDOPT=',A1,' SOLLIB=',A8)
 
   111 FORMAT(56X,'GRID SEQUENCE DATA',//16X,'GRID ID                  I                   R_GSEQ(I)               GRID_SEQ(I)   ', &
                  '     INV_GRID_SEQ(I)',/,12X,'(Actual grid ID)    (Internal grid ID)     (Grid seq - real num)',                  &
@@ -265,6 +312,252 @@
 ! ##################################################################################################################################
 
       CONTAINS
+
+! ##################################################################################################################################
+
+      SUBROUTINE RCM_SEQ_PROC ( R_GSEQ, RCM_OK )
+
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, medat0_cuserin, MELGP, NELE, NGRID
+      USE MODEL_STUF, ONLY            :  EDAT, ELGP, EPNT, ETYPE, GRID_ID
+      USE PARAMS, ONLY                :  EPSIL
+      USE SEQ_PROC_USE_IFs
+
+      IMPLICIT NONE
+
+      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME_RCM = 'RCM_SEQ_PROC'
+      CHARACTER(8*BYTE)               :: TYPE_E
+
+      REAL(DOUBLE), INTENT(OUT)       :: R_GSEQ(NGRID)
+      LOGICAL, INTENT(OUT)            :: RCM_OK
+
+      INTEGER(LONG)                   :: ASTAT
+      INTEGER(LONG)                   :: DELTA
+      INTEGER(LONG)                   :: E
+      INTEGER(LONG)                   :: EPNTK
+      INTEGER(LONG)                   :: I
+      INTEGER(LONG)                   :: IDX
+      INTEGER(LONG)                   :: J
+      INTEGER(LONG)                   :: K
+      INTEGER(LONG)                   :: MIN_DEG
+      INTEGER(LONG)                   :: NG
+      INTEGER(LONG)                   :: NODE
+      INTEGER(LONG)                   :: ORDER_LEN
+      INTEGER(LONG)                   :: P
+      INTEGER(LONG)                   :: START_NODE
+      INTEGER(LONG)                   :: STAMP
+      INTEGER(LONG)                   :: TAIL
+      INTEGER(LONG)                   :: HEAD
+      INTEGER(LONG)                   :: TOTAL_INC
+      INTEGER(LONG)                   :: GRID_ROW_NUM
+      INTEGER(LONG)                   :: NBR_LEN
+      INTEGER(LONG)                   :: COMP_LEN
+      INTEGER(LONG)                   :: NBR_NODE
+      INTEGER(LONG)                   :: NSEQ_LOC
+      INTEGER(LONG)                   :: TMP
+      INTEGER(LONG)                   :: TMP_DEG
+      INTEGER(LONG)                   :: ELROW
+
+      INTEGER(LONG), ALLOCATABLE      :: ELEM_NGP(:)
+      INTEGER(LONG), ALLOCATABLE      :: ELEM_BGRID(:,:)
+      INTEGER(LONG), ALLOCATABLE      :: NODE_ELEM_CNT(:)
+      INTEGER(LONG), ALLOCATABLE      :: NODE_ELEM_PTR(:)
+      INTEGER(LONG), ALLOCATABLE      :: NODE_ELEM_WRK(:)
+      INTEGER(LONG), ALLOCATABLE      :: NODE_ELEM_LIST(:)
+      INTEGER(LONG), ALLOCATABLE      :: DEGREE(:)
+      INTEGER(LONG), ALLOCATABLE      :: MARK(:)
+      INTEGER(LONG), ALLOCATABLE      :: ORDER(:)
+      INTEGER(LONG), ALLOCATABLE      :: QUEUE(:)
+      INTEGER(LONG), ALLOCATABLE      :: COMP_ORDER(:)
+      INTEGER(LONG), ALLOCATABLE      :: NEIGH(:)
+      LOGICAL, ALLOCATABLE            :: VISITED(:)
+
+      RCM_OK = .FALSE.
+
+      ALLOCATE(ELEM_NGP(NELE), ELEM_BGRID(MELGP,NELE), NODE_ELEM_CNT(NGRID), NODE_ELEM_PTR(NGRID+1), STAT=ASTAT)
+      IF (ASTAT /= 0) GOTO 900
+      ELEM_NGP      = 0
+      ELEM_BGRID    = 0
+      NODE_ELEM_CNT = 0
+      NODE_ELEM_PTR = 0
+
+      DO E=1,NELE
+         CALL GET_ELGP ( E )
+         NG = ELGP
+         ELEM_NGP(E) = NG
+         EPNTK = EPNT(E)
+         TYPE_E = ETYPE(E)
+         DELTA = 1
+         IF (TYPE_E == 'BUSH    ') DELTA = 2
+         IF (TYPE_E == 'USERIN  ') DELTA = medat0_cuserin - 1
+
+         NSEQ_LOC = 0
+         DO I=1,NG
+            CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME_RCM, NGRID, GRID_ID, EDAT(EPNTK+I+DELTA), GRID_ROW_NUM )
+            IF (GRID_ROW_NUM > 0) THEN
+               NSEQ_LOC = NSEQ_LOC + 1
+               ELEM_BGRID(NSEQ_LOC,E) = GRID_ROW_NUM
+               NODE_ELEM_CNT(GRID_ROW_NUM) = NODE_ELEM_CNT(GRID_ROW_NUM) + 1
+            ENDIF
+         ENDDO
+         ELEM_NGP(E) = NSEQ_LOC
+      ENDDO
+
+      TOTAL_INC = 0
+      DO I=1,NGRID
+         NODE_ELEM_PTR(I) = TOTAL_INC + 1
+         TOTAL_INC = TOTAL_INC + NODE_ELEM_CNT(I)
+      ENDDO
+      NODE_ELEM_PTR(NGRID+1) = TOTAL_INC + 1
+
+      ALLOCATE(NODE_ELEM_LIST(MAX(TOTAL_INC,1)), NODE_ELEM_WRK(NGRID), DEGREE(NGRID), MARK(NGRID), ORDER(NGRID),                   &
+               QUEUE(NGRID), COMP_ORDER(NGRID), NEIGH(NGRID), VISITED(NGRID), STAT=ASTAT)
+      IF (ASTAT /= 0) GOTO 900
+
+      NODE_ELEM_LIST = 0
+      NODE_ELEM_WRK  = NODE_ELEM_PTR(1:NGRID)
+      DEGREE         = 0
+      MARK           = 0
+      ORDER          = 0
+      QUEUE          = 0
+      COMP_ORDER     = 0
+      NEIGH          = 0
+      VISITED        = .FALSE.
+
+      DO E=1,NELE
+         NG = ELEM_NGP(E)
+         IF (NG < 2) CYCLE
+         DO I=1,NG
+            NODE = ELEM_BGRID(I,E)
+            IF (NODE <= 0) CYCLE
+            IDX = NODE_ELEM_WRK(NODE)
+            NODE_ELEM_LIST(IDX) = E
+            NODE_ELEM_WRK(NODE) = IDX + 1
+         ENDDO
+      ENDDO
+
+      STAMP = 0
+      DO I=1,NGRID
+         STAMP = STAMP + 1
+         DO P=NODE_ELEM_PTR(I),NODE_ELEM_PTR(I+1)-1
+            ELROW = NODE_ELEM_LIST(P)
+            IF (ELROW <= 0) CYCLE
+            NG = ELEM_NGP(ELROW)
+            DO J=1,NG
+               NODE = ELEM_BGRID(J,ELROW)
+               IF ((NODE > 0) .AND. (NODE /= I)) THEN
+                  IF (MARK(NODE) /= STAMP) THEN
+                     MARK(NODE) = STAMP
+                     DEGREE(I) = DEGREE(I) + 1
+                  ENDIF
+               ENDIF
+            ENDDO
+         ENDDO
+      ENDDO
+
+      ORDER_LEN = 0
+      DO
+         START_NODE = 0
+         MIN_DEG = HUGE(MIN_DEG)
+         DO I=1,NGRID
+            IF (.NOT. VISITED(I)) THEN
+               IF (DEGREE(I) < MIN_DEG) THEN
+                  MIN_DEG = DEGREE(I)
+                  START_NODE = I
+               ENDIF
+            ENDIF
+         ENDDO
+         IF (START_NODE == 0) EXIT
+
+         HEAD = 1
+         TAIL = 1
+         QUEUE(1) = START_NODE
+         VISITED(START_NODE) = .TRUE.
+         COMP_LEN = 0
+
+         DO WHILE (HEAD <= TAIL)
+            NODE = QUEUE(HEAD)
+            HEAD = HEAD + 1
+            COMP_LEN = COMP_LEN + 1
+            COMP_ORDER(COMP_LEN) = NODE
+
+            STAMP = STAMP + 1
+            NBR_LEN = 0
+            DO P=NODE_ELEM_PTR(NODE),NODE_ELEM_PTR(NODE+1)-1
+               ELROW = NODE_ELEM_LIST(P)
+               IF (ELROW <= 0) CYCLE
+               NG = ELEM_NGP(ELROW)
+               DO J=1,NG
+                  NBR_NODE = ELEM_BGRID(J,ELROW)
+                  IF ((NBR_NODE > 0) .AND. (.NOT. VISITED(NBR_NODE)) .AND. (NBR_NODE /= NODE)) THEN
+                     IF (MARK(NBR_NODE) /= STAMP) THEN
+                        MARK(NBR_NODE) = STAMP
+                        NBR_LEN = NBR_LEN + 1
+                        NEIGH(NBR_LEN) = NBR_NODE
+                     ENDIF
+                  ENDIF
+               ENDDO
+            ENDDO
+
+            IF (NBR_LEN > 1) THEN
+               DO J=2,NBR_LEN
+                  TMP = NEIGH(J)
+                  TMP_DEG = DEGREE(TMP)
+                  K = J - 1
+                  DO WHILE (K >= 1)
+                     IF ((DEGREE(NEIGH(K)) > TMP_DEG) .OR. ((DEGREE(NEIGH(K)) == TMP_DEG) .AND. (NEIGH(K) > TMP))) THEN
+                        NEIGH(K+1) = NEIGH(K)
+                        K = K - 1
+                     ELSE
+                        EXIT
+                     ENDIF
+                  ENDDO
+                  NEIGH(K+1) = TMP
+               ENDDO
+            ENDIF
+
+            DO J=1,NBR_LEN
+               NBR_NODE = NEIGH(J)
+               IF (.NOT. VISITED(NBR_NODE)) THEN
+                  VISITED(NBR_NODE) = .TRUE.
+                  TAIL = TAIL + 1
+                  QUEUE(TAIL) = NBR_NODE
+               ENDIF
+            ENDDO
+         ENDDO
+
+         DO J=COMP_LEN,1,-1
+            ORDER_LEN = ORDER_LEN + 1
+            ORDER(ORDER_LEN) = COMP_ORDER(J)
+         ENDDO
+      ENDDO
+
+      IF (ORDER_LEN /= NGRID) GOTO 900
+
+      DO I=1,NGRID
+         R_GSEQ(ORDER(I)) = DBLE(I)
+      ENDDO
+
+      RCM_OK = .TRUE.
+
+  900 CONTINUE
+      IF (ALLOCATED(ELEM_NGP)) DEALLOCATE(ELEM_NGP)
+      IF (ALLOCATED(ELEM_BGRID)) DEALLOCATE(ELEM_BGRID)
+      IF (ALLOCATED(NODE_ELEM_CNT)) DEALLOCATE(NODE_ELEM_CNT)
+      IF (ALLOCATED(NODE_ELEM_PTR)) DEALLOCATE(NODE_ELEM_PTR)
+      IF (ALLOCATED(NODE_ELEM_WRK)) DEALLOCATE(NODE_ELEM_WRK)
+      IF (ALLOCATED(NODE_ELEM_LIST)) DEALLOCATE(NODE_ELEM_LIST)
+      IF (ALLOCATED(DEGREE)) DEALLOCATE(DEGREE)
+      IF (ALLOCATED(MARK)) DEALLOCATE(MARK)
+      IF (ALLOCATED(ORDER)) DEALLOCATE(ORDER)
+      IF (ALLOCATED(QUEUE)) DEALLOCATE(QUEUE)
+      IF (ALLOCATED(COMP_ORDER)) DEALLOCATE(COMP_ORDER)
+      IF (ALLOCATED(NEIGH)) DEALLOCATE(NEIGH)
+      IF (ALLOCATED(VISITED)) DEALLOCATE(VISITED)
+
+      RETURN
+
+      END SUBROUTINE RCM_SEQ_PROC
 
 ! ##################################################################################################################################
 

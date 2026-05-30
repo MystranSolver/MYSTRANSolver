@@ -49,6 +49,10 @@
 !                                                                    Lanczos algorithm will use machine precision for ARP_TOL
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
+! --- chase_feast_add --- begin !
+      CHARACTER(  8*BYTE)      :: LANCMETH       = '        '! Deprecated alias for EIGRL extract method selection.
+! --- chase_feast_add --- end !
+! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  1*BYTE)      :: ART_KED        =    'N'    ! Indicates whether to add artificial differ stiff terms to KED
       REAL(DOUBLE)             :: ART_TRAN_KED   =   ONEPM6  ! Artificial differ stiff for translational DOF's
       REAL(DOUBLE)             :: ART_ROT_KED    =   ONEPM6  ! Artificial differ stiff for rotational DOF's
@@ -73,6 +77,9 @@
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: BAILOUT        =     0     ! If >= 0 quit if a singularity in decomposing a matrix is detected
+
+! ----------------------------------------------------------------------------------------------------------------------------------
+      CHARACTER(  1*BYTE)      :: BANDEDOPT      =    'N'    ! 'Y'/'N' enable experimental banded-order optimization path
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       REAL(DOUBLE)             :: CBMIN3         =  TWO      ! Trans shear factor for MIN3  triangle elems (TRIA3)
@@ -161,6 +168,7 @@
 !                                                              BANDIT for bandit auto grid swquencing
 !                                                              GRID for grid numerical order
 !                                                              INPUT for grid input order
+!                                                              RCM for reserved/add-on RCM path (currently mapped to INPUT flow)
       CHARACTER(  1*BYTE)      :: SEQQUIT        =    'N'    !*'Y', 'N' indicator to stop processing if G.P. auto sequencing failed
 !                                                               (goes in field 4 of PARAM GRIDSEQ entry)
       CHARACTER(  1*BYTE)      :: SEQPRT         =    'N'    !*'Y', 'N' indicator to print SEQGP card images from bandit
@@ -482,7 +490,11 @@
       INTEGER(LONG)            :: USR_JCT        =     0     ! User supplied (PARAM B.D. card) value for JCT - used in sort subr's
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      REAL(DOUBLE)             :: WINAMEM        =2147.483647! Max MB of memory that Windows XP allows for arrays
+! --- BANDED_optimizisation -begin-- !
+      REAL(DOUBLE)             :: WINAMEM        =  ZERO     ! Optional per-array MB cap. If > 0, large allocations are blocked
+!                                                              before ALLOCATE; if <= 0, rely on 64-bit OS/compiler allocation
+!                                                              failure handling instead of the old Windows XP 2 GB cap.
+! --- BANDED_optimizisation -end-- !
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       REAL(DOUBLE)             :: WTMASS         =   ONE     ! Value from PARAM WTMASS Bulk Data card

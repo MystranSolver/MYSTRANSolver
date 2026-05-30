@@ -158,6 +158,21 @@
                                         'KMSM', NTERM_KMSM, I_KMSM, J_KMSM, KMSM )
       ENDIF
 
+! --- BANDED_optimizisation -begin-- !
+      IF (DEBUG(49) > 0) THEN
+         CALL WRITE_SPARSE_CRS ( ' KLL input to Lanczos/ARPACK', 'A ', 'A ', NTERM_KLL, NDOFL, I_KLL, J_KLL, KLL )
+         IF (SOL_NAME(1:8) == 'BUCKLING') THEN
+            CALL WRITE_SPARSE_CRS ( ' KLLD input to Lanczos/ARPACK', 'A ', 'A ', NTERM_KLLD, NDOFL, I_KLLD, J_KLLD, KLLD )
+            CALL WRITE_SPARSE_CRS ( ' KMSM = KLL + sigma*KLLD input to Lanczos/ARPACK', 'A ', 'A ', NTERM_KMSM, NDOFL, I_KMSM,   &
+                                     J_KMSM, KMSM )
+         ELSE
+            CALL WRITE_SPARSE_CRS ( ' MLL input to Lanczos/ARPACK', 'A ', 'A ', NTERM_MLL, NDOFL, I_MLL, J_MLL, MLL )
+            CALL WRITE_SPARSE_CRS ( ' KMSM = KLL - sigma*MLL input to Lanczos/ARPACK', 'A ', 'A ', NTERM_KMSM, NDOFL, I_KMSM,    &
+                                     J_KMSM, KMSM )
+         ENDIF
+      ENDIF
+! --- BANDED_optimizisation -end-- !
+
 
 ! Det bandwidth of KMSM so BANDGEN can put it in LAPACK band form. KMSM_SDIA is the number of super-diags in the band form of KMSM
 
@@ -171,6 +186,9 @@
       IF (SUPINFO == 'N') THEN
          WRITE(F06,4905) KMSM_SDIA
       ENDIF
+! --- BANDED_optimizisation -begin-- !
+      CALL REPORT_BANDED_STORAGE_ESTIMATE ( 'KMSM', NDOFL, NTERM_KMSM, I_KMSM, J_KMSM, KMSM_SDIA+1, SUPINFO )
+! --- BANDED_optimizisation -end-- !
 
 ! EIG_LAP_MAT_TYPE was checked in BD_EIGRL for correctness, but make sure, here, that it is correct
 
@@ -190,6 +208,9 @@
 
 ! Allocate array RFAC = (KLL - EIG_SIGMA*MLL, or KLL + EIG_SIGMA*KLLD) for ARACK
 
+! --- BANDED_optimizisation -begin-- !
+      CALL REPORT_SOLVER_DISPATCH_POLICY ( 'KMSM', SUBR_NAME )
+! --- BANDED_optimizisation -end-- !
       IF (SOL_NAME(1:8) == 'BUCKLING') THEN
          CALL LINK_MESSAGE('ALLOCATE ARPACK BAND MAT: RFAC = KLL + sigma*KLLD')
       ELSE
@@ -266,7 +287,10 @@
       ENDIF
 
       IF (DEBUG(49) > 0) THEN
-         CALL WRITE_SPARSE_CRS ( ' KMSMn', 'A ', 'A ', NTERM_KMSMn, NDOFL, I_KMSMn, J_KMSMn, KMSMn )
+! --- BANDED_optimizisation -begin-- !
+         CALL WRITE_SPARSE_CRS ( ' KMSMn nonsymmetric operator used by ARPACK', 'A ', 'A ', NTERM_KMSMn, NDOFL, I_KMSMn, J_KMSMn,&
+                                 KMSMn )
+! --- BANDED_optimizisation -end-- !
       ENDIF
 
 ! Now we can deallocate KMSM (since KMSMn will be used in subr DSBAND)
@@ -596,6 +620,9 @@
 
 ! Allocate array RFAC = (KLL - SIGMA*MLL) for ARACK
 
+! --- BANDED_optimizisation -begin-- !
+      CALL REPORT_SOLVER_DISPATCH_POLICY ( 'KMSM', SUBR_NAME )
+! --- BANDED_optimizisation -end-- !
       CALL ALLOCATE_LAPACK_MAT ( 'RFAC', LDRFAC, NDOFL, SUBR_NAME )
 
 ! Put KMSM in form required by LAPACK band matrix. Call result array RFAC

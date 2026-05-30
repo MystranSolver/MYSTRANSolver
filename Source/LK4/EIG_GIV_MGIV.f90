@@ -112,6 +112,9 @@
       IF (SUPINFO == 'N') THEN
          WRITE(F06,4904) KLL_SDIA
       ENDIF
+! --- BANDED_optimizisation -begin-- !
+      CALL REPORT_BANDED_STORAGE_ESTIMATE ( 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL_SDIA+1, SUPINFO )
+! --- BANDED_optimizisation -end-- !
 
       IF (SOL_NAME(1:8) == 'BUCKLING') THEN
          CALL LINK_MESSAGE('CALCULATE BANDWIDTH OF KLLD MATRIX')
@@ -120,6 +123,9 @@
          IF (SUPINFO == 'N') THEN
             WRITE(F06,4905) 'KLLD', KLLD_SDIA
          ENDIF
+! --- BANDED_optimizisation -begin-- !
+         CALL REPORT_BANDED_STORAGE_ESTIMATE ( 'KLLD', NDOFL, NTERM_KLLD, I_KLLD, J_KLLD, KLLD_SDIA+1, SUPINFO )
+! --- BANDED_optimizisation -end-- !
       ELSE
          CALL LINK_MESSAGE('CALCULATE BANDWIDTH OF MLL MATRIX')
          CALL BANDSIZ ( NDOFL, NTERM_MLL, I_MLL, J_MLL, MLL_SDIA )
@@ -127,6 +133,9 @@
          IF (SUPINFO == 'N') THEN
             WRITE(F06,4905) 'MLL', MLL_SDIA
          ENDIF
+! --- BANDED_optimizisation -begin-- !
+         CALL REPORT_BANDED_STORAGE_ESTIMATE ( 'MLL', NDOFL, NTERM_MLL, I_MLL, J_MLL, MLL_SDIA+1, SUPINFO )
+! --- BANDED_optimizisation -end-- !
       ENDIF
 
 ! A_SDIA and B_SDIA are the number of super-diags in the band form of the ABAND stiffness and BBAND mass matrices.
@@ -184,6 +193,9 @@
 
 ! Allocate arrays ABAND and BBAND (stiffness, mass matrices in band form for LAPACK)
 
+! --- BANDED_optimizisation -begin-- !
+      CALL REPORT_SOLVER_DISPATCH_POLICY ( 'KLL/MLL', SUBR_NAME )
+! --- BANDED_optimizisation -end-- !
       CALL LINK_MESSAGE('ALLOCATE ARRAYS FOR LAPACK BAND FORM OF KLL')
       CALL ALLOCATE_LAPACK_MAT ( 'ABAND', LDAB, NDOFL, SUBR_NAME )
 

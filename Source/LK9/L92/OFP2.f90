@@ -280,12 +280,7 @@
                      ENDIF
                   ENDIF
                ENDDO
-               WRITE_OGEL(NUM) = 'N'
-               DO J=1,NUM_COMPS
-                  IF (OGEL(NUM,J) /= ZERO) THEN
-                     WRITE_OGEL(NUM) = 'Y'
-                  ENDIF
-               ENDDO
+               WRITE_OGEL(NUM) = 'Y'
 
                IF ((NUM == NREQ) .AND. (SC_OUT_REQ > 0)) THEN
 

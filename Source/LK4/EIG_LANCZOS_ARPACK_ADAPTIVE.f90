@@ -222,6 +222,9 @@
       IF (SUPINFO == 'N') THEN
          WRITE(F06,4905) KMSM_SDIA
       ENDIF
+! --- BANDED_optimizisation -begin-- !
+      CALL REPORT_BANDED_STORAGE_ESTIMATE ( 'KMSM', NDOFL, NTERM_KMSM, I_KMSM, J_KMSM, KMSM_SDIA+1, SUPINFO )
+! --- BANDED_optimizisation -end-- !
 
 ! Determine LDRFAC based on matrix type
       IF (SOLLIB(1:6) == 'SPARSE') THEN
@@ -276,6 +279,9 @@
       CALL LINK_MESSAGE('FACTOR SHIFTED MATRIX [KLL - sigma*MLL]')
 
       ! Allocate RFAC and IWORK (kept across all iterations)
+! --- BANDED_optimizisation -begin-- !
+      CALL REPORT_SOLVER_DISPATCH_POLICY ( 'KMSM', SUBR_NAME )
+! --- BANDED_optimizisation -end-- !
       CALL ALLOCATE_LAPACK_MAT ( 'RFAC', LDRFAC, NDOFL, SUBR_NAME )
       CALL ALLOCATE_LAPACK_MAT ( 'IWORK', NDOFL, 1, SUBR_NAME )
 

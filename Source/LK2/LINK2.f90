@@ -40,7 +40,7 @@
       USE IOUNT1, ONLY                :  LINK2G,  LINK2H , LINK2I , LINK2O , LINK2P , LINK2Q
       USE IOUNT1, ONLY                :  L2G_MSG, L2H_MSG, L2I_MSG, L2O_MSG, L2P_MSG, L2Q_MSG
 
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, COMM, FATAL_ERR, LINKNO, MBUG,                                              &
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, COMM, FATAL_ERR, LINKNO, MBUG, NSUB,                                        &
                                          NDOFG, NDOFM, NDOFN, NDOFS, NDOFSA, NDOFF, NDOFO, NDOFA, NDOFL, NDOFR,                    &
                                          NTERM_KGG , NTERM_KNN , NTERM_KNM , NTERM_KMM ,                                           &
                                          NTERM_KFF , NTERM_KFS , NTERM_KSS ,                                                       &
@@ -303,6 +303,18 @@
             WRITE(F06,146) 'KLL STIFFNESS MATRIX IS ', NTERM_KLL
             WRITE(F06,146) 'MLL MASS MATRIX IS      ', NTERM_MLL
             WRITE(F06,146) 'PL LOAD MATRIX IS       ', NTERM_PL
+         ENDIF
+
+         IF (DEBUG(206) > 0) THEN
+            IF (NTERM_KLL > 0) THEN
+               CALL WRITE_MATRIX_MARKET_SPARSE ( 'KLL', NDOFL, NDOFL, 'Y', NTERM_KLL, I_KLL, J_KLL, KLL )
+            ENDIF
+            IF (NTERM_MLL > 0) THEN
+               CALL WRITE_MATRIX_MARKET_SPARSE ( 'MLL', NDOFL, NDOFL, 'Y', NTERM_MLL, I_MLL, J_MLL, MLL )
+            ENDIF
+            IF (NTERM_PL > 0) THEN
+               CALL WRITE_MATRIX_MARKET_SPARSE ( 'PL', NDOFL, NSUB, 'N', NTERM_PL, I_PL, J_PL, PL )
+            ENDIF
          ENDIF
 
          IF (NUM_OU4_REQUESTS > 0) THEN                    ! Call OUTPUT4 processor to process output requests for OUTPUT4 matrices
