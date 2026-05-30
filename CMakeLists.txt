@@ -39,7 +39,7 @@ endif()
 # ==============================================================================
 # FIND OPENBLAS
 # ==============================================================================
-set(OpenBLAS_DIR "C:/gcc/openblas32/lib/cmake/openblas")
+# set(OpenBLAS_DIR "C:/gcc/openblas32/lib/cmake/openblas")
 find_package(OpenBLAS QUIET)
 
 if(OpenBLAS_FOUND)
@@ -268,7 +268,7 @@ if(WIN32)
 endif()
 
 set(F2C_ARITH_H "${F2C_INCLUDE_DIR}/arith.h")
-# --- chase_feast_add --- begin !
+# --- feast_add --- begin !
 set_source_files_properties(
   ${F2C_ARITHCHK_SRC} PROPERTIES COMPILE_FLAGS "-DNO_LONG_LONG -DNO_FPINIT"
 )
@@ -318,11 +318,10 @@ set_source_files_properties(
   PROPERTIES Fortran_PREPROCESS ON COMPILE_OPTIONS "-cpp"
 )
 
-option(MYSTRAN_USE_EXTERNAL_CHASE "Enable native CHASE backend on condensed dense problem" OFF)
-set(MYSTRAN_CHASE_EXTRA_LIBS "" CACHE STRING "Additional libraries for native CHASE backend (for example: chase_f;chase_c;stdc++;gomp)")
+
 option(MYSTRAN_USE_EXTERNAL_FEAST "Enable native FEAST backend on condensed dense problem" OFF)
 set(MYSTRAN_FEAST_EXTRA_LIBS "" CACHE STRING "Additional libraries for native FEAST backend")
-# --- chase_feast_add --- end !
+# --- feast_add --- end !
 
 # ! --- hijack mode for extern blas begin--- !
 # BLAS configuration
@@ -425,20 +424,6 @@ else()
   endif()
 endif()
 
-if(MYSTRAN_USE_EXTERNAL_CHASE)
-  target_compile_definitions(mystran PRIVATE MYSTRAN_HAVE_EXTERNAL_CHASE)
-  foreach(_chase_lib IN LISTS MYSTRAN_CHASE_EXTRA_LIBS)
-    get_filename_component(_chase_dir "${_chase_lib}" DIRECTORY)
-    if(EXISTS "${_chase_dir}/chase_diag.mod")
-      target_include_directories(mystran PRIVATE "${_chase_dir}")
-      break()
-    endif()
-  endforeach()
-  if(MYSTRAN_CHASE_EXTRA_LIBS)
-    separate_arguments(MYSTRAN_CHASE_EXTRA_LIBS)
-    target_link_libraries(mystran ${MYSTRAN_CHASE_EXTRA_LIBS})
-  endif()
-endif()
 
 if(MYSTRAN_USE_EXTERNAL_FEAST)
   target_compile_definitions(mystran PRIVATE MYSTRAN_HAVE_EXTERNAL_FEAST)
