@@ -1,6 +1,7 @@
 ! ##################################################################################################################################
 
       MODULE LAPACK_BLAS_AUX
+! --- lapack_surgery begin --- !
 
 ! This is  the set of LAPACK auxiliary routines called by other LAPACK subroutines
 
@@ -10,6 +11,25 @@
       USE TIMDAT, ONLY                  :  HOUR, MINUTE, SEC,
      &                                     SFRAC, TSEC
       USE PARAMS, ONLY                  :  NOCOUNTS
+      USE LAPACK_DLACON_HELPER
+      USE LAPACK_DLAGTS_HELPER
+      USE LAPACK_DLAN_HELPER
+      USE LAPACK_DLABAD_HELPER
+      USE LAPACK_DLACPY_HELPER
+      USE LAPACK_DLAE2_HELPER
+      USE LAPACK_DLAEV2_HELPER
+      USE LAPACK_DLARF_HELPER
+      USE LAPACK_DLARFB_HELPER
+      USE LAPACK_DLARFG_HELPER
+      USE LAPACK_DLARFT_HELPER
+      USE LAPACK_DLAR_ROT_HELPER
+      USE LAPACK_DLARTG_HELPER
+      USE LAPACK_DLAPY2_HELPER
+      USE LAPACK_DLASCL_HELPER
+      USE LAPACK_DLAS_MISC_HELPER
+      USE LAPACK_DLASRT_HELPER
+      USE LAPACK_DLASSQ_HELPER
+      USE LAPACK_DISNAN_HELPER
 
       USE OUTA_HERE_Interface
 
@@ -3547,60 +3567,10 @@ c
 ! 024 LAPACK_BLAS_AUX
 
       SUBROUTINE DLABAD( SMALL, LARGE )
-
-*  -- LAPACK auxiliary routine (version 3.0) --
-*     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
-*     Courant Institute, Argonne National Lab, and Rice University
-*     October 31, 1992
-*
-*     .. Scalar Arguments ..
       REAL(DOUBLE)   LARGE, SMALL
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLABAD takes as input the values computed by DLAMCH for underflow and
-*  overflow, and returns the square root of each of these values if the
-*  log of LARGE is sufficiently large.  This subroutine is intended to
-*  identify machines with a large exponent range, such as the Crays, and
-*  redefine the underflow and overflow limits to be the square roots of
-*  the values computed by DLAMCH.  This subroutine is needed because
-*  DLAMCH does not compensate for poor arithmetic in the upper half of
-*  the exponent range, as is found on a Cray.
-*
-*  Arguments
-*  =========
-*
-*  SMALL   (input/output) REAL(DOUBLE)
-*          On entry, the underflow threshold as computed by DLAMCH.
-*          On exit, if LOG10(LARGE) is sufficiently large, the square
-*          root of SMALL, otherwise unchanged.
-*
-*  LARGE   (input/output) REAL(DOUBLE)
-*          On entry, the overflow threshold as computed by DLAMCH.
-*          On exit, if LOG10(LARGE) is sufficiently large, the square
-*          root of LARGE, otherwise unchanged.
-*
-*  =====================================================================
-*
-*     .. Intrinsic Functions ..
-      INTRINSIC          LOG10, SQRT
-*     ..
-*     .. Executable Statements ..
-*
-*     If it looks like we're on a Cray, take the square root of
-*     SMALL and LARGE to avoid overflow and underflow problems.
-*
-      IF( LOG10( LARGE ).GT.2000.D0 ) THEN
-         SMALL = SQRT( SMALL )
-         LARGE = SQRT( LARGE )
-      END IF
-*
-      RETURN
-*
-*     End of DLABAD
-*
+
+      CALL DLABAD_HELPER( SMALL, LARGE )
+
       END SUBROUTINE DLABAD
 
 ! ##################################################################################################################################
@@ -3619,202 +3589,9 @@ c
       INTEGER            KASE, N
       integer            itmax
       REAL(DOUBLE)   EST
-*     ..
-*     .. Array Arguments ..
       INTEGER            ISGN( * )
       REAL(DOUBLE)   V( * ), X( * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLACON estimates the 1-norm of a square, real matrix A.
-*  Reverse communication is used for evaluating matrix-vector products.
-*
-*  Arguments
-*  =========
-*
-*  N      (input) INTEGER
-*         The order of the matrix.  N >= 1.
-*
-*  V      (workspace) REAL(DOUBLE) array, dimension (N)
-*         On the final return, V = A*W,  where  EST = norm(V)/norm(W)
-*         (W is not returned).
-*
-*  X      (input/output) REAL(DOUBLE) array, dimension (N)
-*         On an intermediate return, X should be overwritten by
-*               A * X,   if KASE=1,
-*               A' * X,  if KASE=2,
-*         and DLACON must be re-called with all the other parameters
-*         unchanged.
-*
-*  ISGN   (workspace) INTEGER array, dimension (N)
-*
-*  EST    (output) REAL(DOUBLE)
-*         An estimate (a lower bound) for norm(A).
-*
-*  KASE   (input/output) INTEGER
-*         On the initial call to DLACON, KASE should be 0.
-*         On an intermediate return, KASE will be 1 or 2, indicating
-*         whether X should be overwritten by A * X  or A' * X.
-*         On the final return from DLACON, KASE will again be 0.
-
-!  itmax  (input) INTEGER
-!         Max number of iterations. (NOTE: this was a local scalar in the
-!         original DLACON, but I made it an input variable)
-*
-*  Further Details
-*  ======= =======
-*
-*  Contributed by Nick Higham, University of Manchester.
-*  Originally named SONEST, dated March 16, 1988.
-*
-*  Reference: N.J. Higham, "FORTRAN codes for estimating the one-norm of
-*  a real or complex matrix, with applications to condition estimation",
-*  ACM Trans. Math. Soft., vol. 14, no. 4, pp. 381-396, December 1988.
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ZERO, ONE, TWO
-      PARAMETER          ( ZERO = 0.0D+0, ONE = 1.0D+0, TWO = 2.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            I, ITER, J, JLAST, JUMP
-      REAL(DOUBLE)   ALTSGN, ESTOLD, TEMP
-*     ..
-*     .. External Functions ..
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, DBLE, NINT, SIGN
-*     ..
-*     .. Save statement ..
-      SAVE
-*     ..
-*     .. Executable Statements ..
-*
-
-
-! **********************************************************************************************************************************
-      IF( KASE.EQ.0 ) THEN
-         DO 10 I = 1, N
-            X( I ) = ONE / DBLE( N )
-   10    CONTINUE
-         KASE = 1
-         JUMP = 1
-         RETURN
-      END IF
-*
-      GO TO ( 20, 40, 70, 110, 140 )JUMP
-*
-*     ................ ENTRY   (JUMP = 1)
-*     FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY A*X.
-*
-   20 CONTINUE
-      IF( N.EQ.1 ) THEN
-         V( 1 ) = X( 1 )
-         EST = ABS( V( 1 ) )
-*        ... QUIT
-         GO TO 150
-      END IF
-      EST = DASUM( N, X, 1 )
-*
-      DO 30 I = 1, N
-         X( I ) = SIGN( ONE, X( I ) )
-         ISGN( I ) = NINT( X( I ) )
-   30 CONTINUE
-      KASE = 2
-      JUMP = 2
-      RETURN
-*
-*     ................ ENTRY   (JUMP = 2)
-*     FIRST ITERATION.  X HAS BEEN OVERWRITTEN BY TRANDPOSE(A)*X.
-*
-   40 CONTINUE
-      J = IDAMAX( N, X, 1 )
-      ITER = 2
-*
-*     MAIN LOOP - ITERATIONS 2,3,...,ITMAX.
-*
-   50 CONTINUE
-      DO 60 I = 1, N
-         X( I ) = ZERO
-   60 CONTINUE
-      X( J ) = ONE
-      KASE = 1
-      JUMP = 3
-      RETURN
-*
-*     ................ ENTRY   (JUMP = 3)
-*     X HAS BEEN OVERWRITTEN BY A*X.
-*
-   70 CONTINUE
-      CALL DCOPY( N, X, 1, V, 1 )
-      ESTOLD = EST
-      EST = DASUM( N, V, 1 )
-      DO 80 I = 1, N
-         IF( NINT( SIGN( ONE, X( I ) ) ).NE.ISGN( I ) )
-     $      GO TO 90
-   80 CONTINUE
-*     REPEATED SIGN VECTOR DETECTED, HENCE ALGORITHM HAS CONVERGED.
-      GO TO 120
-*
-   90 CONTINUE
-*     TEST FOR CYCLING.
-      IF( EST.LE.ESTOLD )
-     $   GO TO 120
-*
-      DO 100 I = 1, N
-         X( I ) = SIGN( ONE, X( I ) )
-         ISGN( I ) = NINT( X( I ) )
-  100 CONTINUE
-      KASE = 2
-      JUMP = 4
-      RETURN
-*
-*     ................ ENTRY   (JUMP = 4)
-*     X HAS BEEN OVERWRITTEN BY TRANDPOSE(A)*X.
-*
-  110 CONTINUE
-      JLAST = J
-      J = IDAMAX( N, X, 1 )
-      IF( ( X( JLAST ).NE.ABS( X( J ) ) ) .AND. ( ITER.LT.ITMAX ) ) THEN
-         ITER = ITER + 1
-         GO TO 50
-      END IF
-*
-*     ITERATION COMPLETE.  FINAL STAGE.
-*
-  120 CONTINUE
-      ALTSGN = ONE
-      DO 130 I = 1, N
-         X( I ) = ALTSGN*( ONE+DBLE( I-1 ) / DBLE( N-1 ) )
-         ALTSGN = -ALTSGN
-  130 CONTINUE
-      KASE = 1
-      JUMP = 5
-      RETURN
-*
-*     ................ ENTRY   (JUMP = 5)
-*     X HAS BEEN OVERWRITTEN BY A*X.
-*
-  140 CONTINUE
-      TEMP = TWO*( DASUM( N, X, 1 ) / DBLE( 3*N ) )
-      IF( TEMP.GT.EST ) THEN
-         CALL DCOPY( N, X, 1, V, 1 )
-         EST = TEMP
-      END IF
-*
-  150 CONTINUE
-      KASE = 0
-*
-*     End of DLACON
-*
-! **********************************************************************************************************************************
- 9000 continue            ! My lines
-
+      CALL DLACON_HELPER( N, V, X, ISGN, EST, KASE, itmax )
       RETURN
 
 ! **********************************************************************************************************************************
@@ -3834,79 +3611,8 @@ c
 *     .. Scalar Arguments ..
       CHARACTER          UPLO
       INTEGER            LDA, LDB, M, N
-*     ..
-*     .. Array Arguments ..
       REAL(DOUBLE)   A( LDA, * ), B( LDB, * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLACPY copies all or part of a two-dimensional matrix A to another
-*  matrix B.
-*
-*  Arguments
-*  =========
-*
-*  UPLO    (input) CHARACTER*1
-*          Specifies the part of the matrix A to be copied to B.
-*          = 'U':      Upper triangular part
-*          = 'L':      Lower triangular part
-*          Otherwise:  All of the matrix A
-*
-*  M       (input) INTEGER
-*          The number of rows of the matrix A.  M >= 0.
-*
-*  N       (input) INTEGER
-*          The number of columns of the matrix A.  N >= 0.
-*
-*  A       (input) REAL(DOUBLE) array, dimension (LDA,N)
-*          The m by n matrix A.  If UPLO = 'U', only the upper triangle
-*          or trapezoid is accessed; if UPLO = 'L', only the lower
-*          triangle or trapezoid is accessed.
-*
-*  LDA     (input) INTEGER
-*          The leading dimension of the array A.  LDA >= max(1,M).
-*
-*  B       (output) REAL(DOUBLE) array, dimension (LDB,N)
-*          On exit, B = A in the locations specified by UPLO.
-*
-*  LDB     (input) INTEGER
-*          The leading dimension of the array B.  LDB >= max(1,M).
-*
-*  =====================================================================
-*
-*     .. Local Scalars ..
-      INTEGER            I, J
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          MIN
-*     ..
-*     .. Executable Statements ..
-*
-      IF( LSAME( UPLO, 'U' ) ) THEN
-         DO 20 J = 1, N
-            DO 10 I = 1, MIN( J, M )
-               B( I, J ) = A( I, J )
-   10       CONTINUE
-   20    CONTINUE
-      ELSE IF( LSAME( UPLO, 'L' ) ) THEN
-         DO 40 J = 1, N
-            DO 30 I = J, M
-               B( I, J ) = A( I, J )
-   30       CONTINUE
-   40    CONTINUE
-      ELSE
-         DO 60 J = 1, N
-            DO 50 I = 1, M
-               B( I, J ) = A( I, J )
-   50       CONTINUE
-   60    CONTINUE
-      END IF
+      CALL DLACPY_HELPER( UPLO, M, N, A, LDA, B, LDB )
       RETURN
 *
 *     End of DLACPY
@@ -3925,120 +3631,9 @@ c
 *
 *     .. Scalar Arguments ..
       REAL(DOUBLE)   A, B, C, RT1, RT2
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLAE2  computes the eigenvalues of a 2-by-2 symmetric matrix
-*     [  A   B  ]
-*     [  B   C  ].
-*  On return, RT1 is the eigenvalue of larger absolute value, and RT2
-*  is the eigenvalue of smaller absolute value.
-*
-*  Arguments
-*  =========
-*
-*  A       (input) REAL(DOUBLE)
-*          The (1,1) element of the 2-by-2 matrix.
-*
-*  B       (input) REAL(DOUBLE)
-*          The (1,2) and (2,1) elements of the 2-by-2 matrix.
-*
-*  C       (input) REAL(DOUBLE)
-*          The (2,2) element of the 2-by-2 matrix.
-*
-*  RT1     (output) REAL(DOUBLE)
-*          The eigenvalue of larger absolute value.
-*
-*  RT2     (output) REAL(DOUBLE)
-*          The eigenvalue of smaller absolute value.
-*
-*  Further Details
-*  ===============
-*
-*  RT1 is accurate to a few ulps barring over/underflow.
-*
-*  RT2 may be inaccurate if there is massive cancellation in the
-*  determinant A*C-B*B; higher precision or correctly rounded or
-*  correctly truncated arithmetic would be needed to compute RT2
-*  accurately in all cases.
-*
-*  Overflow is possible only if RT1 is within a factor of 5 of overflow.
-*  Underflow is harmless if the input data is 0 or exceeds
-*     underflow_threshold / macheps.
-*
-* =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE
-      PARAMETER          ( ONE = 1.0D0 )
-      REAL(DOUBLE)   TWO
-      PARAMETER          ( TWO = 2.0D0 )
-      REAL(DOUBLE)   ZERO
-      PARAMETER          ( ZERO = 0.0D0 )
-      REAL(DOUBLE)   HALF
-      PARAMETER          ( HALF = 0.5D0 )
-*     ..
-*     .. Local Scalars ..
-      REAL(DOUBLE)   AB, ACMN, ACMX, ADF, DF, RT, SM, TB
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, SQRT
-*     ..
-*     .. Executable Statements ..
-*
-*     Compute the eigenvalues
-*
-      SM = A + C
-      DF = A - C
-      ADF = ABS( DF )
-      TB = B + B
-      AB = ABS( TB )
-      IF( ABS( A ).GT.ABS( C ) ) THEN
-         ACMX = A
-         ACMN = C
-      ELSE
-         ACMX = C
-         ACMN = A
-      END IF
-      IF( ADF.GT.AB ) THEN
-         RT = ADF*SQRT( ONE+( AB / ADF )**2 )
-      ELSE IF( ADF.LT.AB ) THEN
-         RT = AB*SQRT( ONE+( ADF / AB )**2 )
-      ELSE
-*
-*        Includes case AB=ADF=0
-*
-         RT = AB*SQRT( TWO )
-      END IF
-      IF( SM.LT.ZERO ) THEN
-         RT1 = HALF*( SM-RT )
-*
-*        Order of execution important.
-*        To get fully accurate smaller eigenvalue,
-*        next line needs to be executed in higher precision.
-*
-         RT2 = ( ACMX / RT1 )*ACMN - ( B / RT1 )*B
-      ELSE IF( SM.GT.ZERO ) THEN
-         RT1 = HALF*( SM+RT )
-*
-*        Order of execution important.
-*        To get fully accurate smaller eigenvalue,
-*        next line needs to be executed in higher precision.
-*
-         RT2 = ( ACMX / RT1 )*ACMN - ( B / RT1 )*B
-      ELSE
-*
-*        Includes case RT1 = RT2 = 0
-*
-         RT1 = HALF*RT
-         RT2 = -HALF*RT
-      END IF
+      CALL DLAE2_HELPER( A, B, C, RT1, RT2 )
       RETURN
-*
-*     End of DLAE2
-*
+
       END SUBROUTINE DLAE2
 
 ! ##################################################################################################################################
@@ -4047,6 +3642,26 @@ c
       SUBROUTINE DLAEBZ( IJOB, NITMAX, N, MMAX, MINP, NBMIN, ABSTOL,
      $                   RELTOL, PIVMIN, D, E, E2, NVAL, AB, C, MOUT,
      $                   NAB, WORK, IWORK, INFO )
+      INTEGER            IJOB, INFO, MINP, MMAX, MOUT, N, NBMIN,
+     $                   NITMAX
+      REAL(DOUBLE)   ABSTOL, PIVMIN, RELTOL
+      INTEGER            IWORK( * ), NAB( MMAX, * ), NVAL( * )
+      REAL(DOUBLE)   AB( MMAX, * ), C( * ), D( * ), E( * ), E2( * ),
+     $                   WORK( * )
+
+      CALL DLAEBZ_HELPER( IJOB, NITMAX, N, MMAX, MINP, NBMIN, ABSTOL,
+     $                    RELTOL, PIVMIN, D, E, E2, NVAL, AB, C, MOUT,
+     $                    NAB, WORK, IWORK, INFO )
+
+      RETURN
+
+      END SUBROUTINE DLAEBZ
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLAEBZ_HELPER( IJOB, NITMAX, N, MMAX, MINP, NBMIN,
+     $                          ABSTOL, RELTOL, PIVMIN, D, E, E2, NVAL,
+     $                          AB, C, MOUT, NAB, WORK, IWORK, INFO )
 
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -4593,9 +4208,9 @@ CIBM           PREFER SCALAR
 *
       RETURN
 *
-*     End of DLAEBZ
+*     End of DLAEBZ_HELPER
 *
-      END SUBROUTINE DLAEBZ
+      END SUBROUTINE DLAEBZ_HELPER
 
 ! ##################################################################################################################################
 ! 029 LAPACK_BLAS_AUX
@@ -4609,162 +4224,7 @@ CIBM           PREFER SCALAR
 *
 *     .. Scalar Arguments ..
       REAL(DOUBLE)   A, B, C, CS1, RT1, RT2, SN1
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLAEV2 computes the eigendecomposition of a 2-by-2 symmetric matrix
-*     [  A   B  ]
-*     [  B   C  ].
-*  On return, RT1 is the eigenvalue of larger absolute value, RT2 is the
-*  eigenvalue of smaller absolute value, and (CS1,SN1) is the unit right
-*  eigenvector for RT1, giving the decomposition
-*
-*     [ CS1  SN1 ] [  A   B  ] [ CS1 -SN1 ]  =  [ RT1  0  ]
-*     [-SN1  CS1 ] [  B   C  ] [ SN1  CS1 ]     [  0  RT2 ].
-*
-*  Arguments
-*  =========
-*
-*  A       (input) REAL(DOUBLE)
-*          The (1,1) element of the 2-by-2 matrix.
-*
-*  B       (input) REAL(DOUBLE)
-*          The (1,2) element and the conjugate of the (2,1) element of
-*          the 2-by-2 matrix.
-*
-*  C       (input) REAL(DOUBLE)
-*          The (2,2) element of the 2-by-2 matrix.
-*
-*  RT1     (output) REAL(DOUBLE)
-*          The eigenvalue of larger absolute value.
-*
-*  RT2     (output) REAL(DOUBLE)
-*          The eigenvalue of smaller absolute value.
-*
-*  CS1     (output) REAL(DOUBLE)
-*  SN1     (output) REAL(DOUBLE)
-*          The vector (CS1, SN1) is a unit right eigenvector for RT1.
-*
-*  Further Details
-*  ===============
-*
-*  RT1 is accurate to a few ulps barring over/underflow.
-*
-*  RT2 may be inaccurate if there is massive cancellation in the
-*  determinant A*C-B*B; higher precision or correctly rounded or
-*  correctly truncated arithmetic would be needed to compute RT2
-*  accurately in all cases.
-*
-*  CS1 and SN1 are accurate to a few ulps barring over/underflow.
-*
-*  Overflow is possible only if RT1 is within a factor of 5 of overflow.
-*  Underflow is harmless if the input data is 0 or exceeds
-*     underflow_threshold / macheps.
-*
-* =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE
-      PARAMETER          ( ONE = 1.0D0 )
-      REAL(DOUBLE)   TWO
-      PARAMETER          ( TWO = 2.0D0 )
-      REAL(DOUBLE)   ZERO
-      PARAMETER          ( ZERO = 0.0D0 )
-      REAL(DOUBLE)   HALF
-      PARAMETER          ( HALF = 0.5D0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            SGN1, SGN2
-      REAL(DOUBLE)   AB, ACMN, ACMX, ACS, ADF, CS, CT, DF, RT, SM,
-     $                   TB, TN
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, SQRT
-*     ..
-*     .. Executable Statements ..
-*
-*     Compute the eigenvalues
-*
-      SM = A + C
-      DF = A - C
-      ADF = ABS( DF )
-      TB = B + B
-      AB = ABS( TB )
-      IF( ABS( A ).GT.ABS( C ) ) THEN
-         ACMX = A
-         ACMN = C
-      ELSE
-         ACMX = C
-         ACMN = A
-      END IF
-      IF( ADF.GT.AB ) THEN
-         RT = ADF*SQRT( ONE+( AB / ADF )**2 )
-      ELSE IF( ADF.LT.AB ) THEN
-         RT = AB*SQRT( ONE+( ADF / AB )**2 )
-      ELSE
-*
-*        Includes case AB=ADF=0
-*
-         RT = AB*SQRT( TWO )
-      END IF
-      IF( SM.LT.ZERO ) THEN
-         RT1 = HALF*( SM-RT )
-         SGN1 = -1
-*
-*        Order of execution important.
-*        To get fully accurate smaller eigenvalue,
-*        next line needs to be executed in higher precision.
-*
-         RT2 = ( ACMX / RT1 )*ACMN - ( B / RT1 )*B
-      ELSE IF( SM.GT.ZERO ) THEN
-         RT1 = HALF*( SM+RT )
-         SGN1 = 1
-*
-*        Order of execution important.
-*        To get fully accurate smaller eigenvalue,
-*        next line needs to be executed in higher precision.
-*
-         RT2 = ( ACMX / RT1 )*ACMN - ( B / RT1 )*B
-      ELSE
-*
-*        Includes case RT1 = RT2 = 0
-*
-         RT1 = HALF*RT
-         RT2 = -HALF*RT
-         SGN1 = 1
-      END IF
-*
-*     Compute the eigenvector
-*
-      IF( DF.GE.ZERO ) THEN
-         CS = DF + RT
-         SGN2 = 1
-      ELSE
-         CS = DF - RT
-         SGN2 = -1
-      END IF
-      ACS = ABS( CS )
-      IF( ACS.GT.AB ) THEN
-         CT = -TB / CS
-         SN1 = ONE / SQRT( ONE+CT*CT )
-         CS1 = CT*SN1
-      ELSE
-         IF( AB.EQ.ZERO ) THEN
-            CS1 = ONE
-            SN1 = ZERO
-         ELSE
-            TN = -CS / TB
-            CS1 = ONE / SQRT( ONE+TN*TN )
-            SN1 = TN*CS1
-         END IF
-      END IF
-      IF( SGN1.EQ.SGN2 ) THEN
-         TN = CS1
-         CS1 = -SN1
-         SN1 = TN
-      END IF
+      CALL DLAEV2_HELPER( A, B, C, RT1, RT2, CS1, SN1 )
       RETURN
 *
 *     End of DLAEV2
@@ -4790,299 +4250,25 @@ CIBM           PREFER SCALAR
       REAL(DOUBLE)   A( * ), B( * ), C( * ), D( * ), Y( * )
 *     ..
 *
-*  Purpose
-*  =======
-*
-*  DLAGTS may be used to solve one of the systems of equations
-*
-*     (T - lambda*I)*x = y   or   (T - lambda*I)'*x = y,
-*
-*  where T is an n by n tridiagonal matrix, for x, following the
-*  factorization of (T - lambda*I) as
-*
-*     (T - lambda*I) = P*L*U ,
-*
-*  by routine DLAGTF. The choice of equation to be solved is
-*  controlled by the argument JOB, and in each case there is an option
-*  to perturb zero or very small diagonal elements of U, this option
-*  being intended for use in applications such as inverse iteration.
-*
-*  Arguments
-*  =========
-*
-*  JOB     (input) INTEGER
-*          Specifies the job to be performed by DLAGTS as follows:
-*          =  1: The equations  (T - lambda*I)x = y  are to be solved,
-*                but diagonal elements of U are not to be perturbed.
-*          = -1: The equations  (T - lambda*I)x = y  are to be solved
-*                and, if overflow would otherwise occur, the diagonal
-*                elements of U are to be perturbed. See argument TOL
-*                below.
-*          =  2: The equations  (T - lambda*I)'x = y  are to be solved,
-*                but diagonal elements of U are not to be perturbed.
-*          = -2: The equations  (T - lambda*I)'x = y  are to be solved
-*                and, if overflow would otherwise occur, the diagonal
-*                elements of U are to be perturbed. See argument TOL
-*                below.
-*
-*  N       (input) INTEGER
-*          The order of the matrix T.
-*
-*  A       (input) REAL(DOUBLE) array, dimension (N)
-*          On entry, A must contain the diagonal elements of U as
-*          returned from DLAGTF.
-*
-*  B       (input) REAL(DOUBLE) array, dimension (N-1)
-*          On entry, B must contain the first super-diagonal elements of
-*          U as returned from DLAGTF.
-*
-*  C       (input) REAL(DOUBLE) array, dimension (N-1)
-*          On entry, C must contain the sub-diagonal elements of L as
-*          returned from DLAGTF.
-*
-*  D       (input) REAL(DOUBLE) array, dimension (N-2)
-*          On entry, D must contain the second super-diagonal elements
-*          of U as returned from DLAGTF.
-*
-*  IN      (input) INTEGER array, dimension (N)
-*          On entry, IN must contain details of the matrix P as returned
-*          from DLAGTF.
-*
-*  Y       (input/output) REAL(DOUBLE) array, dimension (N)
-*          On entry, the right hand side vector y.
-*          On exit, Y is overwritten by the solution vector x.
-*
-*  TOL     (input/output) REAL(DOUBLE)
-*          On entry, with  JOB .lt. 0, TOL should be the minimum
-*          perturbation to be made to very small diagonal elements of U.
-*          TOL should normally be chosen as about eps*norm(U), where eps
-*          is the relative machine precision, but if TOL is supplied as
-*          non-positive, then it is reset to eps*max( abs( u(i,j) ) ).
-*          If  JOB .gt. 0  then TOL is not referenced.
-*
-*          On exit, TOL is changed as described above, only if TOL is
-*          non-positive on entry. Otherwise TOL is unchanged.
-*
-*  INFO    (output) INTEGER
-*          = 0   : successful exit
-*          .lt. 0: if INFO = -i, the i-th argument had an illegal value
-*          .gt. 0: overflow would occur when computing the INFO(th)
-*                  element of the solution vector x. This can only occur
-*                  when JOB is supplied as positive and either means
-*                  that a diagonal element of U is very small, or that
-*                  the elements of the right-hand side vector y are very
-*                  large.
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE, ZERO
-      PARAMETER          ( ONE = 1.0D+0, ZERO = 0.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            K
-      REAL(DOUBLE)   ABSAK, AK, BIGNUM, EPS, PERT, SFMIN, TEMP
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, MAX, SIGN
-*     ..
-*     .. External Functions ..
-      REAL(DOUBLE)       DLAMCH
-      EXTERNAL           DLAMCH
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. Executable Statements ..
-*
-      INFO = 0
-      IF( ( ABS( JOB ).GT.2 ) .OR. ( JOB.EQ.0 ) ) THEN
-         INFO = -1
-      ELSE IF( N.LT.0 ) THEN
-         INFO = -2
-      END IF
-      IF( INFO.NE.0 ) THEN
-         CALL XERBLA( 'DLAGTS', -INFO )
-         RETURN
-      END IF
-*
-      IF( N.EQ.0 )
-     $   RETURN
-*
-      EPS = DLAMCH( 'Epsilon' )
-      SFMIN = DLAMCH( 'Safe minimum' )
-      BIGNUM = ONE / SFMIN
-*
-      IF( JOB.LT.0 ) THEN
-         IF( TOL.LE.ZERO ) THEN
-            TOL = ABS( A( 1 ) )
-            IF( N.GT.1 )
-     $         TOL = MAX( TOL, ABS( A( 2 ) ), ABS( B( 1 ) ) )
-            DO 10 K = 3, N
-               TOL = MAX( TOL, ABS( A( K ) ), ABS( B( K-1 ) ),
-     $               ABS( D( K-2 ) ) )
-   10       CONTINUE
-            TOL = TOL*EPS
-            IF( TOL.EQ.ZERO )
-     $         TOL = EPS
-         END IF
-      END IF
-*
-      IF( ABS( JOB ).EQ.1 ) THEN
-         DO 20 K = 2, N
-            IF( IN( K-1 ).EQ.0 ) THEN
-               Y( K ) = Y( K ) - C( K-1 )*Y( K-1 )
-            ELSE
-               TEMP = Y( K-1 )
-               Y( K-1 ) = Y( K )
-               Y( K ) = TEMP - C( K-1 )*Y( K )
-            END IF
-   20    CONTINUE
-         IF( JOB.EQ.1 ) THEN
-            DO 30 K = N, 1, -1
-               IF( K.LE.N-2 ) THEN
-                  TEMP = Y( K ) - B( K )*Y( K+1 ) - D( K )*Y( K+2 )
-               ELSE IF( K.EQ.N-1 ) THEN
-                  TEMP = Y( K ) - B( K )*Y( K+1 )
-               ELSE
-                  TEMP = Y( K )
-               END IF
-               AK = A( K )
-               ABSAK = ABS( AK )
-               IF( ABSAK.LT.ONE ) THEN
-                  IF( ABSAK.LT.SFMIN ) THEN
-                     IF( ABSAK.EQ.ZERO .OR. ABS( TEMP )*SFMIN.GT.ABSAK )
-     $                    THEN
-                        INFO = K
-                        RETURN
-                     ELSE
-                        TEMP = TEMP*BIGNUM
-                        AK = AK*BIGNUM
-                     END IF
-                  ELSE IF( ABS( TEMP ).GT.ABSAK*BIGNUM ) THEN
-                     INFO = K
-                     RETURN
-                  END IF
-               END IF
-               Y( K ) = TEMP / AK
-   30       CONTINUE
-         ELSE
-            DO 50 K = N, 1, -1
-               IF( K.LE.N-2 ) THEN
-                  TEMP = Y( K ) - B( K )*Y( K+1 ) - D( K )*Y( K+2 )
-               ELSE IF( K.EQ.N-1 ) THEN
-                  TEMP = Y( K ) - B( K )*Y( K+1 )
-               ELSE
-                  TEMP = Y( K )
-               END IF
-               AK = A( K )
-               PERT = SIGN( TOL, AK )
-   40          CONTINUE
-               ABSAK = ABS( AK )
-               IF( ABSAK.LT.ONE ) THEN
-                  IF( ABSAK.LT.SFMIN ) THEN
-                     IF( ABSAK.EQ.ZERO .OR. ABS( TEMP )*SFMIN.GT.ABSAK )
-     $                    THEN
-                        AK = AK + PERT
-                        PERT = 2*PERT
-                        GO TO 40
-                     ELSE
-                        TEMP = TEMP*BIGNUM
-                        AK = AK*BIGNUM
-                     END IF
-                  ELSE IF( ABS( TEMP ).GT.ABSAK*BIGNUM ) THEN
-                     AK = AK + PERT
-                     PERT = 2*PERT
-                     GO TO 40
-                  END IF
-               END IF
-               Y( K ) = TEMP / AK
-   50       CONTINUE
-         END IF
-      ELSE
-*
-*        Come to here if  JOB = 2 or -2
-*
-         IF( JOB.EQ.2 ) THEN
-            DO 60 K = 1, N
-               IF( K.GE.3 ) THEN
-                  TEMP = Y( K ) - B( K-1 )*Y( K-1 ) - D( K-2 )*Y( K-2 )
-               ELSE IF( K.EQ.2 ) THEN
-                  TEMP = Y( K ) - B( K-1 )*Y( K-1 )
-               ELSE
-                  TEMP = Y( K )
-               END IF
-               AK = A( K )
-               ABSAK = ABS( AK )
-               IF( ABSAK.LT.ONE ) THEN
-                  IF( ABSAK.LT.SFMIN ) THEN
-                     IF( ABSAK.EQ.ZERO .OR. ABS( TEMP )*SFMIN.GT.ABSAK )
-     $                    THEN
-                        INFO = K
-                        RETURN
-                     ELSE
-                        TEMP = TEMP*BIGNUM
-                        AK = AK*BIGNUM
-                     END IF
-                  ELSE IF( ABS( TEMP ).GT.ABSAK*BIGNUM ) THEN
-                     INFO = K
-                     RETURN
-                  END IF
-               END IF
-               Y( K ) = TEMP / AK
-   60       CONTINUE
-         ELSE
-            DO 80 K = 1, N
-               IF( K.GE.3 ) THEN
-                  TEMP = Y( K ) - B( K-1 )*Y( K-1 ) - D( K-2 )*Y( K-2 )
-               ELSE IF( K.EQ.2 ) THEN
-                  TEMP = Y( K ) - B( K-1 )*Y( K-1 )
-               ELSE
-                  TEMP = Y( K )
-               END IF
-               AK = A( K )
-               PERT = SIGN( TOL, AK )
-   70          CONTINUE
-               ABSAK = ABS( AK )
-               IF( ABSAK.LT.ONE ) THEN
-                  IF( ABSAK.LT.SFMIN ) THEN
-                     IF( ABSAK.EQ.ZERO .OR. ABS( TEMP )*SFMIN.GT.ABSAK )
-     $                    THEN
-                        AK = AK + PERT
-                        PERT = 2*PERT
-                        GO TO 70
-                     ELSE
-                        TEMP = TEMP*BIGNUM
-                        AK = AK*BIGNUM
-                     END IF
-                  ELSE IF( ABS( TEMP ).GT.ABSAK*BIGNUM ) THEN
-                     AK = AK + PERT
-                     PERT = 2*PERT
-                     GO TO 70
-                  END IF
-               END IF
-               Y( K ) = TEMP / AK
-   80       CONTINUE
-         END IF
-*
-         DO 90 K = N, 2, -1
-            IF( IN( K-1 ).EQ.0 ) THEN
-               Y( K-1 ) = Y( K-1 ) - C( K-1 )*Y( K )
-            ELSE
-               TEMP = Y( K-1 )
-               Y( K-1 ) = Y( K )
-               Y( K ) = TEMP - C( K-1 )*Y( K )
-            END IF
-   90    CONTINUE
-      END IF
-*
-*     End of DLAGTS
-*
+      CALL DLAGTS_HELPER( JOB, N, A, B, C, D, IN, Y, TOL, INFO )
       END SUBROUTINE DLAGTS
 
 ! ##################################################################################################################################
 ! 032 LAPACK_BLAS_AUX
 *
       SUBROUTINE DLAMC1( BETA, T, RND, IEEE1 )
+      LOGICAL            IEEE1, RND
+      INTEGER            BETA, T
+
+      CALL DLAMC1_HELPER( BETA, T, RND, IEEE1 )
+
+      RETURN
+
+      END SUBROUTINE DLAMC1
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLAMC1_HELPER( BETA, T, RND, IEEE1 )
 
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -5261,14 +4447,28 @@ CIBM           PREFER SCALAR
       IEEE1 = LIEEE1
       RETURN
 *
-*     End of DLAMC1
+*     End of DLAMC1_HELPER
 *
-      END SUBROUTINE DLAMC1
+      END SUBROUTINE DLAMC1_HELPER
 *
 ! ##################################################################################################################################
 ! 033 LAPACK_BLAS_AUX
 *
       SUBROUTINE DLAMC2( BETA, T, RND, EPS, EMIN, RMIN, EMAX, RMAX )
+      LOGICAL            RND
+      INTEGER            BETA, EMAX, EMIN, T
+      REAL(DOUBLE)   EPS, RMAX, RMIN
+
+      CALL DLAMC2_HELPER( BETA, T, RND, EPS, EMIN, RMIN, EMAX, RMAX )
+
+      RETURN
+
+      END SUBROUTINE DLAMC2
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLAMC2_HELPER( BETA, T, RND, EPS, EMIN, RMIN, EMAX,
+     $                          RMAX )
 
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -5518,9 +4718,9 @@ CIBM           PREFER SCALAR
      $      / ' the IF block as marked within the code of routine',
      $      ' DLAMC2,', / ' otherwise supply EMIN explicitly.', / )
 *
-*     End of DLAMC2
+*     End of DLAMC2_HELPER
 *
-      END SUBROUTINE DLAMC2
+      END SUBROUTINE DLAMC2_HELPER
 *
 ! ##################################################################################################################################
 ! 034 LAPACK_BLAS_AUX
@@ -5534,26 +4734,7 @@ CIBM           PREFER SCALAR
 *
 *     .. Scalar Arguments ..
       REAL(DOUBLE)   A, B
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLAMC3  is intended to force  A  and  B  to be stored prior to doing
-*  the addition of  A  and  B ,  for use in situations where optimizers
-*  might hold one of these in a register.
-*
-*  Arguments
-*  =========
-*
-*  A, B    (input) REAL(DOUBLE)
-*          The values A and B.
-*
-* =====================================================================
-*
-*     .. Executable Statements ..
-*
-      DLAMC3 = A + B
+      DLAMC3 = DLAMC3_HELPER( A, B )
 *
       RETURN
 *
@@ -5565,6 +4746,18 @@ CIBM           PREFER SCALAR
 ! 035 LAPACK_BLAS_AUX
 *
       SUBROUTINE DLAMC4( EMIN, START, BASE )
+      INTEGER            BASE, EMIN
+      REAL(DOUBLE)   START
+
+      CALL DLAMC4_HELPER( EMIN, START, BASE )
+
+      RETURN
+
+      END SUBROUTINE DLAMC4
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLAMC4_HELPER( EMIN, START, BASE )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -5640,14 +4833,27 @@ CIBM           PREFER SCALAR
 *
       RETURN
 *
-*     End of DLAMC4
+*     End of DLAMC4_HELPER
 *
-      END SUBROUTINE DLAMC4
+      END SUBROUTINE DLAMC4_HELPER
 *
 ! ##################################################################################################################################
 ! 036 LAPACK_BLAS_AUX
 *
       SUBROUTINE DLAMC5( BETA, P, EMIN, IEEE, EMAX, RMAX )
+      LOGICAL            IEEE
+      INTEGER            BETA, EMAX, EMIN, P
+      REAL(DOUBLE)   RMAX
+
+      CALL DLAMC5_HELPER( BETA, P, EMIN, IEEE, EMAX, RMAX )
+
+      RETURN
+
+      END SUBROUTINE DLAMC5
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLAMC5_HELPER( BETA, P, EMIN, IEEE, EMAX, RMAX )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -5801,9 +5007,9 @@ CIBM           PREFER SCALAR
       RMAX = Y
       RETURN
 *
-*     End of DLAMC5
+*     End of DLAMC5_HELPER
 *
-      END SUBROUTINE DLAMC5
+      END SUBROUTINE DLAMC5_HELPER
 
 ! ##################################################################################################################################
 ! 037 LAPACK_BLAS_AUX
@@ -5819,202 +5025,11 @@ CIBM           PREFER SCALAR
 *     .. Scalar Arguments ..
       CHARACTER          NORM, UPLO
       INTEGER            K, LDAB, N
-*     ..
-*     .. Array Arguments ..
       REAL(DOUBLE)   AB( LDAB, * ), WORK( * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLANSB  returns the value of the one norm,  or the Frobenius norm, or
-*  the  infinity norm,  or the element of  largest absolute value  of an
-*  n by n symmetric band matrix A,  with k super-diagonals.
-*
-*  Description
-*  ===========
-*
-*  DLANSB returns the value
-*
-*     DLANSB = ( max(abs(A(i,j))), NORM = 'M' or 'm'
-*              (
-*              ( norm1(A),         NORM = '1', 'O' or 'o'
-*              (
-*              ( normI(A),         NORM = 'I' or 'i'
-*              (
-*              ( normF(A),         NORM = 'F', 'f', 'E' or 'e'
-*
-*  where  norm1  denotes the  one norm of a matrix (maximum column sum),
-*  normI  denotes the  infinity norm  of a matrix  (maximum row sum) and
-*  normF  denotes the  Frobenius norm of a matrix (square root of sum of
-*  squares).  Note that  max(abs(A(i,j)))  is not a  matrix norm.
-*
-*  Arguments
-*  =========
-*
-*  NORM    (input) CHARACTER*1
-*          Specifies the value to be returned in DLANSB as described
-*          above.
-*
-*  UPLO    (input) CHARACTER*1
-*          Specifies whether the upper or lower triangular part of the
-*          band matrix A is supplied.
-*          = 'U':  Upper triangular part is supplied
-*          = 'L':  Lower triangular part is supplied
-*
-*  N       (input) INTEGER
-*          The order of the matrix A.  N >= 0.  When N = 0, DLANSB is
-*          set to zero.
-*
-*  K       (input) INTEGER
-*          The number of super-diagonals or sub-diagonals of the
-*          band matrix A.  K >= 0.
-*
-*  AB      (input) REAL(DOUBLE) array, dimension (LDAB,N)
-*          The upper or lower triangle of the symmetric band matrix A,
-*          stored in the first K+1 rows of AB.  The j-th column of A is
-*          stored in the j-th column of the array AB as follows:
-*          if UPLO = 'U', AB(k+1+i-j,j) = A(i,j) for max(1,j-k)<=i<=j;
-*          if UPLO = 'L', AB(1+i-j,j)   = A(i,j) for j<=i<=min(n,j+k).
-*
-*  LDAB    (input) INTEGER
-*          The leading dimension of the array AB.  LDAB >= K+1.
-*
-*  WORK    (workspace) REAL(DOUBLE) array, dimension (LWORK),
-*          where LWORK >= N when NORM = 'I' or '1' or 'O'; otherwise,
-*          WORK is not referenced.
-*
-* =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE, ZERO
-      PARAMETER          ( ONE = 1.0D+0, ZERO = 0.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            I, J, L
-      REAL(DOUBLE)   ABSA, SCALE, SUM, VALUE
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, MAX, MIN, SQRT
-*     ..
-*     .. Executable Statements ..
-*
-      IF( N.EQ.0 ) THEN
-         VALUE = ZERO
-      ELSE IF( LSAME( NORM, 'M' ) ) THEN
-*
-*        Find max(abs(A(i,j))).
-*
-         VALUE = ZERO
-         IF( LSAME( UPLO, 'U' ) ) THEN
-            DO 20 J = 1, N
-               IF (NOCOUNTS .NE. 'Y') THEN
-                  write(sc1,12345,advance='no') j, n, cr13_lba
-               ENDIF
-               DO 10 I = MAX( K+2-J, 1 ), K + 1
-                  VALUE = MAX( VALUE, ABS( AB( I, J ) ) )
-   10          CONTINUE
-   20       CONTINUE
-         ELSE
-            DO 40 J = 1, N
-               IF (NOCOUNTS .NE. 'Y') THEN
-                  write(sc1,12345,advance='no') j, n, cr13_lba
-               ENDIF
-               DO 30 I = 1, MIN( N+1-J, K+1 )
-                  VALUE = MAX( VALUE, ABS( AB( I, J ) ) )
-   30          CONTINUE
-   40       CONTINUE
-         END IF
-      ELSE IF( ( LSAME( NORM, 'I' ) ) .OR. ( LSAME( NORM, 'O' ) ) .OR.
-     $         ( NORM.EQ.'1' ) ) THEN
-*
-*        Find normI(A) ( = norm1(A), since A is symmetric).
-*
-         VALUE = ZERO
-         IF( LSAME( UPLO, 'U' ) ) THEN
-            DO 60 J = 1, N
-               IF (NOCOUNTS .NE. 'Y') THEN
-                  write(sc1,12345,advance='no') j, n, cr13_lba
-               ENDIF
-               SUM = ZERO
-               L = K + 1 - J
-               DO 50 I = MAX( 1, J-K ), J - 1
-                  ABSA = ABS( AB( L+I, J ) )
-                  SUM = SUM + ABSA
-                  WORK( I ) = WORK( I ) + ABSA
-   50          CONTINUE
-               WORK( J ) = SUM + ABS( AB( K+1, J ) )
-   60       CONTINUE
-            DO 70 I = 1, N
-               IF (NOCOUNTS .NE. 'Y') THEN
-                  write(sc1,12345,advance='no') i, n, cr13_lba
-               ENDIF
-               VALUE = MAX( VALUE, WORK( I ) )
-   70       CONTINUE
-         ELSE
-            DO 80 I = 1, N
-               WORK( I ) = ZERO
-   80       CONTINUE
-            DO 100 J = 1, N
-               IF (NOCOUNTS .NE. 'Y') THEN
-                  write(sc1,12345,advance='no') j, n, cr13_lba
-               ENDIF
-               SUM = WORK( J ) + ABS( AB( 1, J ) )
-               L = 1 - J
-               DO 90 I = J + 1, MIN( N, J+K )
-                  ABSA = ABS( AB( L+I, J ) )
-                  SUM = SUM + ABSA
-                  WORK( I ) = WORK( I ) + ABSA
-   90          CONTINUE
-               VALUE = MAX( VALUE, SUM )
-  100       CONTINUE
-         END IF
-      ELSE IF( ( LSAME( NORM, 'F' ) ) .OR. ( LSAME( NORM, 'E' ) ) ) THEN
-*
-*        Find normF(A).
-*
-         SCALE = ZERO
-         SUM = ONE
-         IF( K.GT.0 ) THEN
-            IF( LSAME( UPLO, 'U' ) ) THEN
-               DO 110 J = 2, N
-                  IF (NOCOUNTS .NE. 'Y') THEN
-                     write(sc1,12345,advance='no') j, n, cr13_lba
-                  ENDIF
-                  CALL DLASSQ( MIN( J-1, K ), AB( MAX( K+2-J, 1 ), J ),
-     $                         1, SCALE, SUM )
-  110          CONTINUE
-               L = K + 1
-            ELSE
-               DO 120 J = 1, N - 1
-                  IF (NOCOUNTS .NE. 'Y') THEN
-                     write(sc1,12345,advance='no') j, n, cr13_lba
-                  ENDIF
-                  CALL DLASSQ( MIN( N-J, K ), AB( 2, J ), 1, SCALE,
-     $                         SUM )
-  120          CONTINUE
-               L = 1
-            END IF
-            SUM = 2*SUM
-         ELSE
-            L = 1
-         END IF
-         CALL DLASSQ( N, AB( L, 1 ), LDAB, SCALE, SUM )
-         VALUE = SCALE*SQRT( SUM )
-      END IF
-*
-      DLANSB = VALUE
+      DLANSB = DLANSB_HELPER( NORM, UPLO, N, K, AB, LDAB, WORK )
       RETURN
 *
 *     End of DLANSB
-*
-12345 format(5x,'Row ',i8,' of ',i8, a)
 
       END FUNCTION DLANSB
 
@@ -6031,164 +5046,8 @@ CIBM           PREFER SCALAR
 *     .. Scalar Arguments ..
       CHARACTER          NORM, UPLO
       INTEGER            LDA, N
-*     ..
-*     .. Array Arguments ..
       REAL(DOUBLE)   A( LDA, * ), WORK( * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLANSY  returns the value of the one norm,  or the Frobenius norm, or
-*  the  infinity norm,  or the  element of  largest absolute value  of a
-*  real symmetric matrix A.
-*
-*  Description
-*  ===========
-*
-*  DLANSY returns the value
-*
-*     DLANSY = ( max(abs(A(i,j))), NORM = 'M' or 'm'
-*              (
-*              ( norm1(A),         NORM = '1', 'O' or 'o'
-*              (
-*              ( normI(A),         NORM = 'I' or 'i'
-*              (
-*              ( normF(A),         NORM = 'F', 'f', 'E' or 'e'
-*
-*  where  norm1  denotes the  one norm of a matrix (maximum column sum),
-*  normI  denotes the  infinity norm  of a matrix  (maximum row sum) and
-*  normF  denotes the  Frobenius norm of a matrix (square root of sum of
-*  squares).  Note that  max(abs(A(i,j)))  is not a  matrix norm.
-*
-*  Arguments
-*  =========
-*
-*  NORM    (input) CHARACTER*1
-*          Specifies the value to be returned in DLANSY as described
-*          above.
-*
-*  UPLO    (input) CHARACTER*1
-*          Specifies whether the upper or lower triangular part of the
-*          symmetric matrix A is to be referenced.
-*          = 'U':  Upper triangular part of A is referenced
-*          = 'L':  Lower triangular part of A is referenced
-*
-*  N       (input) INTEGER
-*          The order of the matrix A.  N >= 0.  When N = 0, DLANSY is
-*          set to zero.
-*
-*  A       (input) REAL(DOUBLE) array, dimension (LDA,N)
-*          The symmetric matrix A.  If UPLO = 'U', the leading n by n
-*          upper triangular part of A contains the upper triangular part
-*          of the matrix A, and the strictly lower triangular part of A
-*          is not referenced.  If UPLO = 'L', the leading n by n lower
-*          triangular part of A contains the lower triangular part of
-*          the matrix A, and the strictly upper triangular part of A is
-*          not referenced.
-*
-*  LDA     (input) INTEGER
-*          The leading dimension of the array A.  LDA >= max(N,1).
-*
-*  WORK    (workspace) REAL(DOUBLE) array, dimension (LWORK),
-*          where LWORK >= N when NORM = 'I' or '1' or 'O'; otherwise,
-*          WORK is not referenced.
-*
-* =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE, ZERO
-      PARAMETER          ( ONE = 1.0D+0, ZERO = 0.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            I, J
-      REAL(DOUBLE)   ABSA, SCALE, SUM, VALUE
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, MAX, SQRT
-*     ..
-*     .. Executable Statements ..
-*
-      IF( N.EQ.0 ) THEN
-         VALUE = ZERO
-      ELSE IF( LSAME( NORM, 'M' ) ) THEN
-*
-*        Find max(abs(A(i,j))).
-*
-         VALUE = ZERO
-         IF( LSAME( UPLO, 'U' ) ) THEN
-            DO 20 J = 1, N
-               DO 10 I = 1, J
-                  VALUE = MAX( VALUE, ABS( A( I, J ) ) )
-   10          CONTINUE
-   20       CONTINUE
-         ELSE
-            DO 40 J = 1, N
-               DO 30 I = J, N
-                  VALUE = MAX( VALUE, ABS( A( I, J ) ) )
-   30          CONTINUE
-   40       CONTINUE
-         END IF
-      ELSE IF( ( LSAME( NORM, 'I' ) ) .OR. ( LSAME( NORM, 'O' ) ) .OR.
-     $         ( NORM.EQ.'1' ) ) THEN
-*
-*        Find normI(A) ( = norm1(A), since A is symmetric).
-*
-         VALUE = ZERO
-         IF( LSAME( UPLO, 'U' ) ) THEN
-            DO 60 J = 1, N
-               SUM = ZERO
-               DO 50 I = 1, J - 1
-                  ABSA = ABS( A( I, J ) )
-                  SUM = SUM + ABSA
-                  WORK( I ) = WORK( I ) + ABSA
-   50          CONTINUE
-               WORK( J ) = SUM + ABS( A( J, J ) )
-   60       CONTINUE
-            DO 70 I = 1, N
-               VALUE = MAX( VALUE, WORK( I ) )
-   70       CONTINUE
-         ELSE
-            DO 80 I = 1, N
-               WORK( I ) = ZERO
-   80       CONTINUE
-            DO 100 J = 1, N
-               SUM = WORK( J ) + ABS( A( J, J ) )
-               DO 90 I = J + 1, N
-                  ABSA = ABS( A( I, J ) )
-                  SUM = SUM + ABSA
-                  WORK( I ) = WORK( I ) + ABSA
-   90          CONTINUE
-               VALUE = MAX( VALUE, SUM )
-  100       CONTINUE
-         END IF
-      ELSE IF( ( LSAME( NORM, 'F' ) ) .OR. ( LSAME( NORM, 'E' ) ) ) THEN
-*
-*        Find normF(A).
-*
-         SCALE = ZERO
-         SUM = ONE
-         IF( LSAME( UPLO, 'U' ) ) THEN
-            DO 110 J = 2, N
-               CALL DLASSQ( J-1, A( 1, J ), 1, SCALE, SUM )
-  110       CONTINUE
-         ELSE
-            DO 120 J = 1, N - 1
-               CALL DLASSQ( N-J, A( J+1, J ), 1, SCALE, SUM )
-  120       CONTINUE
-         END IF
-         SUM = 2*SUM
-         CALL DLASSQ( N, A, LDA+1, SCALE, SUM )
-         VALUE = SCALE*SQRT( SUM )
-      END IF
-*
-      DLANSY = VALUE
+      DLANSY = DLANSY_HELPER( NORM, UPLO, N, A, LDA, WORK )
       RETURN
 *
 *     End of DLANSY
@@ -6207,50 +5066,9 @@ CIBM           PREFER SCALAR
 *
 *     .. Scalar Arguments ..
       REAL(DOUBLE)   X, Y
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLAPY2 returns sqrt(x**2+y**2), taking care not to cause unnecessary
-*  overflow.
-*
-*  Arguments
-*  =========
-*
-*  X       (input) REAL(DOUBLE)
-*  Y       (input) REAL(DOUBLE)
-*          X and Y specify the values x and y.
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ZERO
-      PARAMETER          ( ZERO = 0.0D0 )
-      REAL(DOUBLE)   ONE
-      PARAMETER          ( ONE = 1.0D0 )
-*     ..
-*     .. Local Scalars ..
-      REAL(DOUBLE)   W, XABS, YABS, Z
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, MAX, MIN, SQRT
-*     ..
-*     .. Executable Statements ..
-*
-      XABS = ABS( X )
-      YABS = ABS( Y )
-      W = MAX( XABS, YABS )
-      Z = MIN( XABS, YABS )
-      IF( Z.EQ.ZERO ) THEN
-         DLAPY2 = W
-      ELSE
-         DLAPY2 = W*SQRT( ONE+( Z / W )**2 )
-      END IF
+      DLAPY2 = DLAPY2_HELPER( X, Y )
       RETURN
-*
-*     End of DLAPY2
-*
+
       END FUNCTION DLAPY2
 
 ! ##################################################################################################################################
@@ -6420,6 +5238,15 @@ CIBM           PREFER SCALAR
 ! 042 LAPACK_BLAS_AUX
 
       SUBROUTINE DLAR2V( N, X, Y, Z, INCX, C, S, INCC )
+      INTEGER            INCC, INCX, N
+      REAL(DOUBLE)       C( * ), S( * ), X( * ), Y( * ), Z( * )
+
+      CALL DLAR2V_HELPER( N, X, Y, Z, INCX, C, S, INCC )
+      RETURN
+
+      END SUBROUTINE DLAR2V
+
+      SUBROUTINE DLAR2V_HELPER( N, X, Y, Z, INCX, C, S, INCC )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -6506,7 +5333,7 @@ CIBM           PREFER SCALAR
 *
       RETURN
 
-      END SUBROUTINE DLAR2V
+      END SUBROUTINE DLAR2V_HELPER
 
 ! ##################################################################################################################################
 ! 043 LAPACK_BLAS_AUX
@@ -6527,104 +5354,7 @@ CIBM           PREFER SCALAR
       REAL(DOUBLE)   C( LDC, * ), V( * ), WORK( * )
 *     ..
 *
-*  Purpose
-*  =======
-*
-*  DLARF applies a real elementary reflector H to a real m by n matrix
-*  C, from either the left or the right. H is represented in the form
-*
-*        H = I - tau * v * v'
-*
-*  where tau is a real scalar and v is a real vector.
-*
-*  If tau = 0, then H is taken to be the unit matrix.
-*
-*  Arguments
-*  =========
-*
-*  SIDE    (input) CHARACTER*1
-*          = 'L': form  H * C
-*          = 'R': form  C * H
-*
-*  M       (input) INTEGER
-*          The number of rows of the matrix C.
-*
-*  N       (input) INTEGER
-*          The number of columns of the matrix C.
-*
-*  V       (input) REAL(DOUBLE) array, dimension
-*                     (1 + (M-1)*abs(INCV)) if SIDE = 'L'
-*                  or (1 + (N-1)*abs(INCV)) if SIDE = 'R'
-*          The vector v in the representation of H. V is not used if
-*          TAU = 0.
-*
-*  INCV    (input) INTEGER
-*          The increment between elements of v. INCV <> 0.
-*
-*  TAU     (input) REAL(DOUBLE)
-*          The value tau in the representation of H.
-*
-*  C       (input/output) REAL(DOUBLE) array, dimension (LDC,N)
-*          On entry, the m by n matrix C.
-*          On exit, C is overwritten by the matrix H * C if SIDE = 'L',
-*          or C * H if SIDE = 'R'.
-*
-*  LDC     (input) INTEGER
-*          The leading dimension of the array C. LDC >= max(1,M).
-*
-*  WORK    (workspace) REAL(DOUBLE) array, dimension
-*                         (N) if SIDE = 'L'
-*                      or (M) if SIDE = 'R'
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE, ZERO
-      PARAMETER          ( ONE = 1.0D+0, ZERO = 0.0D+0 )
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-*     ..
-*     .. Executable Statements ..
-*
-      IF( LSAME( SIDE, 'L' ) ) THEN
-*
-*        Form  H * C
-*
-         IF( TAU.NE.ZERO ) THEN
-*
-*           w := C' * v
-*
-            CALL DGEMV( 'Transpose', M, N, ONE, C, LDC, V, INCV, ZERO,
-     $                  WORK, 1 )
-*
-*           C := C - v * w'
-*
-            CALL DGER( M, N, -TAU, V, INCV, WORK, 1, C, LDC )
-         END IF
-      ELSE
-*
-*        Form  C * H
-*
-         IF( TAU.NE.ZERO ) THEN
-*
-*           w := C * v
-*
-            CALL DGEMV( 'No transpose', M, N, ONE, C, LDC, V, INCV,
-     $                  ZERO, WORK, 1 )
-*
-*           C := C - w * v'
-*
-            CALL DGER( M, N, -TAU, WORK, 1, V, INCV, C, LDC )
-         END IF
-      END IF
-      RETURN
-*
-*     End of DLARF
-*
+      CALL DLARF_HELPER( SIDE, M, N, V, INCV, TAU, C, LDC, WORK )
       END SUBROUTINE DLARF
 
 ! ##################################################################################################################################
@@ -6743,485 +5473,9 @@ CIBM           PREFER SCALAR
 *     ..
 *     .. Executable Statements ..
 *
-*     Quick return if possible
-*
-      IF( M.LE.0 .OR. N.LE.0 )
-     $   RETURN
-*
-      IF( LSAME( TRANS, 'N' ) ) THEN
-         TRANST = 'T'
-      ELSE
-         TRANST = 'N'
-      END IF
-*
-      IF( LSAME( STOREV, 'C' ) ) THEN
-*
-         IF( LSAME( DIRECT, 'F' ) ) THEN
-*
-*           Let  V =  ( V1 )    (first K rows)
-*                     ( V2 )
-*           where  V1  is unit lower triangular.
-*
-            IF( LSAME( SIDE, 'L' ) ) THEN
-*
-*              Form  H * C  or  H' * C  where  C = ( C1 )
-*                                                  ( C2 )
-*
-*              W := C' * V  =  (C1'*V1 + C2'*V2)  (stored in WORK)
-*
-*              W := C1'
-*
-               DO 10 J = 1, K
-                  CALL DCOPY( N, C( J, 1 ), LDC, WORK( 1, J ), 1 )
-   10          CONTINUE
-*
-*              W := W * V1
-*
-               CALL DTRMM( 'Right', 'Lower', 'No transpose', 'Unit', N,
-     $                     K, ONE, V, LDV, WORK, LDWORK )
-               IF( M.GT.K ) THEN
-*
-*                 W := W + C2'*V2
-*
-                  CALL DGEMM( 'Transpose', 'No transpose', N, K, M-K,
-     $                        ONE, C( K+1, 1 ), LDC, V( K+1, 1 ), LDV,
-     $                        ONE, WORK, LDWORK )
-               END IF
-*
-*              W := W * T'  or  W * T
-*
-               CALL DTRMM( 'Right', 'Upper', TRANST, 'Non-unit', N, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - V * W'
-*
-               IF( M.GT.K ) THEN
-*
-*                 C2 := C2 - V2 * W'
-*
-                  CALL DGEMM( 'No transpose', 'Transpose', M-K, N, K,
-     $                        -ONE, V( K+1, 1 ), LDV, WORK, LDWORK, ONE,
-     $                        C( K+1, 1 ), LDC )
-               END IF
-*
-*              W := W * V1'
-*
-               CALL DTRMM( 'Right', 'Lower', 'Transpose', 'Unit', N, K,
-     $                     ONE, V, LDV, WORK, LDWORK )
-*
-*              C1 := C1 - W'
-*
-               DO 30 J = 1, K
-                  DO 20 I = 1, N
-                     C( J, I ) = C( J, I ) - WORK( I, J )
-   20             CONTINUE
-   30          CONTINUE
-*
-            ELSE IF( LSAME( SIDE, 'R' ) ) THEN
-*
-*              Form  C * H  or  C * H'  where  C = ( C1  C2 )
-*
-*              W := C * V  =  (C1*V1 + C2*V2)  (stored in WORK)
-*
-*              W := C1
-*
-               DO 40 J = 1, K
-                  CALL DCOPY( M, C( 1, J ), 1, WORK( 1, J ), 1 )
-   40          CONTINUE
-*
-*              W := W * V1
-*
-               CALL DTRMM( 'Right', 'Lower', 'No transpose', 'Unit', M,
-     $                     K, ONE, V, LDV, WORK, LDWORK )
-               IF( N.GT.K ) THEN
-*
-*                 W := W + C2 * V2
-*
-                  CALL DGEMM( 'No transpose', 'No transpose', M, K, N-K,
-     $                        ONE, C( 1, K+1 ), LDC, V( K+1, 1 ), LDV,
-     $                        ONE, WORK, LDWORK )
-               END IF
-*
-*              W := W * T  or  W * T'
-*
-               CALL DTRMM( 'Right', 'Upper', TRANS, 'Non-unit', M, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - W * V'
-*
-               IF( N.GT.K ) THEN
-*
-*                 C2 := C2 - W * V2'
-*
-                  CALL DGEMM( 'No transpose', 'Transpose', M, N-K, K,
-     $                        -ONE, WORK, LDWORK, V( K+1, 1 ), LDV, ONE,
-     $                        C( 1, K+1 ), LDC )
-               END IF
-*
-*              W := W * V1'
-*
-               CALL DTRMM( 'Right', 'Lower', 'Transpose', 'Unit', M, K,
-     $                     ONE, V, LDV, WORK, LDWORK )
-*
-*              C1 := C1 - W
-*
-               DO 60 J = 1, K
-                  DO 50 I = 1, M
-                     C( I, J ) = C( I, J ) - WORK( I, J )
-   50             CONTINUE
-   60          CONTINUE
-            END IF
-*
-         ELSE
-*
-*           Let  V =  ( V1 )
-*                     ( V2 )    (last K rows)
-*           where  V2  is unit upper triangular.
-*
-            IF( LSAME( SIDE, 'L' ) ) THEN
-*
-*              Form  H * C  or  H' * C  where  C = ( C1 )
-*                                                  ( C2 )
-*
-*              W := C' * V  =  (C1'*V1 + C2'*V2)  (stored in WORK)
-*
-*              W := C2'
-*
-               DO 70 J = 1, K
-                  CALL DCOPY( N, C( M-K+J, 1 ), LDC, WORK( 1, J ), 1 )
-   70          CONTINUE
-*
-*              W := W * V2
-*
-               CALL DTRMM( 'Right', 'Upper', 'No transpose', 'Unit', N,
-     $                     K, ONE, V( M-K+1, 1 ), LDV, WORK, LDWORK )
-               IF( M.GT.K ) THEN
-*
-*                 W := W + C1'*V1
-*
-                  CALL DGEMM( 'Transpose', 'No transpose', N, K, M-K,
-     $                        ONE, C, LDC, V, LDV, ONE, WORK, LDWORK )
-               END IF
-*
-*              W := W * T'  or  W * T
-*
-               CALL DTRMM( 'Right', 'Lower', TRANST, 'Non-unit', N, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - V * W'
-*
-               IF( M.GT.K ) THEN
-*
-*                 C1 := C1 - V1 * W'
-*
-                  CALL DGEMM( 'No transpose', 'Transpose', M-K, N, K,
-     $                        -ONE, V, LDV, WORK, LDWORK, ONE, C, LDC )
-               END IF
-*
-*              W := W * V2'
-*
-               CALL DTRMM( 'Right', 'Upper', 'Transpose', 'Unit', N, K,
-     $                     ONE, V( M-K+1, 1 ), LDV, WORK, LDWORK )
-*
-*              C2 := C2 - W'
-*
-               DO 90 J = 1, K
-                  DO 80 I = 1, N
-                     C( M-K+J, I ) = C( M-K+J, I ) - WORK( I, J )
-   80             CONTINUE
-   90          CONTINUE
-*
-            ELSE IF( LSAME( SIDE, 'R' ) ) THEN
-*
-*              Form  C * H  or  C * H'  where  C = ( C1  C2 )
-*
-*              W := C * V  =  (C1*V1 + C2*V2)  (stored in WORK)
-*
-*              W := C2
-*
-               DO 100 J = 1, K
-                  CALL DCOPY( M, C( 1, N-K+J ), 1, WORK( 1, J ), 1 )
-  100          CONTINUE
-*
-*              W := W * V2
-*
-               CALL DTRMM( 'Right', 'Upper', 'No transpose', 'Unit', M,
-     $                     K, ONE, V( N-K+1, 1 ), LDV, WORK, LDWORK )
-               IF( N.GT.K ) THEN
-*
-*                 W := W + C1 * V1
-*
-                  CALL DGEMM( 'No transpose', 'No transpose', M, K, N-K,
-     $                        ONE, C, LDC, V, LDV, ONE, WORK, LDWORK )
-               END IF
-*
-*              W := W * T  or  W * T'
-*
-               CALL DTRMM( 'Right', 'Lower', TRANS, 'Non-unit', M, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - W * V'
-*
-               IF( N.GT.K ) THEN
-*
-*                 C1 := C1 - W * V1'
-*
-                  CALL DGEMM( 'No transpose', 'Transpose', M, N-K, K,
-     $                        -ONE, WORK, LDWORK, V, LDV, ONE, C, LDC )
-               END IF
-*
-*              W := W * V2'
-*
-               CALL DTRMM( 'Right', 'Upper', 'Transpose', 'Unit', M, K,
-     $                     ONE, V( N-K+1, 1 ), LDV, WORK, LDWORK )
-*
-*              C2 := C2 - W
-*
-               DO 120 J = 1, K
-                  DO 110 I = 1, M
-                     C( I, N-K+J ) = C( I, N-K+J ) - WORK( I, J )
-  110             CONTINUE
-  120          CONTINUE
-            END IF
-         END IF
-*
-      ELSE IF( LSAME( STOREV, 'R' ) ) THEN
-*
-         IF( LSAME( DIRECT, 'F' ) ) THEN
-*
-*           Let  V =  ( V1  V2 )    (V1: first K columns)
-*           where  V1  is unit upper triangular.
-*
-            IF( LSAME( SIDE, 'L' ) ) THEN
-*
-*              Form  H * C  or  H' * C  where  C = ( C1 )
-*                                                  ( C2 )
-*
-*              W := C' * V'  =  (C1'*V1' + C2'*V2') (stored in WORK)
-*
-*              W := C1'
-*
-               DO 130 J = 1, K
-                  CALL DCOPY( N, C( J, 1 ), LDC, WORK( 1, J ), 1 )
-  130          CONTINUE
-*
-*              W := W * V1'
-*
-               CALL DTRMM( 'Right', 'Upper', 'Transpose', 'Unit', N, K,
-     $                     ONE, V, LDV, WORK, LDWORK )
-               IF( M.GT.K ) THEN
-*
-*                 W := W + C2'*V2'
-*
-                  CALL DGEMM( 'Transpose', 'Transpose', N, K, M-K, ONE,
-     $                        C( K+1, 1 ), LDC, V( 1, K+1 ), LDV, ONE,
-     $                        WORK, LDWORK )
-               END IF
-*
-*              W := W * T'  or  W * T
-*
-               CALL DTRMM( 'Right', 'Upper', TRANST, 'Non-unit', N, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - V' * W'
-*
-               IF( M.GT.K ) THEN
-*
-*                 C2 := C2 - V2' * W'
-*
-                  CALL DGEMM( 'Transpose', 'Transpose', M-K, N, K, -ONE,
-     $                        V( 1, K+1 ), LDV, WORK, LDWORK, ONE,
-     $                        C( K+1, 1 ), LDC )
-               END IF
-*
-*              W := W * V1
-*
-               CALL DTRMM( 'Right', 'Upper', 'No transpose', 'Unit', N,
-     $                     K, ONE, V, LDV, WORK, LDWORK )
-*
-*              C1 := C1 - W'
-*
-               DO 150 J = 1, K
-                  DO 140 I = 1, N
-                     C( J, I ) = C( J, I ) - WORK( I, J )
-  140             CONTINUE
-  150          CONTINUE
-*
-            ELSE IF( LSAME( SIDE, 'R' ) ) THEN
-*
-*              Form  C * H  or  C * H'  where  C = ( C1  C2 )
-*
-*              W := C * V'  =  (C1*V1' + C2*V2')  (stored in WORK)
-*
-*              W := C1
-*
-               DO 160 J = 1, K
-                  CALL DCOPY( M, C( 1, J ), 1, WORK( 1, J ), 1 )
-  160          CONTINUE
-*
-*              W := W * V1'
-*
-               CALL DTRMM( 'Right', 'Upper', 'Transpose', 'Unit', M, K,
-     $                     ONE, V, LDV, WORK, LDWORK )
-               IF( N.GT.K ) THEN
-*
-*                 W := W + C2 * V2'
-*
-                  CALL DGEMM( 'No transpose', 'Transpose', M, K, N-K,
-     $                        ONE, C( 1, K+1 ), LDC, V( 1, K+1 ), LDV,
-     $                        ONE, WORK, LDWORK )
-               END IF
-*
-*              W := W * T  or  W * T'
-*
-               CALL DTRMM( 'Right', 'Upper', TRANS, 'Non-unit', M, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - W * V
-*
-               IF( N.GT.K ) THEN
-*
-*                 C2 := C2 - W * V2
-*
-                  CALL DGEMM( 'No transpose', 'No transpose', M, N-K, K,
-     $                        -ONE, WORK, LDWORK, V( 1, K+1 ), LDV, ONE,
-     $                        C( 1, K+1 ), LDC )
-               END IF
-*
-*              W := W * V1
-*
-               CALL DTRMM( 'Right', 'Upper', 'No transpose', 'Unit', M,
-     $                     K, ONE, V, LDV, WORK, LDWORK )
-*
-*              C1 := C1 - W
-*
-               DO 180 J = 1, K
-                  DO 170 I = 1, M
-                     C( I, J ) = C( I, J ) - WORK( I, J )
-  170             CONTINUE
-  180          CONTINUE
-*
-            END IF
-*
-         ELSE
-*
-*           Let  V =  ( V1  V2 )    (V2: last K columns)
-*           where  V2  is unit lower triangular.
-*
-            IF( LSAME( SIDE, 'L' ) ) THEN
-*
-*              Form  H * C  or  H' * C  where  C = ( C1 )
-*                                                  ( C2 )
-*
-*              W := C' * V'  =  (C1'*V1' + C2'*V2') (stored in WORK)
-*
-*              W := C2'
-*
-               DO 190 J = 1, K
-                  CALL DCOPY( N, C( M-K+J, 1 ), LDC, WORK( 1, J ), 1 )
-  190          CONTINUE
-*
-*              W := W * V2'
-*
-               CALL DTRMM( 'Right', 'Lower', 'Transpose', 'Unit', N, K,
-     $                     ONE, V( 1, M-K+1 ), LDV, WORK, LDWORK )
-               IF( M.GT.K ) THEN
-*
-*                 W := W + C1'*V1'
-*
-                  CALL DGEMM( 'Transpose', 'Transpose', N, K, M-K, ONE,
-     $                        C, LDC, V, LDV, ONE, WORK, LDWORK )
-               END IF
-*
-*              W := W * T'  or  W * T
-*
-               CALL DTRMM( 'Right', 'Lower', TRANST, 'Non-unit', N, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - V' * W'
-*
-               IF( M.GT.K ) THEN
-*
-*                 C1 := C1 - V1' * W'
-*
-                  CALL DGEMM( 'Transpose', 'Transpose', M-K, N, K, -ONE,
-     $                        V, LDV, WORK, LDWORK, ONE, C, LDC )
-               END IF
-*
-*              W := W * V2
-*
-               CALL DTRMM( 'Right', 'Lower', 'No transpose', 'Unit', N,
-     $                     K, ONE, V( 1, M-K+1 ), LDV, WORK, LDWORK )
-*
-*              C2 := C2 - W'
-*
-               DO 210 J = 1, K
-                  DO 200 I = 1, N
-                     C( M-K+J, I ) = C( M-K+J, I ) - WORK( I, J )
-  200             CONTINUE
-  210          CONTINUE
-*
-            ELSE IF( LSAME( SIDE, 'R' ) ) THEN
-*
-*              Form  C * H  or  C * H'  where  C = ( C1  C2 )
-*
-*              W := C * V'  =  (C1*V1' + C2*V2')  (stored in WORK)
-*
-*              W := C2
-*
-               DO 220 J = 1, K
-                  CALL DCOPY( M, C( 1, N-K+J ), 1, WORK( 1, J ), 1 )
-  220          CONTINUE
-*
-*              W := W * V2'
-*
-               CALL DTRMM( 'Right', 'Lower', 'Transpose', 'Unit', M, K,
-     $                     ONE, V( 1, N-K+1 ), LDV, WORK, LDWORK )
-               IF( N.GT.K ) THEN
-*
-*                 W := W + C1 * V1'
-*
-                  CALL DGEMM( 'No transpose', 'Transpose', M, K, N-K,
-     $                        ONE, C, LDC, V, LDV, ONE, WORK, LDWORK )
-               END IF
-*
-*              W := W * T  or  W * T'
-*
-               CALL DTRMM( 'Right', 'Lower', TRANS, 'Non-unit', M, K,
-     $                     ONE, T, LDT, WORK, LDWORK )
-*
-*              C := C - W * V
-*
-               IF( N.GT.K ) THEN
-*
-*                 C1 := C1 - W * V1
-*
-                  CALL DGEMM( 'No transpose', 'No transpose', M, N-K, K,
-     $                        -ONE, WORK, LDWORK, V, LDV, ONE, C, LDC )
-               END IF
-*
-*              W := W * V2
-*
-               CALL DTRMM( 'Right', 'Lower', 'No transpose', 'Unit', M,
-     $                     K, ONE, V( 1, N-K+1 ), LDV, WORK, LDWORK )
-*
-*              C1 := C1 - W
-*
-               DO 240 J = 1, K
-                  DO 230 I = 1, M
-                     C( I, N-K+J ) = C( I, N-K+J ) - WORK( I, J )
-  230             CONTINUE
-  240          CONTINUE
-*
-            END IF
-*
-         END IF
-      END IF
-*
+      CALL DLARFB_HELPER( SIDE, TRANS, DIRECT, STOREV, M, N, K, V, LDV,
+     $                    T, LDT, C, LDC, WORK, LDWORK )
       RETURN
-*
-*     End of DLARFB
-*
       END SUBROUTINE DLARFB
 
 ! ##################################################################################################################################
@@ -7242,128 +5496,7 @@ CIBM           PREFER SCALAR
       REAL(DOUBLE)   X( * )
 *     ..
 *
-*  Purpose
-*  =======
-*
-*  DLARFG generates a real elementary reflector H of order n, such
-*  that
-*
-*        H * ( alpha ) = ( beta ),   H' * H = I.
-*            (   x   )   (   0  )
-*
-*  where alpha and beta are scalars, and x is an (n-1)-element real
-*  vector. H is represented in the form
-*
-*        H = I - tau * ( 1 ) * ( 1 v' ) ,
-*                      ( v )
-*
-*  where tau is a real scalar and v is a real (n-1)-element
-*  vector.
-*
-*  If the elements of x are all zero, then tau = 0 and H is taken to be
-*  the unit matrix.
-*
-*  Otherwise  1 <= tau <= 2.
-*
-*  Arguments
-*  =========
-*
-*  N       (input) INTEGER
-*          The order of the elementary reflector.
-*
-*  ALPHA   (input/output) REAL(DOUBLE)
-*          On entry, the value alpha.
-*          On exit, it is overwritten with the value beta.
-*
-*  X       (input/output) REAL(DOUBLE) array, dimension
-*                         (1+(N-2)*abs(INCX))
-*          On entry, the vector x.
-*          On exit, it is overwritten with the vector v.
-*
-*  INCX    (input) INTEGER
-*          The increment between elements of X. INCX > 0.
-*
-*  TAU     (output) REAL(DOUBLE)
-*          The value tau.
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE, ZERO
-      PARAMETER          ( ONE = 1.0D+0, ZERO = 0.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            J, KNT
-      REAL(DOUBLE)   BETA, RSAFMN, SAFMIN, XNORM
-*     ..
-*     .. External Functions ..
-
-      REAL(DOUBLE)       DLAMCH
-      EXTERNAL           DLAMCH
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, SIGN
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. Executable Statements ..
-*
-      IF( N.LE.1 ) THEN
-         TAU = ZERO
-         RETURN
-      END IF
-*
-      XNORM = DNRM2( N-1, X, INCX )
-*
-      IF( XNORM.EQ.ZERO ) THEN
-*
-*        H  =  I
-*
-         TAU = ZERO
-      ELSE
-*
-*        general case
-*
-         BETA = -SIGN( DLAPY2( ALPHA, XNORM ), ALPHA )
-         SAFMIN = DLAMCH( 'S' ) / DLAMCH( 'E' )
-         IF( ABS( BETA ).LT.SAFMIN ) THEN
-*
-*           XNORM, BETA may be inaccurate; scale X and recompute them
-*
-            RSAFMN = ONE / SAFMIN
-            KNT = 0
-   10       CONTINUE
-            KNT = KNT + 1
-            CALL DSCAL( N-1, RSAFMN, X, INCX )
-            BETA = BETA*RSAFMN
-            ALPHA = ALPHA*RSAFMN
-            IF( ABS( BETA ).LT.SAFMIN )
-     $         GO TO 10
-*
-*           New BETA is at most 1, at least SAFMIN
-*
-            XNORM = DNRM2( N-1, X, INCX )
-            BETA = -SIGN( DLAPY2( ALPHA, XNORM ), ALPHA )
-            TAU = ( BETA-ALPHA ) / BETA
-            CALL DSCAL( N-1, ONE / ( ALPHA-BETA ), X, INCX )
-*
-*           If ALPHA is subnormal, it may lose relative accuracy
-*
-            ALPHA = BETA
-            DO 20 J = 1, KNT
-               ALPHA = ALPHA*SAFMIN
-   20       CONTINUE
-         ELSE
-            TAU = ( BETA-ALPHA ) / BETA
-            CALL DSCAL( N-1, ONE / ( ALPHA-BETA ), X, INCX )
-            ALPHA = BETA
-         END IF
-      END IF
-*
-      RETURN
-*
-*     End of DLARFG
-*
+      CALL DLARFG_HELPER( N, ALPHA, X, INCX, TAU )
       END SUBROUTINE DLARFG
 
 ! ##################################################################################################################################
@@ -7384,207 +5517,7 @@ CIBM           PREFER SCALAR
       REAL(DOUBLE)   T( LDT, * ), TAU( * ), V( LDV, * )
 *     ..
 *
-*  Purpose
-*  =======
-*
-*  DLARFT forms the triangular factor T of a real block reflector H
-*  of order n, which is defined as a product of k elementary reflectors.
-*
-*  If DIRECT = 'F', H = H(1) H(2) . . . H(k) and T is upper triangular;
-*
-*  If DIRECT = 'B', H = H(k) . . . H(2) H(1) and T is lower triangular.
-*
-*  If STOREV = 'C', the vector which defines the elementary reflector
-*  H(i) is stored in the i-th column of the array V, and
-*
-*     H  =  I - V * T * V'
-*
-*  If STOREV = 'R', the vector which defines the elementary reflector
-*  H(i) is stored in the i-th row of the array V, and
-*
-*     H  =  I - V' * T * V
-*
-*  Arguments
-*  =========
-*
-*  DIRECT  (input) CHARACTER*1
-*          Specifies the order in which the elementary reflectors are
-*          multiplied to form the block reflector:
-*          = 'F': H = H(1) H(2) . . . H(k) (Forward)
-*          = 'B': H = H(k) . . . H(2) H(1) (Backward)
-*
-*  STOREV  (input) CHARACTER*1
-*          Specifies how the vectors which define the elementary
-*          reflectors are stored (see also Further Details):
-*          = 'C': columnwise
-*          = 'R': rowwise
-*
-*  N       (input) INTEGER
-*          The order of the block reflector H. N >= 0.
-*
-*  K       (input) INTEGER
-*          The order of the triangular factor T (= the number of
-*          elementary reflectors). K >= 1.
-*
-*  V       (input/output) REAL(DOUBLE) array, dimension
-*                               (LDV,K) if STOREV = 'C'
-*                               (LDV,N) if STOREV = 'R'
-*          The matrix V. See further details.
-*
-*  LDV     (input) INTEGER
-*          The leading dimension of the array V.
-*          If STOREV = 'C', LDV >= max(1,N); if STOREV = 'R', LDV >= K.
-*
-*  TAU     (input) REAL(DOUBLE) array, dimension (K)
-*          TAU(i) must contain the scalar factor of the elementary
-*          reflector H(i).
-*
-*  T       (output) REAL(DOUBLE) array, dimension (LDT,K)
-*          The k by k triangular factor T of the block reflector.
-*          If DIRECT = 'F', T is upper triangular; if DIRECT = 'B', T is
-*          lower triangular. The rest of the array is not used.
-*
-*  LDT     (input) INTEGER
-*          The leading dimension of the array T. LDT >= K.
-*
-*  Further Details
-*  ===============
-*
-*  The shape of the matrix V and the storage of the vectors which define
-*  the H(i) is best illustrated by the following example with n = 5 and
-*  k = 3. The elements equal to 1 are not stored; the corresponding
-*  array elements are modified but restored on exit. The rest of the
-*  array is not used.
-*
-*  DIRECT = 'F' and STOREV = 'C':         DIRECT = 'F' and STOREV = 'R':
-*
-*               V = (  1       )                 V = (  1 v1 v1 v1 v1 )
-*                   ( v1  1    )                     (     1 v2 v2 v2 )
-*                   ( v1 v2  1 )                     (        1 v3 v3 )
-*                   ( v1 v2 v3 )
-*                   ( v1 v2 v3 )
-*
-*  DIRECT = 'B' and STOREV = 'C':         DIRECT = 'B' and STOREV = 'R':
-*
-*               V = ( v1 v2 v3 )                 V = ( v1 v1  1       )
-*                   ( v1 v2 v3 )                     ( v2 v2 v2  1    )
-*                   (  1 v2 v3 )                     ( v3 v3 v3 v3  1 )
-*                   (     1 v3 )
-*                   (        1 )
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ONE, ZERO
-      PARAMETER          ( ONE = 1.0D+0, ZERO = 0.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            I, J
-      REAL(DOUBLE)   VII
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-*     ..
-*     .. Executable Statements ..
-*
-*     Quick return if possible
-*
-      IF( N.EQ.0 )
-     $   RETURN
-*
-      IF( LSAME( DIRECT, 'F' ) ) THEN
-         DO 20 I = 1, K
-            IF( TAU( I ).EQ.ZERO ) THEN
-*
-*              H(i)  =  I
-*
-               DO 10 J = 1, I
-                  T( J, I ) = ZERO
-   10          CONTINUE
-            ELSE
-*
-*              general case
-*
-               VII = V( I, I )
-               V( I, I ) = ONE
-               IF( LSAME( STOREV, 'C' ) ) THEN
-*
-*                 T(1:i-1,i) := - tau(i) * V(i:n,1:i-1)' * V(i:n,i)
-*
-                  CALL DGEMV( 'Transpose', N-I+1, I-1, -TAU( I ),
-     $                        V( I, 1 ), LDV, V( I, I ), 1, ZERO,
-     $                        T( 1, I ), 1 )
-               ELSE
-*
-*                 T(1:i-1,i) := - tau(i) * V(1:i-1,i:n) * V(i,i:n)'
-*
-                  CALL DGEMV( 'No transpose', I-1, N-I+1, -TAU( I ),
-     $                        V( 1, I ), LDV, V( I, I ), LDV, ZERO,
-     $                        T( 1, I ), 1 )
-               END IF
-               V( I, I ) = VII
-*
-*              T(1:i-1,i) := T(1:i-1,1:i-1) * T(1:i-1,i)
-*
-               CALL DTRMV( 'Upper', 'No transpose', 'Non-unit', I-1, T,
-     $                     LDT, T( 1, I ), 1 )
-               T( I, I ) = TAU( I )
-            END IF
-   20    CONTINUE
-      ELSE
-         DO 40 I = K, 1, -1
-            IF( TAU( I ).EQ.ZERO ) THEN
-*
-*              H(i)  =  I
-*
-               DO 30 J = I, K
-                  T( J, I ) = ZERO
-   30          CONTINUE
-            ELSE
-*
-*              general case
-*
-               IF( I.LT.K ) THEN
-                  IF( LSAME( STOREV, 'C' ) ) THEN
-                     VII = V( N-K+I, I )
-                     V( N-K+I, I ) = ONE
-*
-*                    T(i+1:k,i) :=
-*                            - tau(i) * V(1:n-k+i,i+1:k)' * V(1:n-k+i,i)
-*
-                     CALL DGEMV( 'Transpose', N-K+I, K-I, -TAU( I ),
-     $                           V( 1, I+1 ), LDV, V( 1, I ), 1, ZERO,
-     $                           T( I+1, I ), 1 )
-                     V( N-K+I, I ) = VII
-                  ELSE
-                     VII = V( I, N-K+I )
-                     V( I, N-K+I ) = ONE
-*
-*                    T(i+1:k,i) :=
-*                            - tau(i) * V(i+1:k,1:n-k+i) * V(i,1:n-k+i)'
-*
-                     CALL DGEMV( 'No transpose', K-I, N-K+I, -TAU( I ),
-     $                           V( I+1, 1 ), LDV, V( I, 1 ), LDV, ZERO,
-     $                           T( I+1, I ), 1 )
-                     V( I, N-K+I ) = VII
-                  END IF
-*
-*                 T(i+1:k,i) := T(i+1:k,i+1:k) * T(i+1:k,i)
-*
-                  CALL DTRMV( 'Lower', 'No transpose', 'Non-unit', K-I,
-     $                        T( I+1, I+1 ), LDT, T( I+1, I ), 1 )
-               END IF
-               T( I, I ) = TAU( I )
-            END IF
-   40    CONTINUE
-      END IF
-      RETURN
-*
-*     End of DLARFT
-*
+      CALL DLARFT_HELPER( DIRECT, STOREV, N, K, V, LDV, TAU, T, LDT )
       END SUBROUTINE DLARFT
 
 ! ##################################################################################################################################
@@ -7604,97 +5537,26 @@ CIBM           PREFER SCALAR
       REAL(DOUBLE)   C( * ), X( * ), Y( * )
 *     ..
 *
-*  Purpose
-*  =======
-*
-*  DLARGV generates a vector of real plane rotations, determined by
-*  elements of the real vectors x and y. For i = 1,2,...,n
-*
-*     (  c(i)  s(i) ) ( x(i) ) = ( a(i) )
-*     ( -s(i)  c(i) ) ( y(i) ) = (   0  )
-*
-*  Arguments
-*  =========
-*
-*  N       (input) INTEGER
-*          The number of plane rotations to be generated.
-*
-*  X       (input/output) REAL(DOUBLE) array,
-*                         dimension (1+(N-1)*INCX)
-*          On entry, the vector x.
-*          On exit, x(i) is overwritten by a(i), for i = 1,...,n.
-*
-*  INCX    (input) INTEGER
-*          The increment between elements of X. INCX > 0.
-*
-*  Y       (input/output) REAL(DOUBLE) array,
-*                         dimension (1+(N-1)*INCY)
-*          On entry, the vector y.
-*          On exit, the sines of the plane rotations.
-*
-*  INCY    (input) INTEGER
-*          The increment between elements of Y. INCY > 0.
-*
-*  C       (output) REAL(DOUBLE) array, dimension (1+(N-1)*INCC)
-*          The cosines of the plane rotations.
-*
-*  INCC    (input) INTEGER
-*          The increment between elements of C. INCC > 0.
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ZERO, ONE
-      PARAMETER          ( ZERO = 0.0D+0, ONE = 1.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            I, IC, IX, IY
-      REAL(DOUBLE)   F, G, T, TT
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, SQRT
-*     ..
-*     .. Executable Statements ..
-*
-      IX = 1
-      IY = 1
-      IC = 1
-      DO 10 I = 1, N
-         F = X( IX )
-         G = Y( IY )
-         IF( G.EQ.ZERO ) THEN
-            C( IC ) = ONE
-         ELSE IF( F.EQ.ZERO ) THEN
-            C( IC ) = ZERO
-            Y( IY ) = ONE
-            X( IX ) = G
-         ELSE IF( ABS( F ).GT.ABS( G ) ) THEN
-            T = G / F
-            TT = SQRT( ONE+T*T )
-            C( IC ) = ONE / TT
-            Y( IY ) = T*C( IC )
-            X( IX ) = F*TT
-         ELSE
-            T = F / G
-            TT = SQRT( ONE+T*T )
-            Y( IY ) = ONE / TT
-            C( IC ) = T*Y( IY )
-            X( IX ) = G*TT
-         END IF
-         IC = IC + INCC
-         IY = IY + INCY
-         IX = IX + INCX
-   10 CONTINUE
-      RETURN
-*
-*     End of DLARGV
-*
+      CALL DLARGV_HELPER( N, X, INCX, Y, INCY, C, INCC )
       END SUBROUTINE DLARGV
 
 ! ##################################################################################################################################
 ! 048 LAPACK_BLAS_AUX
 
       SUBROUTINE DLARNV( IDIST, ISEED, N, X )
+      INTEGER            IDIST, N
+      INTEGER            ISEED( 4 )
+      REAL(DOUBLE)   X( * )
+
+      CALL DLARNV_HELPER( IDIST, ISEED, N, X )
+
+      RETURN
+
+      END SUBROUTINE DLARNV
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLARNV_HELPER( IDIST, ISEED, N, X )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -7806,9 +5668,9 @@ CIBM           PREFER SCALAR
    40 CONTINUE
       RETURN
 *
-*     End of DLARNV
+*     End of DLARNV_HELPER
 *
-      END SUBROUTINE DLARNV
+      END SUBROUTINE DLARNV_HELPER
 
 ! ##################################################################################################################################
 ! 049 LAPACK_BLAS_AUX
@@ -7824,137 +5686,7 @@ CIBM           PREFER SCALAR
       REAL(DOUBLE)   CS, F, G, R, SN
 *     ..
 *
-*  Purpose
-*  =======
-*
-*  DLARTG generate a plane rotation so that
-*
-*     [  CS  SN  ]  .  [ F ]  =  [ R ]   where CS**2 + SN**2 = 1.
-*     [ -SN  CS  ]     [ G ]     [ 0 ]
-*
-*  This is a slower, more accurate version of the BLAS1 routine DROTG,
-*  with the following other differences:
-*     F and G are unchanged on return.
-*     If G=0, then CS=1 and SN=0.
-*     If F=0 and (G .ne. 0), then CS=0 and SN=1 without doing any
-*        floating point operations (saves work in DBDSQR when
-*        there are zeros on the diagonal).
-*
-*  If F exceeds G in magnitude, CS will be positive.
-*
-*  Arguments
-*  =========
-*
-*  F       (input) REAL(DOUBLE)
-*          The first component of vector to be rotated.
-*
-*  G       (input) REAL(DOUBLE)
-*          The second component of vector to be rotated.
-*
-*  CS      (output) REAL(DOUBLE)
-*          The cosine of the rotation.
-*
-*  SN      (output) REAL(DOUBLE)
-*          The sine of the rotation.
-*
-*  R       (output) REAL(DOUBLE)
-*          The nonzero component of the rotated vector.
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ZERO
-      PARAMETER          ( ZERO = 0.0D0 )
-      REAL(DOUBLE)   ONE
-      PARAMETER          ( ONE = 1.0D0 )
-      REAL(DOUBLE)   TWO
-      PARAMETER          ( TWO = 2.0D0 )
-*     ..
-*     .. Local Scalars ..
-      LOGICAL            FIRST
-      INTEGER            COUNT, I
-      REAL(DOUBLE)   EPS, F1, G1, SAFMIN, SAFMN2, SAFMX2, SCALE
-*     ..
-*     .. External Functions ..
-      REAL(DOUBLE)       DLAMCH
-      EXTERNAL           DLAMCH
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, INT, LOG, MAX, SQRT
-*     ..
-*     .. Save statement ..
-      SAVE               FIRST, SAFMX2, SAFMIN, SAFMN2
-*     ..
-*     .. Data statements ..
-      DATA               FIRST / .TRUE. /
-*     ..
-*     .. Executable Statements ..
-*
-      IF( FIRST ) THEN
-         FIRST = .FALSE.
-         SAFMIN = DLAMCH( 'S' )
-         EPS = DLAMCH( 'E' )
-         SAFMN2 = DLAMCH( 'B' )**INT( LOG( SAFMIN / EPS ) /
-     $            LOG( DLAMCH( 'B' ) ) / TWO )
-         SAFMX2 = ONE / SAFMN2
-      END IF
-      IF( G.EQ.ZERO ) THEN
-         CS = ONE
-         SN = ZERO
-         R = F
-      ELSE IF( F.EQ.ZERO ) THEN
-         CS = ZERO
-         SN = ONE
-         R = G
-      ELSE
-         F1 = F
-         G1 = G
-         SCALE = MAX( ABS( F1 ), ABS( G1 ) )
-         IF( SCALE.GE.SAFMX2 ) THEN
-            COUNT = 0
-   10       CONTINUE
-            COUNT = COUNT + 1
-            F1 = F1*SAFMN2
-            G1 = G1*SAFMN2
-            SCALE = MAX( ABS( F1 ), ABS( G1 ) )
-            IF( SCALE.GE.SAFMX2 )
-     $         GO TO 10
-            R = SQRT( F1**2+G1**2 )
-            CS = F1 / R
-            SN = G1 / R
-            DO 20 I = 1, COUNT
-               R = R*SAFMX2
-   20       CONTINUE
-         ELSE IF( SCALE.LE.SAFMN2 ) THEN
-            COUNT = 0
-   30       CONTINUE
-            COUNT = COUNT + 1
-            F1 = F1*SAFMX2
-            G1 = G1*SAFMX2
-            SCALE = MAX( ABS( F1 ), ABS( G1 ) )
-            IF( SCALE.LE.SAFMN2 )
-     $         GO TO 30
-            R = SQRT( F1**2+G1**2 )
-            CS = F1 / R
-            SN = G1 / R
-            DO 40 I = 1, COUNT
-               R = R*SAFMN2
-   40       CONTINUE
-         ELSE
-            R = SQRT( F1**2+G1**2 )
-            CS = F1 / R
-            SN = G1 / R
-         END IF
-         IF( ABS( F ).GT.ABS( G ) .AND. CS.LT.ZERO ) THEN
-            CS = -CS
-            SN = -SN
-            R = -R
-         END IF
-      END IF
-      RETURN
-*
-*     End of DLARTG
-*
+      CALL DLARTG_HELPER( F, G, CS, SN, R )
       END SUBROUTINE DLARTG
 
 ! ##################################################################################################################################
@@ -7974,74 +5706,26 @@ CIBM           PREFER SCALAR
       REAL(DOUBLE)   C( * ), S( * ), X( * ), Y( * )
 *     ..
 *
-*  Purpose
-*  =======
-*
-*  DLARTV applies a vector of real plane rotations to elements of the
-*  real vectors x and y. For i = 1,2,...,n
-*
-*     ( x(i) ) := (  c(i)  s(i) ) ( x(i) )
-*     ( y(i) )    ( -s(i)  c(i) ) ( y(i) )
-*
-*  Arguments
-*  =========
-*
-*  N       (input) INTEGER
-*          The number of plane rotations to be applied.
-*
-*  X       (input/output) REAL(DOUBLE) array,
-*                         dimension (1+(N-1)*INCX)
-*          The vector x.
-*
-*  INCX    (input) INTEGER
-*          The increment between elements of X. INCX > 0.
-*
-*  Y       (input/output) REAL(DOUBLE) array,
-*                         dimension (1+(N-1)*INCY)
-*          The vector y.
-*
-*  INCY    (input) INTEGER
-*          The increment between elements of Y. INCY > 0.
-*
-*  C       (input) REAL(DOUBLE) array, dimension (1+(N-1)*INCC)
-*          The cosines of the plane rotations.
-*
-*  S       (input) REAL(DOUBLE) array, dimension (1+(N-1)*INCC)
-*          The sines of the plane rotations.
-*
-*  INCC    (input) INTEGER
-*          The increment between elements of C and S. INCC > 0.
-*
-*  =====================================================================
-*
-*     .. Local Scalars ..
-      INTEGER            I, IC, IX, IY
-      REAL(DOUBLE)   XI, YI
-*     ..
-*     .. Executable Statements ..
-*
-      IX = 1
-      IY = 1
-      IC = 1
-      DO 10 I = 1, N
-         XI = X( IX )
-         YI = Y( IY )
-         X( IX ) = C( IC )*XI + S( IC )*YI
-         Y( IY ) = C( IC )*YI - S( IC )*XI
-         IX = IX + INCX
-         IY = IY + INCY
-         IC = IC + INCC
-   10 CONTINUE
-      RETURN
-*
-*     End of DLARTV
-*
+      CALL DLARTV_HELPER( N, X, INCX, Y, INCY, C, S, INCC )
       END SUBROUTINE DLARTV
 
 ! ##################################################################################################################################
 ! 051 LAPACK_BLAS_AUX
 
       SUBROUTINE DLARUV( ISEED, N, X )
+      INTEGER            N
+      INTEGER            ISEED( 4 )
+      REAL(DOUBLE)   X( * )
+
+      CALL DLARUV_HELPER( ISEED, N, X )
+
+      RETURN
+
+      END SUBROUTINE DLARUV
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLARUV_HELPER( ISEED, N, X )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -8406,9 +6090,9 @@ CIBM           PREFER SCALAR
       ISEED( 4 ) = IT4
       RETURN
 *
-*     End of DLARUV
+*     End of DLARUV_HELPER
 *
-      END SUBROUTINE DLARUV
+      END SUBROUTINE DLARUV_HELPER
 
 ! ##################################################################################################################################
 ! 052 LAPACK_BLAS_AUX
@@ -8424,259 +6108,8 @@ CIBM           PREFER SCALAR
       CHARACTER          TYPE
       INTEGER            INFO, KL, KU, LDA, M, N
       REAL(DOUBLE)   CFROM, CTO
-*     ..
-*     .. Array Arguments ..
       REAL(DOUBLE)   A( LDA, * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLASCL multiplies the M by N real matrix A by the real scalar
-*  CTO/CFROM.  This is done without over/underflow as long as the final
-*  result CTO*A(I,J)/CFROM does not over/underflow. TYPE specifies that
-*  A may be full, upper triangular, lower triangular, upper Hessenberg,
-*  or banded.
-*
-*  Arguments
-*  =========
-*
-*  TYPE    (input) CHARACTER*1
-*          TYPE indices the storage type of the input matrix.
-*          = 'G':  A is a full matrix.
-*          = 'L':  A is a lower triangular matrix.
-*          = 'U':  A is an upper triangular matrix.
-*          = 'H':  A is an upper Hessenberg matrix.
-*          = 'B':  A is a symmetric band matrix with lower bandwidth KL
-*                  and upper bandwidth KU and with the only the lower
-*                  half stored.
-*          = 'Q':  A is a symmetric band matrix with lower bandwidth KL
-*                  and upper bandwidth KU and with the only the upper
-*                  half stored.
-*          = 'Z':  A is a band matrix with lower bandwidth KL and upper
-*                  bandwidth KU.
-*
-*  KL      (input) INTEGER
-*          The lower bandwidth of A.  Referenced only if TYPE = 'B',
-*          'Q' or 'Z'.
-*
-*  KU      (input) INTEGER
-*          The upper bandwidth of A.  Referenced only if TYPE = 'B',
-*          'Q' or 'Z'.
-*
-*  CFROM   (input) REAL(DOUBLE)
-*  CTO     (input) REAL(DOUBLE)
-*          The matrix A is multiplied by CTO/CFROM. A(I,J) is computed
-*          without over/underflow if the final result CTO*A(I,J)/CFROM
-*          can be represented without over/underflow.  CFROM must be
-*          nonzero.
-*
-*  M       (input) INTEGER
-*          The number of rows of the matrix A.  M >= 0.
-*
-*  N       (input) INTEGER
-*          The number of columns of the matrix A.  N >= 0.
-*
-*  A       (input/output) REAL(DOUBLE) array, dimension (LDA,M)
-*          The matrix to be multiplied by CTO/CFROM.  See TYPE for the
-*          storage type.
-*
-*  LDA     (input) INTEGER
-*          The leading dimension of the array A.  LDA >= max(1,M).
-*
-*  INFO    (output) INTEGER
-*          0  - successful exit
-*          <0 - if INFO = -i, the i-th argument had an illegal value.
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ZERO, ONE
-      PARAMETER          ( ZERO = 0.0D0, ONE = 1.0D0 )
-*     ..
-*     .. Local Scalars ..
-      LOGICAL            DONE
-      INTEGER            I, ITYPE, J, K1, K2, K3, K4
-      REAL(DOUBLE)   BIGNUM, CFROM1, CFROMC, CTO1, CTOC, MUL, SMLNUM
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-
-      REAL(DOUBLE)       DLAMCH
-      EXTERNAL           DLAMCH
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS, MAX, MIN
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. Executable Statements ..
-*
-*     Test the input arguments
-*
-      INFO = 0
-*
-      IF( LSAME( TYPE, 'G' ) ) THEN
-         ITYPE = 0
-      ELSE IF( LSAME( TYPE, 'L' ) ) THEN
-         ITYPE = 1
-      ELSE IF( LSAME( TYPE, 'U' ) ) THEN
-         ITYPE = 2
-      ELSE IF( LSAME( TYPE, 'H' ) ) THEN
-         ITYPE = 3
-      ELSE IF( LSAME( TYPE, 'B' ) ) THEN
-         ITYPE = 4
-      ELSE IF( LSAME( TYPE, 'Q' ) ) THEN
-         ITYPE = 5
-      ELSE IF( LSAME( TYPE, 'Z' ) ) THEN
-         ITYPE = 6
-      ELSE
-         ITYPE = -1
-      END IF
-*
-      IF( ITYPE.EQ.-1 ) THEN
-         INFO = -1
-      ELSE IF( CFROM.EQ.ZERO ) THEN
-         INFO = -4
-      ELSE IF( M.LT.0 ) THEN
-         INFO = -6
-      ELSE IF( N.LT.0 .OR. ( ITYPE.EQ.4 .AND. N.NE.M ) .OR.
-     $         ( ITYPE.EQ.5 .AND. N.NE.M ) ) THEN
-         INFO = -7
-      ELSE IF( ITYPE.LE.3 .AND. LDA.LT.MAX( 1, M ) ) THEN
-         INFO = -9
-      ELSE IF( ITYPE.GE.4 ) THEN
-         IF( KL.LT.0 .OR. KL.GT.MAX( M-1, 0 ) ) THEN
-            INFO = -2
-         ELSE IF( KU.LT.0 .OR. KU.GT.MAX( N-1, 0 ) .OR.
-     $            ( ( ITYPE.EQ.4 .OR. ITYPE.EQ.5 ) .AND. KL.NE.KU ) )
-     $             THEN
-            INFO = -3
-         ELSE IF( ( ITYPE.EQ.4 .AND. LDA.LT.KL+1 ) .OR.
-     $            ( ITYPE.EQ.5 .AND. LDA.LT.KU+1 ) .OR.
-     $            ( ITYPE.EQ.6 .AND. LDA.LT.2*KL+KU+1 ) ) THEN
-            INFO = -9
-         END IF
-      END IF
-*
-      IF( INFO.NE.0 ) THEN
-         CALL XERBLA( 'DLASCL', -INFO )
-         RETURN
-      END IF
-*
-*     Quick return if possible
-*
-      IF( N.EQ.0 .OR. M.EQ.0 )
-     $   RETURN
-*
-*     Get machine parameters
-*
-      SMLNUM = DLAMCH( 'S' )
-      BIGNUM = ONE / SMLNUM
-*
-      CFROMC = CFROM
-      CTOC = CTO
-*
-   10 CONTINUE
-      CFROM1 = CFROMC*SMLNUM
-      CTO1 = CTOC / BIGNUM
-      IF( ABS( CFROM1 ).GT.ABS( CTOC ) .AND. CTOC.NE.ZERO ) THEN
-         MUL = SMLNUM
-         DONE = .FALSE.
-         CFROMC = CFROM1
-      ELSE IF( ABS( CTO1 ).GT.ABS( CFROMC ) ) THEN
-         MUL = BIGNUM
-         DONE = .FALSE.
-         CTOC = CTO1
-      ELSE
-         MUL = CTOC / CFROMC
-         DONE = .TRUE.
-      END IF
-*
-      IF( ITYPE.EQ.0 ) THEN
-*
-*        Full matrix
-*
-         DO 30 J = 1, N
-            DO 20 I = 1, M
-               A( I, J ) = A( I, J )*MUL
-   20       CONTINUE
-   30    CONTINUE
-*
-      ELSE IF( ITYPE.EQ.1 ) THEN
-*
-*        Lower triangular matrix
-*
-         DO 50 J = 1, N
-            DO 40 I = J, M
-               A( I, J ) = A( I, J )*MUL
-   40       CONTINUE
-   50    CONTINUE
-*
-      ELSE IF( ITYPE.EQ.2 ) THEN
-*
-*        Upper triangular matrix
-*
-         DO 70 J = 1, N
-            DO 60 I = 1, MIN( J, M )
-               A( I, J ) = A( I, J )*MUL
-   60       CONTINUE
-   70    CONTINUE
-*
-      ELSE IF( ITYPE.EQ.3 ) THEN
-*
-*        Upper Hessenberg matrix
-*
-         DO 90 J = 1, N
-            DO 80 I = 1, MIN( J+1, M )
-               A( I, J ) = A( I, J )*MUL
-   80       CONTINUE
-   90    CONTINUE
-*
-      ELSE IF( ITYPE.EQ.4 ) THEN
-*
-*        Lower half of a symmetric band matrix
-*
-         K3 = KL + 1
-         K4 = N + 1
-         DO 110 J = 1, N
-            DO 100 I = 1, MIN( K3, K4-J )
-               A( I, J ) = A( I, J )*MUL
-  100       CONTINUE
-  110    CONTINUE
-*
-      ELSE IF( ITYPE.EQ.5 ) THEN
-*
-*        Upper half of a symmetric band matrix
-*
-         K1 = KU + 2
-         K3 = KU + 1
-         DO 130 J = 1, N
-            DO 120 I = MAX( K1-J, 1 ), K3
-               A( I, J ) = A( I, J )*MUL
-  120       CONTINUE
-  130    CONTINUE
-*
-      ELSE IF( ITYPE.EQ.6 ) THEN
-*
-*        Band matrix
-*
-         K1 = KL + KU + 2
-         K2 = KL + 1
-         K3 = 2*KL + KU + 1
-         K4 = KL + KU + 1 + M
-         DO 150 J = 1, N
-            DO 140 I = MAX( K1-J, K2 ), MIN( K3, K4-J )
-               A( I, J ) = A( I, J )*MUL
-  140       CONTINUE
-  150    CONTINUE
-*
-      END IF
-*
-      IF( .NOT.DONE )
-     $   GO TO 10
-*
+      CALL DLASCL_HELPER( TYPE, KL, KU, CFROM, CTO, M, N, A, LDA, INFO )
       RETURN
 *
 *     End of DLASCL
@@ -8697,104 +6130,8 @@ CIBM           PREFER SCALAR
       CHARACTER          UPLO
       INTEGER            LDA, M, N
       REAL(DOUBLE)   ALPHA, BETA
-*     ..
-*     .. Array Arguments ..
       REAL(DOUBLE)   A( LDA, * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLASET initializes an m-by-n matrix A to BETA on the diagonal and
-*  ALPHA on the offdiagonals.
-*
-*  Arguments
-*  =========
-*
-*  UPLO    (input) CHARACTER*1
-*          Specifies the part of the matrix A to be set.
-*          = 'U':      Upper triangular part is set; the strictly lower
-*                      triangular part of A is not changed.
-*          = 'L':      Lower triangular part is set; the strictly upper
-*                      triangular part of A is not changed.
-*          Otherwise:  All of the matrix A is set.
-*
-*  M       (input) INTEGER
-*          The number of rows of the matrix A.  M >= 0.
-*
-*  N       (input) INTEGER
-*          The number of columns of the matrix A.  N >= 0.
-*
-*  ALPHA   (input) REAL(DOUBLE)
-*          The constant to which the offdiagonal elements are to be set.
-*
-*  BETA    (input) REAL(DOUBLE)
-*          The constant to which the diagonal elements are to be set.
-*
-*  A       (input/output) REAL(DOUBLE) array, dimension (LDA,N)
-*          On exit, the leading m-by-n submatrix of A is set as follows:
-*
-*          if UPLO = 'U', A(i,j) = ALPHA, 1<=i<=j-1, 1<=j<=n,
-*          if UPLO = 'L', A(i,j) = ALPHA, j+1<=i<=m, 1<=j<=n,
-*          otherwise,     A(i,j) = ALPHA, 1<=i<=m, 1<=j<=n, i.ne.j,
-*
-*          and, for all UPLO, A(i,i) = BETA, 1<=i<=min(m,n).
-*
-*  LDA     (input) INTEGER
-*          The leading dimension of the array A.  LDA >= max(1,M).
-*
-* =====================================================================
-*
-*     .. Local Scalars ..
-      INTEGER            I, J
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          MIN
-*     ..
-*     .. Executable Statements ..
-*
-      IF( LSAME( UPLO, 'U' ) ) THEN
-*
-*        Set the strictly upper triangular or trapezoidal part of the
-*        array to ALPHA.
-*
-         DO 20 J = 2, N
-            DO 10 I = 1, MIN( J-1, M )
-               A( I, J ) = ALPHA
-   10       CONTINUE
-   20    CONTINUE
-*
-      ELSE IF( LSAME( UPLO, 'L' ) ) THEN
-*
-*        Set the strictly lower triangular or trapezoidal part of the
-*        array to ALPHA.
-*
-         DO 40 J = 1, MIN( M, N )
-            DO 30 I = J + 1, M
-               A( I, J ) = ALPHA
-   30       CONTINUE
-   40    CONTINUE
-*
-      ELSE
-*
-*        Set the leading m-by-n submatrix to ALPHA.
-*
-         DO 60 J = 1, N
-            DO 50 I = 1, M
-               A( I, J ) = ALPHA
-   50       CONTINUE
-   60    CONTINUE
-      END IF
-*
-*     Set the first min(M,N) diagonal elements to BETA.
-*
-      DO 70 I = 1, MIN( M, N )
-         A( I, I ) = BETA
-   70 CONTINUE
+      CALL DLASET_HELPER( UPLO, M, N, ALPHA, BETA, A, LDA )
 *
       RETURN
 *
@@ -8806,6 +6143,20 @@ CIBM           PREFER SCALAR
 ! 054 LAPACK_BLAS_AUX
 
       SUBROUTINE DLASR( SIDE, PIVOT, DIRECT, M, N, C, S, A, LDA )
+      CHARACTER          DIRECT, PIVOT, SIDE
+      INTEGER            LDA, M, N
+      REAL(DOUBLE)   A( LDA, * ), C( * ), S( * )
+
+      CALL DLASR_HELPER( SIDE, PIVOT, DIRECT, M, N, C, S, A, LDA )
+
+      RETURN
+
+      END SUBROUTINE DLASR
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLASR_HELPER( SIDE, PIVOT, DIRECT, M, N, C, S, A,
+     $                         LDA )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -9126,9 +6477,9 @@ CIBM           PREFER SCALAR
 *
       RETURN
 *
-*     End of DLASR
+*     End of DLASR_HELPER
 *
-      END SUBROUTINE DLASR
+      END SUBROUTINE DLASR_HELPER
 
 ! ##################################################################################################################################
 ! 055 LAPACK_BLAS_AUX
@@ -9143,234 +6494,8 @@ CIBM           PREFER SCALAR
 *     .. Scalar Arguments ..
       CHARACTER          ID
       INTEGER            INFO, N
-*     ..
-*     .. Array Arguments ..
       REAL(DOUBLE)   D( * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  Sort the numbers in D in increasing order (if ID = 'I') or
-*  in decreasing order (if ID = 'D' ).
-*
-*  Use Quick Sort, reverting to Insertion sort on arrays of
-*  size <= 20. Dimension of STACK limits N to about 2**32.
-*
-*  Arguments
-*  =========
-*
-*  ID      (input) CHARACTER*1
-*          = 'I': sort D in increasing order;
-*          = 'D': sort D in decreasing order.
-*
-*  N       (input) INTEGER
-*          The length of the array D.
-*
-*  D       (input/output) REAL(DOUBLE) array, dimension (N)
-*          On entry, the array to be sorted.
-*          On exit, D has been sorted into increasing order
-*          (D(1) <= ... <= D(N) ) or into decreasing order
-*          (D(1) >= ... >= D(N) ), depending on ID.
-*
-*  INFO    (output) INTEGER
-*          = 0:  successful exit
-*          < 0:  if INFO = -i, the i-th argument had an illegal value
-*
-*  =====================================================================
-*
-*     .. Parameters ..
-      INTEGER            SELECT
-      PARAMETER          ( SELECT = 20 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            DIR, ENDD, I, J, START, STKPNT
-      REAL(DOUBLE)   D1, D2, D3, DMNMX, TMP
-*     ..
-*     .. Local Arrays ..
-      INTEGER            STACK( 2, 32 )
-*     ..
-*     .. External Functions ..
-      LOGICAL            LSAME
-      EXTERNAL           LSAME
-*     ..
-*     .. External Subroutines ..
-*     ..
-*     .. Executable Statements ..
-*
-*     Test the input paramters.
-*
-      INFO = 0
-      DIR = -1
-      IF( LSAME( ID, 'D' ) ) THEN
-         DIR = 0
-      ELSE IF( LSAME( ID, 'I' ) ) THEN
-         DIR = 1
-      END IF
-      IF( DIR.EQ.-1 ) THEN
-         INFO = -1
-      ELSE IF( N.LT.0 ) THEN
-         INFO = -2
-      END IF
-      IF( INFO.NE.0 ) THEN
-         CALL XERBLA( 'DLASRT', -INFO )
-         RETURN
-      END IF
-*
-*     Quick return if possible
-*
-      IF( N.LE.1 )
-     $   RETURN
-*
-      STKPNT = 1
-      STACK( 1, 1 ) = 1
-      STACK( 2, 1 ) = N
-   10 CONTINUE
-      START = STACK( 1, STKPNT )
-      ENDD = STACK( 2, STKPNT )
-      STKPNT = STKPNT - 1
-      IF( ENDD-START.LE.SELECT .AND. ENDD-START.GT.0 ) THEN
-*
-*        Do Insertion sort on D( START:ENDD )
-*
-         IF( DIR.EQ.0 ) THEN
-*
-*           Sort into decreasing order
-*
-            DO 30 I = START + 1, ENDD
-               DO 20 J = I, START + 1, -1
-                  IF( D( J ).GT.D( J-1 ) ) THEN
-                     DMNMX = D( J )
-                     D( J ) = D( J-1 )
-                     D( J-1 ) = DMNMX
-                  ELSE
-                     GO TO 30
-                  END IF
-   20          CONTINUE
-   30       CONTINUE
-*
-         ELSE
-*
-*           Sort into increasing order
-*
-            DO 50 I = START + 1, ENDD
-               DO 40 J = I, START + 1, -1
-                  IF( D( J ).LT.D( J-1 ) ) THEN
-                     DMNMX = D( J )
-                     D( J ) = D( J-1 )
-                     D( J-1 ) = DMNMX
-                  ELSE
-                     GO TO 50
-                  END IF
-   40          CONTINUE
-   50       CONTINUE
-*
-         END IF
-*
-      ELSE IF( ENDD-START.GT.SELECT ) THEN
-*
-*        Partition D( START:ENDD ) and stack parts, largest one first
-*
-*        Choose partition entry as median of 3
-*
-         D1 = D( START )
-         D2 = D( ENDD )
-         I = ( START+ENDD ) / 2
-         D3 = D( I )
-         IF( D1.LT.D2 ) THEN
-            IF( D3.LT.D1 ) THEN
-               DMNMX = D1
-            ELSE IF( D3.LT.D2 ) THEN
-               DMNMX = D3
-            ELSE
-               DMNMX = D2
-            END IF
-         ELSE
-            IF( D3.LT.D2 ) THEN
-               DMNMX = D2
-            ELSE IF( D3.LT.D1 ) THEN
-               DMNMX = D3
-            ELSE
-               DMNMX = D1
-            END IF
-         END IF
-*
-         IF( DIR.EQ.0 ) THEN
-*
-*           Sort into decreasing order
-*
-            I = START - 1
-            J = ENDD + 1
-   60       CONTINUE
-   70       CONTINUE
-            J = J - 1
-            IF( D( J ).LT.DMNMX )
-     $         GO TO 70
-   80       CONTINUE
-            I = I + 1
-            IF( D( I ).GT.DMNMX )
-     $         GO TO 80
-            IF( I.LT.J ) THEN
-               TMP = D( I )
-               D( I ) = D( J )
-               D( J ) = TMP
-               GO TO 60
-            END IF
-            IF( J-START.GT.ENDD-J-1 ) THEN
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = START
-               STACK( 2, STKPNT ) = J
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = J + 1
-               STACK( 2, STKPNT ) = ENDD
-            ELSE
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = J + 1
-               STACK( 2, STKPNT ) = ENDD
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = START
-               STACK( 2, STKPNT ) = J
-            END IF
-         ELSE
-*
-*           Sort into increasing order
-*
-            I = START - 1
-            J = ENDD + 1
-   90       CONTINUE
-  100       CONTINUE
-            J = J - 1
-            IF( D( J ).GT.DMNMX )
-     $         GO TO 100
-  110       CONTINUE
-            I = I + 1
-            IF( D( I ).LT.DMNMX )
-     $         GO TO 110
-            IF( I.LT.J ) THEN
-               TMP = D( I )
-               D( I ) = D( J )
-               D( J ) = TMP
-               GO TO 90
-            END IF
-            IF( J-START.GT.ENDD-J-1 ) THEN
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = START
-               STACK( 2, STKPNT ) = J
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = J + 1
-               STACK( 2, STKPNT ) = ENDD
-            ELSE
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = J + 1
-               STACK( 2, STKPNT ) = ENDD
-               STKPNT = STKPNT + 1
-               STACK( 1, STKPNT ) = START
-               STACK( 2, STKPNT ) = J
-            END IF
-         END IF
-      END IF
-      IF( STKPNT.GT.0 )
-     $   GO TO 10
+      CALL DLASRT_HELPER( ID, N, D, INFO )
       RETURN
 *
 *     End of DLASRT
@@ -9390,80 +6515,8 @@ CIBM           PREFER SCALAR
 *     .. Scalar Arguments ..
       INTEGER            INCX, N
       REAL(DOUBLE)   SCALE, SUMSQ
-*     ..
-*     .. Array Arguments ..
       REAL(DOUBLE)   X( * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLASSQ  returns the values  scl  and  smsq  such that
-*
-*     ( scl**2 )*smsq = x( 1 )**2 +...+ x( n )**2 + ( scale**2 )*sumsq,
-*
-*  where  x( i ) = X( 1 + ( i - 1 )*INCX ). The value of  sumsq  is
-*  assumed to be non-negative and  scl  returns the value
-*
-*     scl = max( scale, abs( x( i ) ) ).
-*
-*  scale and sumsq must be supplied in SCALE and SUMSQ and
-*  scl and smsq are overwritten on SCALE and SUMSQ respectively.
-*
-*  The routine makes only one pass through the vector x.
-*
-*  Arguments
-*  =========
-*
-*  N       (input) INTEGER
-*          The number of elements to be used from the vector X.
-*
-*  X       (input) REAL(DOUBLE) array, dimension (N)
-*          The vector for which a scaled sum of squares is computed.
-*             x( i )  = X( 1 + ( i - 1 )*INCX ), 1 <= i <= n.
-*
-*  INCX    (input) INTEGER
-*          The increment between successive values of the vector X.
-*          INCX > 0.
-*
-*  SCALE   (input/output) REAL(DOUBLE)
-*          On entry, the value  scale  in the equation above.
-*          On exit, SCALE is overwritten with  scl , the scaling factor
-*          for the sum of squares.
-*
-*  SUMSQ   (input/output) REAL(DOUBLE)
-*          On entry, the value  sumsq  in the equation above.
-*          On exit, SUMSQ is overwritten with  smsq , the basic sum of
-*          squares from which  scl  has been factored out.
-*
-* =====================================================================
-*
-*     .. Parameters ..
-      REAL(DOUBLE)   ZERO
-      PARAMETER          ( ZERO = 0.0D+0 )
-*     ..
-*     .. Local Scalars ..
-      INTEGER            IX
-      REAL(DOUBLE)   ABSXI
-*     ..
-*     .. Intrinsic Functions ..
-      INTRINSIC          ABS
-*     ..
-*     .. Executable Statements ..
-*
-      IF( N.GT.0 ) THEN
-         DO 10 IX = 1, 1 + ( N-1 )*INCX, INCX
-            IF( X( IX ).NE.ZERO ) THEN
-               ABSXI = ABS( X( IX ) )
-               IF( SCALE.LT.ABSXI ) THEN
-                  SUMSQ = 1 + SUMSQ*( SCALE / ABSXI )**2
-                  SCALE = ABSXI
-               ELSE
-                  SUMSQ = SUMSQ + ( ABSXI / SCALE )**2
-               END IF
-            END IF
-   10    CONTINUE
-      END IF
+      CALL DLASSQ_HELPER( N, X, INCX, SCALE, SUMSQ )
       RETURN
 *
 *     End of DLASSQ
@@ -9482,111 +6535,9 @@ CIBM           PREFER SCALAR
 *
 *     .. Scalar Arguments ..
       INTEGER            INCX, K1, K2, LDA, N
-*     ..
-*     .. Array Arguments ..
       INTEGER            IPIV( * )
       REAL(DOUBLE)   A( LDA, * )
-*     ..
-*
-*  Purpose
-*  =======
-*
-*  DLASWP performs a series of row interchanges on the matrix A.
-*  One row interchange is initiated for each of rows K1 through K2 of A.
-*
-*  Arguments
-*  =========
-*
-*  N       (input) INTEGER
-*          The number of columns of the matrix A.
-*
-*  A       (input/output) REAL(DOUBLE) array, dimension (LDA,N)
-*          On entry, the matrix of column dimension N to which the row
-*          interchanges will be applied.
-*          On exit, the permuted matrix.
-*
-*  LDA     (input) INTEGER
-*          The leading dimension of the array A.
-*
-*  K1      (input) INTEGER
-*          The first element of IPIV for which a row interchange will
-*          be done.
-*
-*  K2      (input) INTEGER
-*          The last element of IPIV for which a row interchange will
-*          be done.
-*
-*  IPIV    (input) INTEGER array, dimension (M*abs(INCX))
-*          The vector of pivot indices.  Only the elements in positions
-*          K1 through K2 of IPIV are accessed.
-*          IPIV(K) = L implies rows K and L are to be interchanged.
-*
-*  INCX    (input) INTEGER
-*          The increment between successive values of IPIV.  If IPIV
-*          is negative, the pivots are applied in reverse order.
-*
-*  Further Details
-*  ===============
-*
-*  Modified by
-*   R. C. Whaley, Computer Science Dept., Univ. of Tenn., Knoxville, USA
-*
-* =====================================================================
-*
-*     .. Local Scalars ..
-      INTEGER            I, I1, I2, INC, IP, IX, IX0, J, K, N32
-      REAL(DOUBLE)   TEMP
-*     ..
-*     .. Executable Statements ..
-*
-*     Interchange row I with row IPIV(I) for each of rows K1 through K2.
-*
-      IF( INCX.GT.0 ) THEN
-         IX0 = K1
-         I1 = K1
-         I2 = K2
-         INC = 1
-      ELSE IF( INCX.LT.0 ) THEN
-         IX0 = 1 + ( 1-K2 )*INCX
-         I1 = K2
-         I2 = K1
-         INC = -1
-      ELSE
-         RETURN
-      END IF
-*
-      N32 = ( N / 32 )*32
-      IF( N32.NE.0 ) THEN
-         DO 30 J = 1, N32, 32
-            IX = IX0
-            DO 20 I = I1, I2, INC
-               IP = IPIV( IX )
-               IF( IP.NE.I ) THEN
-                  DO 10 K = J, J + 31
-                     TEMP = A( I, K )
-                     A( I, K ) = A( IP, K )
-                     A( IP, K ) = TEMP
-   10             CONTINUE
-               END IF
-               IX = IX + INCX
-   20       CONTINUE
-   30    CONTINUE
-      END IF
-      IF( N32.NE.N ) THEN
-         N32 = N32 + 1
-         IX = IX0
-         DO 50 I = I1, I2, INC
-            IP = IPIV( IX )
-            IF( IP.NE.I ) THEN
-               DO 40 K = N32, N
-                  TEMP = A( I, K )
-                  A( I, K ) = A( IP, K )
-                  A( IP, K ) = TEMP
-   40          CONTINUE
-            END IF
-            IX = IX + INCX
-   50    CONTINUE
-      END IF
+      CALL DLASWP_HELPER( N, A, LDA, K1, K2, IPIV, INCX )
 *
       RETURN
 *
@@ -9599,9 +6550,28 @@ CIBM           PREFER SCALAR
 
       SUBROUTINE DLATBS( UPLO, TRANS, DIAG, NORMIN, N, KD, AB, LDAB, X,
      $                   SCALE, CNORM, INFO, iter_num, dtbsv_msg )
+      CHARACTER          DIAG, NORMIN, TRANS, UPLO
+      character*1        dtbsv_msg
+      INTEGER            INFO, KD, LDAB, N
+      integer            iter_num
+      REAL(DOUBLE)   SCALE
+      REAL(DOUBLE)   AB( LDAB, * ), CNORM( * ), X( * )
+
+      CALL DLATBS_HELPER( UPLO, TRANS, DIAG, NORMIN, N, KD, AB, LDAB,
+     $                    X, SCALE, CNORM, INFO, iter_num, dtbsv_msg )
+
+      RETURN
+
+      END SUBROUTINE DLATBS
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLATBS_HELPER( UPLO, TRANS, DIAG, NORMIN, N, KD, AB,
+     $                          LDAB, X, SCALE, CNORM, INFO, iter_num,
+     $                          dtbsv_msg )
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
 
-      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: subr_name = 'DLATBS'
+      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: subr_name = 'DLATBS_HELPER'
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -10337,7 +7307,7 @@ CIBM           PREFER SCALAR
          CALL DSCAL( N, ONE / TSCAL, CNORM, 1 )
       END IF
 *
-*     End of DLATBS
+*     End of DLATBS_HELPER
 *
 12345 format(5X,'Iteration number ',i4,' : J = ',i8,' to ',i8, a)
 
@@ -10346,12 +7316,25 @@ CIBM           PREFER SCALAR
 
 ! **********************************************************************************************************************************
 
-      END SUBROUTINE DLATBS
+      END SUBROUTINE DLATBS_HELPER
 
 ! ##################################################################################################################################
 ! 059 LAPACK_BLAS_AUX
 
       SUBROUTINE DLATRD( UPLO, N, NB, A, LDA, E, TAU, W, LDW )
+      CHARACTER          UPLO
+      INTEGER            LDA, LDW, N, NB
+      REAL(DOUBLE)   A( LDA, * ), E( * ), TAU( * ), W( LDW, * )
+
+      CALL DLATRD_HELPER( UPLO, N, NB, A, LDA, E, TAU, W, LDW )
+
+      RETURN
+
+      END SUBROUTINE DLATRD
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DLATRD_HELPER( UPLO, N, NB, A, LDA, E, TAU, W, LDW )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -10606,14 +7589,26 @@ CIBM           PREFER SCALAR
 *
       RETURN
 *
-*     End of DLATRD
+*     End of DLATRD_HELPER
 *
-      END SUBROUTINE DLATRD
+      END SUBROUTINE DLATRD_HELPER
 
 ! ##################################################################################################################################
 ! 060 LAPACK_BLAS_AUX
 
       SUBROUTINE DORG2L( M, N, K, A, LDA, TAU, WORK, INFO )
+      INTEGER            INFO, K, LDA, M, N
+      REAL(DOUBLE)   A( LDA, * ), TAU( * ), WORK( * )
+
+      CALL DORG2L_HELPER( M, N, K, A, LDA, TAU, WORK, INFO )
+
+      RETURN
+
+      END SUBROUTINE DORG2L
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DORG2L_HELPER( M, N, K, A, LDA, TAU, WORK, INFO )
 *
 *  -- LAPACK routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -10737,14 +7732,26 @@ CIBM           PREFER SCALAR
    40 CONTINUE
       RETURN
 *
-*     End of DORG2L
+*     End of DORG2L_HELPER
 *
-      END SUBROUTINE DORG2L
+      END SUBROUTINE DORG2L_HELPER
 
 ! ##################################################################################################################################
 ! 061 LAPACK_BLAS_AUX
 
       SUBROUTINE DORG2R( M, N, K, A, LDA, TAU, WORK, INFO )
+      INTEGER            INFO, K, LDA, M, N
+      REAL(DOUBLE)   A( LDA, * ), TAU( * ), WORK( * )
+
+      CALL DORG2R_HELPER( M, N, K, A, LDA, TAU, WORK, INFO )
+
+      RETURN
+
+      END SUBROUTINE DORG2R
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DORG2R_HELPER( M, N, K, A, LDA, TAU, WORK, INFO )
 *
 *  -- LAPACK routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -10870,14 +7877,27 @@ CIBM           PREFER SCALAR
    40 CONTINUE
       RETURN
 *
-*     End of DORG2R
+*     End of DORG2R_HELPER
 *
-      END SUBROUTINE DORG2R
+      END SUBROUTINE DORG2R_HELPER
 
 ! ##################################################################################################################################
 ! 062 LAPACK_BLAS_AUX
 
       SUBROUTINE DORGQL( M, N, K, A, LDA, TAU, WORK, LWORK, INFO )
+      INTEGER            INFO, K, LDA, LWORK, M, N
+      REAL(DOUBLE)   A( LDA, * ), TAU( * ), WORK( * )
+
+      CALL DORGQL_HELPER( M, N, K, A, LDA, TAU, WORK, LWORK, INFO )
+
+      RETURN
+
+      END SUBROUTINE DORGQL
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DORGQL_HELPER( M, N, K, A, LDA, TAU, WORK, LWORK,
+     $                          INFO )
 *
 *  -- LAPACK routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -11087,14 +8107,27 @@ CIBM           PREFER SCALAR
       WORK( 1 ) = IWS
       RETURN
 *
-*     End of DORGQL
+*     End of DORGQL_HELPER
 *
-      END SUBROUTINE DORGQL
+      END SUBROUTINE DORGQL_HELPER
 
 ! ##################################################################################################################################
 ! 063 LAPACK_BLAS_AUX
 
       SUBROUTINE DORGQR( M, N, K, A, LDA, TAU, WORK, LWORK, INFO )
+      INTEGER            INFO, K, LDA, LWORK, M, N
+      REAL(DOUBLE)   A( LDA, * ), TAU( * ), WORK( * )
+
+      CALL DORGQR_HELPER( M, N, K, A, LDA, TAU, WORK, LWORK, INFO )
+
+      RETURN
+
+      END SUBROUTINE DORGQR
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DORGQR_HELPER( M, N, K, A, LDA, TAU, WORK, LWORK,
+     $                          INFO )
 *
 *  -- LAPACK routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -11307,14 +8340,27 @@ CIBM           PREFER SCALAR
       WORK( 1 ) = IWS
       RETURN
 *
-*     End of DORGQR
+*     End of DORGQR_HELPER
 *
-      END SUBROUTINE DORGQR
+      END SUBROUTINE DORGQR_HELPER
 
 ! ##################################################################################################################################
 ! 064 LAPACK_BLAS_AUX
 
       SUBROUTINE DRSCL( N, SA, SX, INCX )
+      INTEGER            INCX, N
+      REAL(DOUBLE)   SA
+      REAL(DOUBLE)   SX( * )
+
+      CALL DRSCL_HELPER( N, SA, SX, INCX )
+
+      RETURN
+
+      END SUBROUTINE DRSCL
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DRSCL_HELPER( N, SA, SX, INCX )
 *
 *  -- LAPACK auxiliary routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -11425,14 +8471,27 @@ CIBM           PREFER SCALAR
 *
       RETURN
 *
-*     End of DRSCL
+*     End of DRSCL_HELPER
 *
-      END SUBROUTINE DRSCL
+      END SUBROUTINE DRSCL_HELPER
 
 ! ##################################################################################################################################
 ! 065 LAPACK_BLAS_AUX
 
       SUBROUTINE DSYTD2( UPLO, N, A, LDA, D, E, TAU, INFO )
+      CHARACTER          UPLO
+      INTEGER            INFO, LDA, N
+      REAL(DOUBLE)   A( LDA, * ), D( * ), E( * ), TAU( * )
+
+      CALL DSYTD2_HELPER( UPLO, N, A, LDA, D, E, TAU, INFO )
+
+      RETURN
+
+      END SUBROUTINE DSYTD2
+
+! **********************************************************************************************************************************
+
+      SUBROUTINE DSYTD2_HELPER( UPLO, N, A, LDA, D, E, TAU, INFO )
 *
 *  -- LAPACK routine (version 3.0) --
 *     Univ. of Tennessee, Univ. of California Berkeley, NAG Ltd.,
@@ -11677,9 +8736,9 @@ CIBM           PREFER SCALAR
 *
       RETURN
 *
-*     End of DSYTD2
+*     End of DSYTD2_HELPER
 *
-      END SUBROUTINE DSYTD2
+      END SUBROUTINE DSYTD2_HELPER
 
 ! #################################################################################################################################
 ! 069 LAPACK_BLAS_AUX
@@ -11709,10 +8768,7 @@ CIBM           PREFER SCALAR
 *
 *  =====================================================================
 *
-*  .. External Functions ..
-*  ..
-*  .. Executable Statements ..
-      DISNAN = DLAISNAN(DIN,DIN)
+      DISNAN = DISNAN_HELPER(DIN)
       RETURN
       END FUNCTION DISNAN
 
@@ -11756,9 +8812,9 @@ CIBM           PREFER SCALAR
 *
 *  =====================================================================
 *
-*  .. Executable Statements ..
-      DLAISNAN = (DIN1.NE.DIN2)
+      DLAISNAN = DLAISNAN_HELPER(DIN1,DIN2)
       RETURN
       END FUNCTION DLAISNAN
 
+! --- lapack_surgery end --- !
       END MODULE LAPACK_BLAS_AUX
