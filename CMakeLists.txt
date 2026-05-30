@@ -13,6 +13,48 @@ if(WIN32)
   enable_language(RC)
 endif()
 
+# ! --- hijack mode for extern blas begin--- !
+# ==============================================================================
+# ABI SAFETY CHECK
+# ==============================================================================
+include(CheckFortranSourceCompiles)
+check_fortran_source_compiles("
+      program abi_check
+      use iso_c_binding, only: c_int
+      implicit none
+      integer(c_int) :: n
+      if (kind(n) /= 4) stop 1
+      end program
+" FORTRAN_C_INT_IS_4BYTE)
+
+if(NOT FORTRAN_C_INT_IS_4BYTE)
+  message(FATAL_ERROR
+    \"\n*** BLAS ABI MISMATCH DETECTED ***\n\"
+    \"Your Fortran compiler's C_INT is not 4 bytes. \"
+    \"This means standard OpenBLAS (LP64) will corrupt the stack.\n\")
+endif()
+# ! --- hijack mode for extern blas end--- !
+
+# ! --- hijack mode for extern blas begin--- !
+# ==============================================================================
+# FIND OPENBLAS
+# ==============================================================================
+set(OpenBLAS_DIR "C:/gcc/openblas32/lib/cmake/openblas")
+find_package(OpenBLAS QUIET)
+
+if(OpenBLAS_FOUND)
+    message(STATUS "Using OpenBLAS: ${OpenBLAS_LIBRARIES}")
+    set(MYSTRAN_USE_OPENBLAS ON)
+    set(enable_internal_blaslib OFF CACHE BOOL "" FORCE)
+    set(TPL_BLAS_LIBRARIES "${OpenBLAS_LIBRARIES}" CACHE FILEPATH "" FORCE)
+else()
+    message(STATUS "OpenBLAS not found, will use internal BLAS")
+    set(MYSTRAN_USE_OPENBLAS OFF)
+    set(enable_internal_blaslib ON CACHE BOOL "" FORCE)
+    unset(TPL_BLAS_LIBRARIES CACHE)
+endif()
+# ! --- hijack mode for extern blas end--- !
+
 # basic compiler and output options
 set(CMAKE_SOURCE_DIR "${PROJECT_SOURCE_DIR}/Source")
 set(BLAS_SOURCE_DIR "${PROJECT_SOURCE_DIR}/BLAS")
@@ -39,6 +81,30 @@ set(CMAKE_CONFIGURATION_TYPES
   Deterministic
   CACHE STRING "" FORCE
 )
+
+# !--- ndebug release fix --- begin!
+# Some Intel ifx Release setups conflict with forced NDEBUG definitions coming
+# from default CMake release flags. Allow stripping NDEBUG for reproducible
+# behavior across toolchains.
+option(MYSTRAN_DISABLE_NDEBUG "Remove NDEBUG from CMake release-style flags" ON)
+if(MYSTRAN_DISABLE_NDEBUG)
+  foreach(lang C CXX Fortran)
+    foreach(cfg RELEASE RELWITHDEBINFO MINSIZEREL)
+      set(_var "CMAKE_${lang}_FLAGS_${cfg}")
+      if(DEFINED ${_var})
+        set(_flags "${${_var}}")
+        string(REPLACE "-DNDEBUG" "" _flags "${_flags}")
+        string(REPLACE "/DNDEBUG" "" _flags "${_flags}")
+        string(REPLACE "-D NDEBUG" "" _flags "${_flags}")
+        string(REPLACE "/D NDEBUG" "" _flags "${_flags}")
+        string(REGEX REPLACE "[ \t]+" " " _flags "${_flags}")
+        string(STRIP "${_flags}" _flags)
+        set(${_var} "${_flags}" CACHE STRING "" FORCE)
+      endif()
+    endforeach()
+  endforeach()
+endif()
+# !--- ndebug release fix --- end!
 
 # suppress cmake warnings for superlu
 if(NOT DEFINED CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
@@ -153,6 +219,8 @@ else()
   set(SLU_DRIVER "${SUPERLU_DIR}/FORTRAN/c_fortran_dgssv.c")
 endif()
 
+# ! --- hijack mode for extern blas begin--- !
+if(NOT MYSTRAN_USE_OPENBLAS)
 # f2c stuff
 set(F2C_DIR "${PROJECT_SOURCE_DIR}/f2c")
 set(F2C_INCLUDE_DIR "${F2C_DIR}/include")
@@ -200,6 +268,7 @@ if(WIN32)
 endif()
 
 set(F2C_ARITH_H "${F2C_INCLUDE_DIR}/arith.h")
+# --- chase_feast_add --- begin !
 set_source_files_properties(
   ${F2C_ARITHCHK_SRC} PROPERTIES COMPILE_FLAGS "-DNO_LONG_LONG -DNO_FPINIT"
 )
@@ -224,6 +293,8 @@ add_library(f2c ${F2C_CFILES} ${F2C_ARITH_H})
 if(WIN32)
   add_definitions(-DUSE_CLOCK -DMSDOS)
 endif()
+endif() # NOT MYSTRAN_USE_OPENBLAS
+# ! --- hijack mode for extern blas end--- !
 
 # set some extra vars for MSYS builds to make the binary portable
 if(WIN32)
@@ -242,61 +313,80 @@ file(GLOB_RECURSE ALL_FORTRAN_FILES
   "${CMAKE_SOURCE_DIR}/*.F03"
 )
 
-# same BLAS-finding subroutine as SuperLU
-if(NOT enable_internal_blaslib)
-  if(TPL_BLAS_LIBRARIES)
-    set(BLAS_FOUND TRUE)
-  else()
-    find_package(BLAS)
+set_source_files_properties(
+  "${PROJECT_SOURCE_DIR}/Source/LK4/EIGRL_EXTRACT_SOLVERS.F90"
+  PROPERTIES Fortran_PREPROCESS ON COMPILE_OPTIONS "-cpp"
+)
 
-    if(BLAS_FOUND)
-      set(TPL_BLAS_LIBRARIES "${BLAS_LIBRARIES}" CACHE FILEPATH
-        "Set from FindBLAS.cmake BLAS_LIBRARIES." FORCE)
-    endif()
-  endif()
-endif()
+option(MYSTRAN_USE_EXTERNAL_CHASE "Enable native CHASE backend on condensed dense problem" OFF)
+set(MYSTRAN_CHASE_EXTRA_LIBS "" CACHE STRING "Additional libraries for native CHASE backend (for example: chase_f;chase_c;stdc++;gomp)")
+option(MYSTRAN_USE_EXTERNAL_FEAST "Enable native FEAST backend on condensed dense problem" OFF)
+set(MYSTRAN_FEAST_EXTRA_LIBS "" CACHE STRING "Additional libraries for native FEAST backend")
+# --- chase_feast_add --- end !
 
-if(NOT BLAS_FOUND)
-  message(STATUS "BLAS not found, building local BLAS")
-  list(
-    APPEND blas_fns dgemm dgemv dlamch dlanst dscal dsteqr dsterf dswap dtrsm
-    dtrtri ilaenv lsame xerbla
-  )
-
-  foreach(fname IN LISTS blas_fns)
-    # message(STATUS "Checking for BLAS subr ${fname}")
-    check_function_exists("${fname}" BLAS_FN_EXISTS)
-    set(BLAS_FN_EXISTS CACHE "1" STRING)
-
-    if(NOT BLAS_FN_EXISTS)
-      # message(STATUS "BLAS subr ${fname} not found")
-      string(TOUPPER ${fname} fname_upper)
-      list(APPEND missing_blas_src "${BLAS_SOURCE_DIR}/${fname_upper}.f")
-      list(APPEND missing_blas_fns ${fname})
-    endif()
-
-    unset(BLAS_FN_EXISTS CACHE)
-  endforeach()
-
-  # if any subroutines have bene found, create an inner blas library
-  list(LENGTH missing_blas_fns MISSING_FNS_TOTAL)
-
-  if(MISSING_FNS_TOTAL GREATER 0)
-    if(MISSING_FNS_TOTAL GREATER 1)
-      message(
-        STATUS
-        "BLAS subrs (${missing_blas_fns}) are absent and will be built locally."
-      )
-    else()
-      message(
-        STATUS
-        "BLAS subr ${missing_blas_fns} is absent and will be built locally."
-      )
-    endif()
-  endif()
+# ! --- hijack mode for extern blas begin--- !
+# BLAS configuration
+if(MYSTRAN_USE_OPENBLAS)
+    message(STATUS "Using OpenBLAS: ${TPL_BLAS_LIBRARIES}")
+    set(missing_blas_src "${BLAS_SOURCE_DIR}/XERBLA.f")
 else()
-  message(STATUS "Using system BLAS (${TPL_BLAS_LIBRARIES})")
+    # same BLAS-finding subroutine as SuperLU
+    if(NOT enable_internal_blaslib)
+      if(TPL_BLAS_LIBRARIES)
+        set(BLAS_FOUND TRUE)
+      else()
+        find_package(BLAS)
+
+        if(BLAS_FOUND)
+          set(TPL_BLAS_LIBRARIES "${BLAS_LIBRARIES}" CACHE FILEPATH
+            "Set from FindBLAS.cmake BLAS_LIBRARIES." FORCE)
+        endif()
+      endif()
+    endif()
+
+    if(NOT BLAS_FOUND)
+      message(STATUS "BLAS not found, building local BLAS")
+      list(
+        APPEND blas_fns dgemm dgemv dlamch dlanst dscal dsteqr dsterf dswap dtrsm
+        dtrtri ilaenv lsame xerbla
+      )
+
+      foreach(fname IN LISTS blas_fns)
+        # message(STATUS "Checking for BLAS subr ${fname}")
+        check_function_exists("${fname}" BLAS_FN_EXISTS)
+        set(BLAS_FN_EXISTS CACHE "1" STRING)
+
+        if(NOT BLAS_FN_EXISTS)
+          # message(STATUS "BLAS subr ${fname} not found")
+          string(TOUPPER ${fname} fname_upper)
+          list(APPEND missing_blas_src "${BLAS_SOURCE_DIR}/${fname_upper}.f")
+          list(APPEND missing_blas_fns ${fname})
+        endif()
+
+        unset(BLAS_FN_EXISTS CACHE)
+      endforeach()
+
+      # if any subroutines have bene found, create an inner blas library
+      list(LENGTH missing_blas_fns MISSING_FNS_TOTAL)
+
+      if(MISSING_FNS_TOTAL GREATER 0)
+        if(MISSING_FNS_TOTAL GREATER 1)
+          message(
+            STATUS
+            "BLAS subrs (${missing_blas_fns}) are absent and will be built locally."
+          )
+        else()
+          message(
+            STATUS
+            "BLAS subr ${missing_blas_fns} is absent and will be built locally."
+          )
+        endif()
+      endif()
+    else()
+      message(STATUS "Using system BLAS (${TPL_BLAS_LIBRARIES})")
+    endif()
 endif()
+# ! --- hijack mode for extern blas end--- !
 
 # prepare the main executable, linked against the specifics and the m
 # it appears utils used to be a module, but that is no longer the case?
@@ -313,14 +403,55 @@ add_executable(
 if(USE_SUPERLU_MT)
   if(PLAT STREQUAL "_PTHREAD")
     message(WARNING "We recommend using OpenMP, not pthread!")
-    target_link_libraries(mystran superlu_mt_PTHREAD f2c)
+    if(MYSTRAN_USE_OPENBLAS)
+      target_link_libraries(mystran superlu_mt_PTHREAD ${TPL_BLAS_LIBRARIES})
+    else()
+      target_link_libraries(mystran superlu_mt_PTHREAD f2c)
+    endif()
   elseif(PLAT STREQUAL "_OPENMP")
-    target_link_libraries(mystran superlu_mt_OPENMP f2c)
+    if(MYSTRAN_USE_OPENBLAS)
+      target_link_libraries(mystran superlu_mt_OPENMP ${TPL_BLAS_LIBRARIES})
+    else()
+      target_link_libraries(mystran superlu_mt_OPENMP f2c)
+    endif()
   endif()
 
   target_compile_definitions(mystran PRIVATE USE_SUPERLU_MT)
 else()
-  target_link_libraries(mystran superlu f2c)
+  if(MYSTRAN_USE_OPENBLAS)
+    target_link_libraries(mystran superlu ${TPL_BLAS_LIBRARIES})
+  else()
+    target_link_libraries(mystran superlu f2c)
+  endif()
+endif()
+
+if(MYSTRAN_USE_EXTERNAL_CHASE)
+  target_compile_definitions(mystran PRIVATE MYSTRAN_HAVE_EXTERNAL_CHASE)
+  foreach(_chase_lib IN LISTS MYSTRAN_CHASE_EXTRA_LIBS)
+    get_filename_component(_chase_dir "${_chase_lib}" DIRECTORY)
+    if(EXISTS "${_chase_dir}/chase_diag.mod")
+      target_include_directories(mystran PRIVATE "${_chase_dir}")
+      break()
+    endif()
+  endforeach()
+  if(MYSTRAN_CHASE_EXTRA_LIBS)
+    separate_arguments(MYSTRAN_CHASE_EXTRA_LIBS)
+    target_link_libraries(mystran ${MYSTRAN_CHASE_EXTRA_LIBS})
+  endif()
+endif()
+
+if(MYSTRAN_USE_EXTERNAL_FEAST)
+  target_compile_definitions(mystran PRIVATE MYSTRAN_HAVE_EXTERNAL_FEAST)
+  foreach(_feast_lib IN LISTS MYSTRAN_FEAST_EXTRA_LIBS)
+    get_filename_component(_feast_dir "${_feast_lib}" DIRECTORY)
+    if(EXISTS "${_feast_dir}")
+      target_include_directories(mystran PRIVATE "${_feast_dir}")
+    endif()
+  endforeach()
+  if(MYSTRAN_FEAST_EXTRA_LIBS)
+    separate_arguments(MYSTRAN_FEAST_EXTRA_LIBS)
+    target_link_libraries(mystran ${MYSTRAN_FEAST_EXTRA_LIBS})
+  endif()
 endif()
 
 set_target_properties(
