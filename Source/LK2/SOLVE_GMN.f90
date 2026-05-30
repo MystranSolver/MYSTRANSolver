@@ -295,6 +295,9 @@
       CHARACTER( 1*BYTE)              :: OPND              ! Input to subr READ_MATRIX_i. 'Y'/'N' whether to open  a file or not
       CHARACTER(FILE_NAM_MAXLEN*BYTE) :: SCRFIL            ! File name
       CHARACTER( 1*BYTE)              :: TRANS             ! 'Y' if
+      LOGICAL                         :: RMM_SOLVED_WITH_SUPERLU
+      LOGICAL                         :: RMM_FULL_ALLOCATED
+      LOGICAL                         :: CCS1_ALLOCATED
 
       INTEGER(LONG)                   :: COMPV             ! Component number (1-6) of a grid DOF
       INTEGER(LONG)                   :: GRIDV             ! Grid number
@@ -323,10 +326,14 @@
 
       OUNT(1) = ERR
       OUNT(2) = F06
+      RMM_SOLVED_WITH_SUPERLU = .FALSE.
+      RMM_FULL_ALLOCATED      = .FALSE.
+      CCS1_ALLOCATED          = .FALSE.
 
       IF (SOLLIB == 'BANDED  ') THEN
-                                                           ! Create full matrix RMM_FULL from sparse RMM
+                                                            ! Create full matrix RMM_FULL from sparse RMM
          CALL ALLOCATE_FULL_MAT  ( 'RMM_FULL', NDOFM, NDOFM, SUBR_NAME )
+         RMM_FULL_ALLOCATED = .TRUE.
          CALL SPARSE_CRS_TO_FULL ( 'RMM       ', NTERM_RMM, NDOFM, NDOFM, SYM_RMM, I_RMM, J_RMM, RMM, RMM_FULL )
 
                                                            ! Perform factorization of RMM_FULL matrix.
@@ -346,16 +353,33 @@
 
          ELSE IF (INFO > 0) THEN                           ! 0 diag in RMM
 
-            CALL GET_GRID_AND_COMP ( 'M ', INFO, GRIDV, COMPV  )
+             CALL GET_GRID_AND_COMP ( 'M ', INFO, GRIDV, COMPV  )
 
-            WRITE(ERR,2501) CALLED_SUBR, SUBR_NAME, INFO
-            WRITE(F06,2501) CALLED_SUBR, SUBR_NAME, INFO
-            FATAL_ERR = FATAL_ERR + 1
-            IF ((GRIDV > 0) .AND. (COMPV > 0)) THEN
-               WRITE(ERR,25012) GRIDV, COMPV
-               WRITE(F06,25012) GRIDV, COMPV
+            IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
+               WRITE(ERR,2501) CALLED_SUBR, SUBR_NAME, INFO
+               WRITE(F06,2501) CALLED_SUBR, SUBR_NAME, INFO
+               IF ((GRIDV > 0) .AND. (COMPV > 0)) THEN
+                  WRITE(ERR,25012) GRIDV, COMPV
+                  WRITE(F06,25012) GRIDV, COMPV
+               ENDIF
+               WRITE(ERR,25013)
+               WRITE(F06,25013)
+               SLU_INFO = 0
+               CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NDOFM, NTERM_RMM, SUBR_NAME )
+               CCS1_ALLOCATED = .TRUE.
+               CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
+               CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
+               RMM_SOLVED_WITH_SUPERLU = .TRUE.
+            ELSE
+               WRITE(ERR,2501) CALLED_SUBR, SUBR_NAME, INFO
+               WRITE(F06,2501) CALLED_SUBR, SUBR_NAME, INFO
+               FATAL_ERR = FATAL_ERR + 1
+               IF ((GRIDV > 0) .AND. (COMPV > 0)) THEN
+                  WRITE(ERR,25012) GRIDV, COMPV
+                  WRITE(F06,25012) GRIDV, COMPV
+               ENDIF
+               CALL OUTA_HERE ( 'Y' )
             ENDIF
-            CALL OUTA_HERE ( 'Y' )
 
          ENDIF
 
@@ -365,8 +389,10 @@
 
             SLU_INFO = 0
             CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NDOFM, NTERM_RMM, SUBR_NAME )
+            CCS1_ALLOCATED = .TRUE.
             CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
             CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
+            RMM_SOLVED_WITH_SUPERLU = .TRUE.
 
          ELSE
 
@@ -431,7 +457,11 @@
 
          IF (NULL_COL == 'N') THEN                         ! DGETRS will solve for GMN_COL & load it into GMN array
 
-            IF      (SOLLIB == 'BANDED  ') THEN
+            IF (RMM_SOLVED_WITH_SUPERLU) THEN
+               SLU_INFO = 0
+               CALL FBS_SUPRLU ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, J, RMN_COL, SLU_INFO )
+
+            ELSE IF (SOLLIB == 'BANDED  ') THEN
                TRANS = 'N'
                NRHS = 1
                CALL DGETRS ( TRANS, NDOFM, NRHS ,RMM_FULL, NDOFM, IPIV, RMN_COL, NDOFM, INFO )
@@ -486,12 +516,16 @@
 
       WRITE(SC1,*) CR13
 
-      CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
-      CALL DEALLOCATE_FULL_MAT ( 'RMM_FULL' )
+      IF (CCS1_ALLOCATED) THEN
+         CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
+      ENDIF
+      IF (RMM_FULL_ALLOCATED) THEN
+         CALL DEALLOCATE_FULL_MAT ( 'RMM_FULL' )
+      ENDIF
 
-FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside SuperLU
+ FreeS:IF (RMM_SOLVED_WITH_SUPERLU) THEN                    ! Last, free the storage allocated inside SuperLU
 
-         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
+          IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
             DO J=1,NDOFM                                         ! Need a null col of loads when SuperLU is called to factor KLL
                DUM_COL(J) = ZERO                                  ! (only because it appears in the calling list)
@@ -557,6 +591,8 @@ FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the stor
 
 25012 FORMAT('               THIS CORRESPONDS TO THE ROW & COL IN RMM FOR GRID POINT ',I8,' COMPONENT ',I3,'.'                     &
                     ,/,14X,' TO CORRECT THIS SITUATION, REMOVE THAT COMPONENT FROM REFC IN FIELD 5 OF THE OFFENDING RBE3(s)')
+
+25013 FORMAT(' *WARNING    : LAPACK RMM FACTORIZATION FAILED. MYSTRAN WILL FALL BACK TO SUPERLU FOR THE GMN CONSTRAINT SOLVE.')
 
  2092 FORMAT(4X,A44,20X,I2,':',I2,':',I2,'.',I3)
 

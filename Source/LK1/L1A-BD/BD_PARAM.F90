@@ -40,7 +40,8 @@
 
       USE PARAMS, ONLY                :  ARP_TOL         , ART_KED         , ART_ROT_KED     , ART_TRAN_KED    ,                   &
                                          ART_MASS        , ART_ROT_MASS    , ART_TRAN_MASS   , AUTOSPC         , AUTOSPC_NSET    , &
-                                         AUTOSPC_RAT     , AUTOSPC_INFO    , AUTOSPC_SPCF    , BAILOUT         , CRS_CCS         , &
+                                         AUTOSPC_RAT     , AUTOSPC_INFO    , AUTOSPC_SPCF    , BAILOUT         , BANDEDOPT       , &
+                                         CRS_CCS         , &
                                          CBMIN3          , CBMIN4          , CBMIN4T         , CHKGRDS         ,                   &
                                          CUSERIN         , CUSERIN_EID     , CUSERIN_IN4     , CUSERIN_PID     , CUSERIN_SPNT_ID , &
                                          CUSERIN_XSET    , CUSERIN_COMPTYP , DARPACK         ,                                     &
@@ -49,7 +50,7 @@
                                          EPSIL           , EMP0_PAUSE      , ESP0_PAUSE      , F06_COL_START   ,                   &
                                          GRDPNT          , GRDPNT_IN       , GRIDSEQ         , HEXAXIS         ,                   &
                                          IORQ1M          , IORQ1S          , IORQ1B          , IORQ2B          , IORQ2T          , &
-                                         ITMAX           , KLLRAT          , KOORAT          ,                   MATSPARS        , &
+                                         ITMAX           , KLLRAT          , KOORAT          , LANCMETH        , MATSPARS        , &
                                          MEMAFAC         , MIN4TRED        , MXALLOCA        , MAXRATIO        ,                   &
                                          MEFMCORD        , MEFMLOC         , MEFMGRID        ,                                     &
                                          MPFOUT          , MXITERI         , MXITERL         , OTMSKIP         , POST            , &
@@ -377,6 +378,12 @@
          CALL BD_IMBEDDED_BLANK   ( JCARD,0,3,0,0,0,0,0,0 )! Make sure that there are no imbedded blanks in field 3
          CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,4,5,6,7,8,9 )! Issue warning if fields 4-9 not blank
          CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
+
+! BANDEDOPT enables experimental banded-order optimization path
+
+      ELSE IF (JCARD(2)(1:8) == 'BANDEDOP') THEN
+         PARNAM = 'BANDEDOPT'
+         CALL YES_NO_CHECK(CARD, JCARD, CHRPARM, PARNAM, BANDEDOPT)
 
 ! CBMIN3 is a parameter for the Mindlin (thick) triangular plate element (CTRIA3).
 !   It is used in calculating PHISQ, a scalar multiple of the transverse shear stiff
@@ -872,15 +879,17 @@
                GRIDSEQ = 'GRID    '
             ELSE IF (CHRPARM == 'INPUT   ') THEN
                GRIDSEQ = 'INPUT   '
+            ELSE IF (CHRPARM(1:3) == 'RCM') THEN
+               GRIDSEQ = 'RCM     '
             ELSE
                WARN_ERR = WARN_ERR + 1
                WRITE(ERR,101) CARD
-               WRITE(ERR,1189) PARNAM,'BANDIT, GRID or INPUT',CHRPARM,GRIDSEQ
+               WRITE(ERR,1189) PARNAM,'BANDIT, GRID, INPUT or RCM',CHRPARM,GRIDSEQ
                IF (SUPWARN == 'N') THEN
                   IF (ECHO == 'NONE  ') THEN
                      WRITE(F06,101) CARD
                   ENDIF
-                  WRITE(F06,1189) PARNAM,'BANDIT, GRID or INPUT',CHRPARM,GRIDSEQ
+                  WRITE(F06,1189) PARNAM,'BANDIT, GRID, INPUT or RCM',CHRPARM,GRIDSEQ
                ENDIF
             ENDIF
          ENDIF
@@ -1355,6 +1364,41 @@
          CALL BD_IMBEDDED_BLANK   ( JCARD,0,3,0,0,0,0,0,0 )! Make sure that there are no imbedded blanks in field 3
          CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,4,5,6,7,8,9 )! Issue warning if fields 4-9 not blank
          CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
+
+! --- chase_feast_add --- begin !
+! LANCMETH is a deprecated alias for selecting the EIGRL extract backend when no EIGRL continuation is present
+
+      ELSE IF (JCARD(2)(1:8) == 'LANCMETH') THEN
+         PARNAM = 'LANCMETH'
+         CALL CHAR_FLD ( JCARD(3), JF(3), CHRPARM )
+         IF (IERRFL(3) == 'N') THEN
+            CALL LEFT_ADJ_BDFLD ( CHRPARM )
+            IF      (CHRPARM(1:6) == 'ARPACK') THEN
+               LANCMETH = 'ARPACK  '
+            ELSE IF (CHRPARM(1:5) == 'CHASE') THEN
+               LANCMETH = 'CHASE   '
+            ELSE IF (CHRPARM(1:5) == 'FEAST') THEN
+               LANCMETH = 'FEAST   '
+            ELSE IF (CHRPARM(1:5) == 'SUBSP') THEN
+               LANCMETH = 'SUBSP   '
+            ELSE IF (CHRPARM(1:5) == 'DENSE') THEN
+               LANCMETH = 'DENSE   '
+            ELSE
+               WARN_ERR = WARN_ERR + 1
+               WRITE(ERR,101) CARD
+               WRITE(ERR,1189) PARNAM,'ARPACK/CHASE/FEAST/SUBSP/DENSE',CHRPARM,LANCMETH
+               IF (SUPWARN == 'N') THEN
+                  IF (ECHO == 'NONE  ') THEN
+                     WRITE(F06,101) CARD
+                  ENDIF
+                  WRITE(F06,1189) PARNAM,'ARPACK/CHASE/FEAST/SUBSP/DENSE',CHRPARM,LANCMETH
+               ENDIF
+            ENDIF
+         ENDIF
+
+         CALL BD_IMBEDDED_BLANK   ( JCARD,0,3,0,0,0,0,0,0 )
+         CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,4,5,6,7,8,9 )
+         CALL CRDERR ( CARD )
 
 ! OTMSKIP defines whether tp quit if a singularity is found in matrix decomp
 
@@ -2822,8 +2866,10 @@ do_i:    DO I=1,JCARD_LEN
          CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,4,5,6,7,8,9 )! Issue warning if fields 4-9 not blank
          CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
 
-! WINAMEM is the max MB of memory Windows allows. If an attempt is made to exceed it, the code can abort with an
-! abnormal termination
+! --- BANDED_optimizisation -begin-- !
+! WINAMEM is an optional per-array MB cap. Historical MYSTRAN used this for the Windows XP 2 GB address-space limit.
+! In modern 64-bit builds, WINAMEM <= 0 disables this legacy cap and lets ALLOCATE/STAT report memory failure.
+! --- BANDED_optimizisation -end-- !
 
       ELSE IF (JCARD(2)(1:8) == 'WINAMEM ') THEN
          PARNAM = 'WINAMEM  '
@@ -2974,6 +3020,7 @@ do_i:    DO I=1,JCARD_LEN
          CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
 
       ENDIF
+! --- chase_feast_add --- end !
 
 
 

@@ -203,7 +203,9 @@
 
          NTERMS = LTERM
          MB_NEEDED = RDOUBLE*REAL(NTERMS)/ONEPP6 + TWO*RLONG*REAL(NTERMS)/ONEPP6
-         IF (MB_NEEDED >= WINAMEM) THEN                 ! Reduce request for memory to
+! --- BANDED_optimizisation -begin-- !
+         IF ((WINAMEM > ZERO) .AND. (MB_NEEDED >= WINAMEM)) THEN
+! --- BANDED_optimizisation -end-- !
             NTERMS = MEMAFAC*(WINAMEM/MB_NEEDED)*NTERMS
          ENDIF
          ALLOC_ATTEMPT_NUM = 1
@@ -322,4 +324,3 @@ i_do:          DO
 ! **********************************************************************************************************************************
 
       END SUBROUTINE ALLOCATE_STF_ARRAYS
-

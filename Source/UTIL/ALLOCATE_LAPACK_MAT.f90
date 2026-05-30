@@ -34,7 +34,7 @@
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, TOT_MB_MEM_ALLOC
       USE TIMDAT, ONLY                :  TSEC
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
-      USE PARAMS, ONLY                :  WINAMEM
+      USE PARAMS, ONLY                :  SUPINFO, WINAMEM
       USE ARPACK_MATRICES_1 , ONLY    :  IWORK, RFAC, RESID, SELECT, VBAS, WORKD, WORKL
       USE LAPACK_DPB_MATRICES, ONLY   :  ABAND, BBAND, LAPACK_S, RES
 
@@ -85,11 +85,20 @@
          ELSE
             MB_ALLOCATED = REAL(DOUBLE)*RNROWS*RNCOLS/ONEPP6
             WRITE(SC1,9199) NAME, MB_ALLOCATED
-            IF (MB_ALLOCATED > WINAMEM) THEN
+! --- BANDED_optimizisation -begin-- !
+            IF (WINAMEM > ZERO) THEN
+               WRITE(ERR,941) NAME, NROWS, NCOLS, MB_ALLOCATED, WINAMEM
+               IF (SUPINFO == 'N') WRITE(F06,941) NAME, NROWS, NCOLS, MB_ALLOCATED, WINAMEM
+            ELSE
+               WRITE(ERR,942) NAME, NROWS, NCOLS, MB_ALLOCATED
+               IF (SUPINFO == 'N') WRITE(F06,942) NAME, NROWS, NCOLS, MB_ALLOCATED
+            ENDIF
+            IF ((WINAMEM > ZERO) .AND. (MB_ALLOCATED > WINAMEM)) THEN
                WRITE(ERR,940) MB_ALLOCATED, NAME, WINAMEM
                WRITE(F06,940) MB_ALLOCATED, NAME, WINAMEM
                CALL OUTA_HERE ( 'Y' )
             ENDIF
+! --- BANDED_optimizisation -end-- !
             ALLOCATE (ABAND(NROWS,NCOLS),STAT=IERR)
             IF (IERR == 0) THEN
          !xx   WRITE(SC1, * )                              ! Advance 1 line for screen messages
@@ -119,6 +128,20 @@
          ELSE
             MB_ALLOCATED = REAL(DOUBLE)*RNROWS*RNCOLS/ONEPP6
             WRITE(SC1,9199) NAME, MB_ALLOCATED
+! --- BANDED_optimizisation -begin-- !
+            IF (WINAMEM > ZERO) THEN
+               WRITE(ERR,941) NAME, NROWS, NCOLS, MB_ALLOCATED, WINAMEM
+               IF (SUPINFO == 'N') WRITE(F06,941) NAME, NROWS, NCOLS, MB_ALLOCATED, WINAMEM
+            ELSE
+               WRITE(ERR,942) NAME, NROWS, NCOLS, MB_ALLOCATED
+               IF (SUPINFO == 'N') WRITE(F06,942) NAME, NROWS, NCOLS, MB_ALLOCATED
+            ENDIF
+            IF ((WINAMEM > ZERO) .AND. (MB_ALLOCATED > WINAMEM)) THEN
+               WRITE(ERR,940) MB_ALLOCATED, NAME, WINAMEM
+               WRITE(F06,940) MB_ALLOCATED, NAME, WINAMEM
+               CALL OUTA_HERE ( 'Y' )
+            ENDIF
+! --- BANDED_optimizisation -end-- !
             ALLOCATE (BBAND(NROWS,NCOLS),STAT=IERR)
             IF (IERR == 0) THEN
          !xx   WRITE(SC1, * )                              ! Advance 1 line for screen messages
@@ -260,6 +283,20 @@
          ELSE
             MB_ALLOCATED = REAL(DOUBLE)*RNROWS*RNCOLS/ONEPP6
             WRITE(SC1,9199) NAME, MB_ALLOCATED
+! --- BANDED_optimizisation -begin-- !
+            IF (WINAMEM > ZERO) THEN
+               WRITE(ERR,941) NAME, NROWS, NCOLS, MB_ALLOCATED, WINAMEM
+               IF (SUPINFO == 'N') WRITE(F06,941) NAME, NROWS, NCOLS, MB_ALLOCATED, WINAMEM
+            ELSE
+               WRITE(ERR,942) NAME, NROWS, NCOLS, MB_ALLOCATED
+               IF (SUPINFO == 'N') WRITE(F06,942) NAME, NROWS, NCOLS, MB_ALLOCATED
+            ENDIF
+            IF ((WINAMEM > ZERO) .AND. (MB_ALLOCATED > WINAMEM)) THEN
+               WRITE(ERR,940) MB_ALLOCATED, NAME, WINAMEM
+               WRITE(F06,940) MB_ALLOCATED, NAME, WINAMEM
+               CALL OUTA_HERE ( 'Y' )
+            ENDIF
+! --- BANDED_optimizisation -end-- !
             ALLOCATE (RFAC(NROWS,NCOLS),STAT=IERR)
             IF (IERR == 0) THEN
          !xx   WRITE(SC1, * )                              ! Advance 1 line for screen messages
@@ -379,8 +416,16 @@
   915 FORMAT(' *ERROR   915: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' NAME OF ARRAY TO BE ',A,' IS INCORRECT. INPUT NAME WAS ',A)
 
-  940 FORMAT(' *ERROR   940: ATTEMPT TO ALLOCATE ',F10.3,' MB OF MEMORY TO ARRAY ',A,' EXCEEDING WINDOWS MAX MEMORY ALLOWED OF ',  &
+  940 FORMAT(' *ERROR   940: ATTEMPT TO ALLOCATE ',F10.3,' MB OF MEMORY TO ARRAY ',A,' EXCEEDS PARAM WINAMEM LIMIT OF ',          &
                              F10.3,' MB')
+
+! --- BANDED_optimizisation -begin-- !
+  941 FORMAT(' *INFORMATION: BANDED ALLOCATION REQUEST FOR ',A,': ROWS = ',I12,', COLS = ',I12,', ESTIMATED MB = ',F13.3,          &
+                    /,14X,' PARAM WINAMEM LIMIT IS ACTIVE AT ',F13.3,' MB; EXCEEDANCE IS FATAL FOR BANDED ALLOCATION')
+
+  942 FORMAT(' *INFORMATION: BANDED ALLOCATION REQUEST FOR ',A,': ROWS = ',I12,', COLS = ',I12,', ESTIMATED MB = ',F13.3,          &
+                    /,14X,' PARAM WINAMEM LIMIT IS DISABLED; ALLOCATE/STAT WILL REPORT MEMORY FAILURE')
+! --- BANDED_optimizisation -end-- !
 
   990 FORMAT(' *ERROR   990: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' CANNOT ALLOCATE MEMORY TO ARRAY ',A,'. IT IS ALREADY ALLOCATED')

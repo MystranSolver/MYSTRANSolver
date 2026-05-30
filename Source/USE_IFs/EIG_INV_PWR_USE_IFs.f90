@@ -32,6 +32,9 @@
       USE ALLOCATE_SPARSE_MAT_Interface
       USE MATADD_SSS_Interface
       USE ALLOCATE_EIGEN1_MAT_Interface
+! !--- matrix classifier --- begin!
+      USE BANDGEN_LAPACK_DGB_Interface
+! !--- matrix classifier --- end!
       USE SYM_MAT_DECOMP_LAPACK_Interface
       USE SYM_MAT_DECOMP_SUPRLU_Interface
       USE OUTA_HERE_Interface
