@@ -1174,6 +1174,12 @@ j_do2:            DO J=2,LMPCADDC
          TRIM_LINE = TRIM(LINE)
       ENDDO
 
+      ! Skip capitalizing OUTPUT4 and PARTN, which are executive control commands
+      ! because matrix names like "KRRcb" in their fields are case sensitive.
+      IF ((LINE(1: 7) == 'OUTPUT4') .OR. (LINE(1: 5) == 'PARTN'  )) THEN
+         RETURN
+      ENDIF
+
       DO I = 1,256
           ! remove $
           IF (LINE(I:I) == '$') THEN
