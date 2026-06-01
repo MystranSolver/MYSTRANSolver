@@ -38,20 +38,17 @@
 ! the OUTPUT4 matrix. PARTN must follow an OUTPUT4 requesting output of the matrix A
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, EC_ENTRY_LEN
-      USE IOUNT1, ONLY                :  ERR, F06, MOU4, OU4, OU4_ELM_OTM, OU4_GRD_OTM, SC1
+      USE SCONTR, ONLY                :  EC_ENTRY_LEN
+      USE IOUNT1, ONLY                :  ERR, F06, MOU4, OU4, OU4_ELM_OTM, OU4_GRD_OTM
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE OUTPUT4_MATRICES, ONLY      :  NUM_OU4_REQUESTS, NUM_PARTN_REQUESTS, OU4_PART_VEC_NAMES, OU4_PART_MAT_NAMES,             &
-                                         ACT_OU4_MYSTRAN_NAMES, ACT_OU4_OUTPUT_NAMES,                                              &
-                                         ALLOW_OU4_MYSTRAN_NAMES, ALLOW_OU4_OUTPUT_NAMES
-
-      USE TIMDAT, ONLY                :  TSEC
+                                         ACT_OU4_MYSTRAN_NAMES, ACT_OU4_OUTPUT_NAMES
 
       USE EC_PARTN_USE_IFs                                 ! Added 2019/07/14
+      USE TO_UPPER_Interface
 
       IMPLICIT NONE
 
-      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'EC_PARTN'
       CHARACTER(LEN=*), INTENT(IN)    :: CARD1             ! Card read in LOADE and shifted to begin in col 1
       CHARACTER(LEN=LEN(CARD1))       :: CARD2             ! CARD1 truncated at $ (trailing comment) if there is one
       CHARACTER(LEN=EC_ENTRY_LEN)     :: DATA_80(3)        ! Temp slot for holding data until lead/trail blanks stripped
@@ -168,7 +165,10 @@ nerr: IF (IERR == 0) THEN
 
          FOUND = 'N'
          DO I=1,NUM_OU4_REQUESTS                           ! Set names of the matrix to be partitioned, the partitions and the vecs
-            IF (DATA_16(1) == ACT_OU4_MYSTRAN_NAMES(I)) THEN
+            ! DATA_16(1) was upper-cased when reading the card.
+            ! Here, upper-case the allowed names so that comparison is case-insensitive
+            ! and thus allows KRRcb, MRRcb, KLR(t).
+            IF (DATA_16(1) == TO_UPPER(ACT_OU4_MYSTRAN_NAMES(I))) THEN
                FOUND = 'Y'
                OU4_PART_MAT_NAMES(I,1) = DATA_16(1)
                OU4_PART_VEC_NAMES(I,1) = DATA_16(2)

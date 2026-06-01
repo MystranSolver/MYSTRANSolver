@@ -1112,48 +1112,23 @@ j_do2:            DO J=2,LMPCADDC
 
       END SUBROUTINE LOADB
 
-
-      !function to_upper(in) result (out)
-      SUBROUTINE TO_UPPER_LINE(LINE)
-      ! it seems like there should be a better way to write an upper function...
-      ! https://en.wikibooks.org/wiki/Fortran/strings
-      implicit none
-      CHARACTER(256), intent (inout) :: LINE
-      integer                    :: I, J
-      CHARACTER(26), parameter   :: UPP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-      CHARACTER(26), parameter   :: LOW = 'abcdefghijklmnopqrstuvwxyz'
-
-      DO I = 1,256
-          ! remove $
-          IF (LINE(I:I) == '$') THEN
-              LINE(I:) = ' '
-              GOTO 100 ! break
-          ENDIF
-
-          J = index(LOW, LINE(I:I))      ! Is ith character in LOW
-          IF (J>0) LINE(I:I) = UPP(J:J)  ! Yes, then subst with UPP
-  100 ENDDO
-      END SUBROUTINE TO_UPPER_LINE
-      !end function to_upper
-
       !---------------------------------------------------------
       SUBROUTINE READ_BDF_LINE(IN1, IOCHK, LINE)
 
-      ! it seems like there should be a better way to write an upper function...
-      ! https://en.wikibooks.org/wiki/Fortran/strings
       USE IOUNT1, ONLY                :  ERR, INFILE, F06 !
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      implicit none
-      CHARACTER(256), intent (inout) :: LINE
-      CHARACTER(256)             :: TRIM_LINE
-      integer, intent (in)       :: IN1
-      integer, intent (inout)    :: IOCHK
-      integer                    :: I, J, FATAL_ERR
-      CHARACTER(26), parameter   :: UPP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-      CHARACTER(26), parameter   :: LOW = 'abcdefghijklmnopqrstuvwxyz'
-      CHARACTER(24*BYTE)         :: MESSAG            ! Message for output error purposes
-      INTEGER(LONG)              :: OUNT(2)           ! File units to write messages to. Input to subr READERR
-      INTEGER(LONG)              :: REC_NO            ! Record number when reading a file. Input to subr READERR
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG
+      USE TO_UPPER_Interface
+
+      IMPLICIT NONE
+
+      CHARACTER(256), INTENT (INOUT)  :: LINE
+      CHARACTER(256)                  :: TRIM_LINE
+      INTEGER, INTENT (IN)            :: IN1
+      INTEGER, INTENT (INOUT)         :: IOCHK
+      INTEGER                         :: I, FATAL_ERR
+      CHARACTER(24*BYTE)              :: MESSAG            ! Message for output error purposes
+      INTEGER(LONG)                   :: OUNT(2)           ! File units to write messages to. Input to subr READERR
+      INTEGER(LONG)                   :: REC_NO            ! Record number when reading a file. Input to subr READERR
 
       ! Make units for writing errors the error file and output file
       OUNT(1) = ERR
@@ -1178,12 +1153,12 @@ j_do2:            DO J=2,LMPCADDC
           ! remove $
           IF (LINE(I:I) == '$') THEN
               LINE(I:) = ' '
-              GOTO 100 ! break
+              EXIT
           ENDIF
-
-          J = index(LOW, LINE(I:I))      ! Is ith character in LOW
-          IF (J>0) LINE(I:I) = UPP(J:J)  ! Yes, then subst with UPP
-  100 ENDDO
+      ENDDO
+  
+      LINE = TO_UPPER(LINE)
+  
 
   101 FORMAT(A)
       END SUBROUTINE READ_BDF_LINE

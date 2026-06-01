@@ -46,6 +46,7 @@
       USE TIMDAT, ONLY                :  TSEC
 
       USE EC_OUTPUT4_USE_IFs                               ! Added 2019/07/14
+      USE TO_UPPER_Interface
 
       IMPLICIT NONE
 
@@ -416,13 +417,21 @@ nerr: IF (IERR == 0) THEN
       INTEGER(LONG), INTENT(OUT)      :: INDEX             ! Row in array ALLOW_OU4_MYSTRAN_NAMES where name was found
       INTEGER(LONG)                   :: JJ                ! DO loop index
 
+      CHARACTER(16*BYTE)              :: ALLOW_OU4_MYSTRAN_NAME_UPPER
+      CHARACTER(16*BYTE)              :: ALLOW_OU4_OUTPUT_NAME_UPPER
+
 ! **********************************************************************************************************************************
 ! Check requested OUTPUT4 names to make sure they are in the list of valid names
 
       VALID_OU4_NAME = 'Y'
       DO JJ=1,NUM_OU4_VALID_NAMES
          FOUND = 'N'
-         IF ((MYSTRAN_NAME == ALLOW_OU4_MYSTRAN_NAMES(JJ)) .OR. (MYSTRAN_NAME == ALLOW_OU4_OUTPUT_NAMES(JJ))) THEN
+         ! MYSTRAN_NAME was upper-cased when reading the card.
+         ! Here, upper-case the allowed names so that comparison is case-insensitive
+         ! and thus allows KRRcb, MRRcb, KLR(t).
+         ALLOW_OU4_MYSTRAN_NAME_UPPER = TO_UPPER(ALLOW_OU4_MYSTRAN_NAMES(JJ))
+         ALLOW_OU4_OUTPUT_NAME_UPPER = TO_UPPER(ALLOW_OU4_OUTPUT_NAMES(JJ))
+         IF ((MYSTRAN_NAME == ALLOW_OU4_MYSTRAN_NAME_UPPER) .OR. (MYSTRAN_NAME == ALLOW_OU4_OUTPUT_NAME_UPPER)) THEN
             FOUND = 'Y'
             INDEX = JJ
             EXIT
@@ -452,5 +461,6 @@ nerr: IF (IERR == 0) THEN
 ! **********************************************************************************************************************************
 
       END SUBROUTINE CHECK_MATRIX_NAME
-
+     
+      
       END SUBROUTINE EC_OUTPUT4
