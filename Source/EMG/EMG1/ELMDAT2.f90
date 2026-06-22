@@ -1,28 +1,28 @@
 ! ##################################################################################################################################
-! Begin MIT license text.
+! Begin MIT license text.                                                                                    
 ! _______________________________________________________________________________________________________
-
-! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)
-
-! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+                                                                                                         
+! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)                                              
+                                                                                                         
+! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and      
 ! associated documentation files (the "Software"), to deal in the Software without restriction, including
 ! without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
-! the following conditions:
-
-! The above copyright notice and this permission notice shall be included in all copies or substantial
-! portions of the Software and documentation.
-
-! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-! THE SOFTWARE.
+! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to   
+! the following conditions:                                                                              
+                                                                                                         
+! The above copyright notice and this permission notice shall be included in all copies or substantial   
+! portions of the Software and documentation.                                                                              
+                                                                                                         
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS                                
+! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                            
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE                            
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                                 
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,                          
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN                              
+! THE SOFTWARE.                                                                                          
 ! _______________________________________________________________________________________________________
-
-! End MIT license text.
+                                                                                                        
+! End MIT license text.                                                                                      
 
 
       SUBROUTINE ELMDAT2 ( INT_ELEM_ID, OPT, WRITE_WARN )
@@ -30,11 +30,14 @@
 ! Generates small arrays of elem data, for use by subroutine EMG, one elem at a time for all elems. Arrays generated are:
 
 !   DT (1 elem temperatures) and PRESS (1 element pressure load)
-
+ 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG
       USE IOUNT1, ONLY                :  WRT_ERR
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, LPDAT, MPRESS, MDT, MTDAT_TEMPRB, NSUB, NTSUB
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, LPDAT, MPRESS, MDT, MTDAT_TEMPRB, NSUB, NTSUB 
       USE TIMDAT, ONLY                :  TSEC
+! --- cbeam_add begin --- !
+      USE SCONTR, ONLY                :  MPDAT_PLOAD1
+! --- cbeam_add end --- !
       USE CONSTANTS_1, ONLY           :  ZERO, QUARTER, THIRD
       USE MODEL_STUF, ONLY            :  BGRID, DT, ELGP, ETYPE, GTEMP, PDATA, PPNT, PTYPE, PRESS, TDATA, TPNT, TYPE
 
@@ -52,8 +55,6 @@
       INTEGER(LONG)                   :: ITPN              ! A pointer into array TPNT
 
 
-
-
 ! **********************************************************************************************************************************
       TYPE = ETYPE(INT_ELEM_ID)
 
@@ -69,7 +70,9 @@
 
       IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(6) == 'Y')) THEN
 
-         DT = ZERO
+
+         DT= ZERO
+
 
          IF (NTSUB > 0) THEN
 
@@ -82,41 +85,61 @@
                      IF ((TYPE == 'ROD     ') .OR. (TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ') .OR. (TYPE == 'USER1   ')) THEN
                         DO I=1,MTDAT_TEMPRB
                            DT(I,J) = TDATA(ITPN-1+I)
-                        ENDDO
-                     ELSE
+                        ENDDO 
+                     ELSE 
                         DO I=1,ELGP
                            DT(I,J) = TDATA(ITPN)
-                        ENDDO
+                        ENDDO 
                         DT(ELGP+1,J) = TDATA(ITPN+1)
                      ENDIF
 
                   ELSE                                     ! Temperatures are on grid cards
 
-                     DO I=1,ELGP
-                        DT(I,J) = GTEMP(BGRID(I),J)
-                     ENDDO
+                     DO I=1,ELGP     
+                        DT(I,J) = GTEMP(BGRID(I),J)  
+                     ENDDO 
 
                   ENDIF
 
-               ENDDO
+               ENDDO 
 
             ENDIF
 
          ENDIF
 
       ENDIF
-
+ 
 ! **********************************************************************************************************************************
 ! Generate PRESS pressure array for this element if OPT(5) says to. The pressure data was on elem pressure B.D. cards and
-! has been transferred to arrays PPNT, PDATA by an earlier subr (PRESSURE_DATA_PROC)
+! has been transferred to arrays PPNT, PDATA by an earlier subr (PRESSURE_DATA_PROC) 
 
       IF (OPT(5) == 'Y') THEN
 
          IF (LPDAT > 0) THEN
+!---  cbeam add --- begin!
+            DO I=1,MPRESS
+               DO J=1,NSUB
+                  PRESS(I,J) = ZERO
+               ENDDO
+            ENDDO 
 
-            PRESS = ZERO
+            IF ((TYPE == 'BAR     ') .OR. (TYPE == 'BART    ') .OR. (TYPE == 'BEAM    ')) THEN
 
-            IF ((TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'QUAD4')) THEN
+               IF (PTYPE(INT_ELEM_ID) == '2') THEN
+
+                  DO I=1,NSUB
+                     IPPN = PPNT(INT_ELEM_ID,I)
+                     IF (IPPN /= 0) THEN
+!*** ADDED -- 2026-04-20 -- FOR BEAM DSB ***
+                        DO J=1,MPDAT_PLOAD1
+                           PRESS(J,I) = PDATA(IPPN+J-1)
+                        ENDDO
+                     ENDIF
+                  ENDDO
+
+               ENDIF
+!---  cbeam add --- end!
+            ELSE IF ((TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'QUAD4')) THEN
 
                IF      (PTYPE(INT_ELEM_ID) == '1') THEN
 
@@ -173,7 +196,7 @@
 
          ENDIF
 
-      ENDIF
+      ENDIF 
 
 
 
@@ -182,3 +205,5 @@
 ! **********************************************************************************************************************************
 
       END SUBROUTINE ELMDAT2
+
+

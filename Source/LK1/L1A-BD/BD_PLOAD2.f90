@@ -42,6 +42,10 @@
       CHARACTER(LEN=*),INTENT(IN)     :: CARD               ! A Bulk Data card
       CHARACTER( 1*BYTE),INTENT(INOUT):: CC_LOAD_FND(LSUB,2)! 'Y' if B.D load/temp card w/ same set ID (SID) as C.C. LOAD = SID
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)          ! The 10 fields of characters making up CARD
+! --- cbeam_add begin --- !
+      CHARACTER(LEN=JCARD_LEN)        :: PLOAD1_SCALE       ! PLOAD1 scale keyword
+      CHARACTER(LEN=JCARD_LEN)        :: PLOAD1_TYPE        ! PLOAD1 load type keyword
+! --- cbeam_add end --- !
       CHARACTER( 1*BYTE)              :: THRU               ! 'Y' if field 5 of parent card is "THRU"
       CHARACTER( 8*BYTE)              :: TOKEN              ! The 1st 8 characters from a JCARD
       CHARACTER( 8*BYTE)              :: TOKTYP             ! The type of token in a field of parent card. Output from subr TOKCHK
@@ -91,19 +95,60 @@
          JERR = JERR + 1
       ENDIF
 
-! Read pressure value
-
-      CALL R8FLD ( JCARD(3), JF(3), RPRESS )
-
 ! Check for the 2 options on specifying data on the card. Either all data are PLOAD_ELID's or the THRU  option is used in
 ! which case field 5 will have "THRU".
 
 
+! --- cbeam_add begin --- !
       IF      ((JCARD(1)(1:7) == 'PLOAD1 ') .OR. (JCARD(1)(1:7) == 'PLOAD1*')) THEN
-         WRITE(ERR,99)
-         WRITE(F06,99)
-         FATAL_ERR = FATAL_ERR + 1
+         CALL I4FLD ( JCARD(3), JF(3), PLOAD_ELID(1) )
+         IF (IERRFL(3) == 'N') THEN
+            IF (PLOAD_ELID(1) <= 0) THEN
+               JERR      = JERR + 1
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1152) JCARD(1), JCARD(2)
+               WRITE(F06,1152) JCARD(1), JCARD(2)
+            ENDIF
+         ELSE
+            JERR = JERR + 1
+         ENDIF
+
+         CALL CHAR_FLD ( JCARD(4), JF(4), PLOAD1_TYPE )
+         CALL LEFT_ADJ_BDFLD ( PLOAD1_TYPE )
+         IF (PLOAD1_TYPE(1:2) == 'MX') PLOAD1_TYPE = 'MXE'
+         IF (PLOAD1_TYPE(1:2) == 'MY') PLOAD1_TYPE = 'MYE'
+         IF (PLOAD1_TYPE(1:2) == 'MZ') PLOAD1_TYPE = 'MZE'
+         IF ((PLOAD1_TYPE /= 'FY' ) .AND. (PLOAD1_TYPE /= 'FYE') .AND. (PLOAD1_TYPE /= 'FZ' ) .AND. (PLOAD1_TYPE /= 'FZE') .AND.  &
+             (PLOAD1_TYPE /= 'Y'  ) .AND. (PLOAD1_TYPE /= 'Z'  ) .AND. (PLOAD1_TYPE /= 'FXE') .AND. (PLOAD1_TYPE /= 'MXE') .AND.  &
+             (PLOAD1_TYPE /= 'MYE') .AND. (PLOAD1_TYPE /= 'MZE')) THEN
+            JERR      = JERR + 1
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,1199) JCARD(1), JCARD(2), PLOAD1_TYPE
+            WRITE(F06,1199) JCARD(1), JCARD(2), PLOAD1_TYPE
+         ENDIF
+
+         CALL CHAR_FLD ( JCARD(5), JF(5), PLOAD1_SCALE )
+         CALL LEFT_ADJ_BDFLD ( PLOAD1_SCALE )
+         IF (PLOAD1_SCALE == ' ') PLOAD1_SCALE = 'FR'
+         IF ((PLOAD1_SCALE /= 'FR'  ) .AND. (PLOAD1_SCALE /= 'LE'  ) .AND.                                             &
+             (PLOAD1_SCALE /= 'FRPR') .AND. (PLOAD1_SCALE /= 'LEPR')) THEN
+            JERR      = JERR + 1
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,1200) JCARD(1), JCARD(2), PLOAD1_SCALE
+            WRITE(F06,1200) JCARD(1), JCARD(2), PLOAD1_SCALE
+         ENDIF
+
+         CALL R8FLD ( JCARD(6), JF(6), RPRESS )
+         CALL R8FLD ( JCARD(7), JF(7), RPRESS )
+         CALL R8FLD ( JCARD(8), JF(8), RPRESS )
+         CALL R8FLD ( JCARD(9), JF(9), RPRESS )
+
+         CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,9 )
+         CALL CRDERR ( CARD )
+! --- cbeam_add end --- !
       ELSE IF ((JCARD(1)(1:7) == 'PLOAD2 ') .OR. (JCARD(1)(1:7) == 'PLOAD2*')) THEN
+
+         CALL R8FLD ( JCARD(3), JF(3), RPRESS )
 
          THRU = 'N'
          TOKEN = JCARD(5)(1:8)                             ! Only send the 1st 8 chars of this JCARD. It has been left justified
@@ -153,6 +198,7 @@
 
       ENDIF
 
+
 ! Write data to file L1Q
 
       IF (JERR == 0) THEN
@@ -166,11 +212,16 @@
       RETURN
 
 ! **********************************************************************************************************************************
-   99 FORMAT(' *ERROR      : CODE NOT WRITTEN YET FOR PLOAD1')
-
  1128 FORMAT(' *ERROR  1128: ON ',A,A,' THE IDs MUST BE IN INCREASING ORDER FOR THRU OPTION')
 
  1152 FORMAT(' *ERROR  1152: ON ',A,A,' ELEM IDs MUST BE > 0')
+
+! --- cbeam_add begin --- !
+ 1199 FORMAT(' *ERROR      : ON ',A,A,' PLOAD1 TYPE "',A,'" IS NOT SUPPORTED. USE FYE/FZE/FXE/MXE/MYE/MZE',                 &
+                    ' (legacy FY/FZ and Y/Z also accepted)')
+
+ 1200 FORMAT(' *ERROR      : ON ',A,A,' PLOAD1 SCALE "',A,'" IS NOT SUPPORTED. USE FR, LE, FRPR OR LEPR')
+! --- cbeam_add end --- !
 
  1163 FORMAT(' *ERROR  1163: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' TOO MANY ',A,' ENTRIES; LIMIT = ',I12)

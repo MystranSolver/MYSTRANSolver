@@ -60,6 +60,9 @@
       CHARACTER(  1*BYTE)            :: IMB_BLANK(2:9)   = (/('N', I=2, 9)/) ! 'Y', 'N' indicates imbedded blanks in B.D. field
       CHARACTER(  1*BYTE)            :: PRINTENV         = 'N'               ! 'Y' if Software Passport env vars are to be printed
       CHARACTER(  1*BYTE)            :: RESTART          = 'N'               ! 'Y' if run is a restart
+! --- rsa_nastran begin --- !
+      CHARACTER(  1*BYTE)            :: RSA_NX_SEMODES   = 'N'               ! 'Y' if SOL SEMODES alias was requested
+! --- rsa_nastran end --- !
       CHARACTER( 16*BYTE)            :: SOL_NAME         = '                '! Name for the solution (e.g. 'STATICS')
       CHARACTER( 2*BYTE)             :: TSET_CHR_LEN     = '  '              ! Char len of entries in TSET
 
@@ -202,9 +205,12 @@
       INTEGER(LONG)            :: NCORD2              =   0      ! Count of no. of CORD2C, 2R or 2S cards
       INTEGER(LONG)            :: NCPENTA6            =   0      ! Count of no. of CPENTA  elems with  6 nodes
       INTEGER(LONG)            :: NCPENTA15           =   0      ! Count of no. of CPENTA  elems with 15 nodes
+      INTEGER(LONG)            :: NCPYRA5             =   0      ! Count of no. of CPYRA   elems with  5 nodes
+      INTEGER(LONG)            :: NCPYRA14            =   0      ! Count of no. of CPYRA   elems with 14 nodes
       INTEGER(LONG)            :: NCQUAD4             =   0      ! Count of no. of CQUAD4  elems
       INTEGER(LONG)            :: NCQUAD4K            =   0      ! Count of no. of CQUAD4K elems
       INTEGER(LONG)            :: NCQUAD8             =   0      ! Count of no. of CQUAD8  elems
+      INTEGER(LONG)            :: NCQUADR             =   0      ! Count of no. of CQUADR  elems
       INTEGER(LONG)            :: NCROD               =   0      ! Count of no. of CROD    elems
       INTEGER(LONG)            :: NCSHEAR             =   0      ! Count of no. of CSHEAR  elems
       INTEGER(LONG)            :: NCTETRA4            =   0      ! Count of no. of CTETRA  elems with  4 nodes
@@ -439,7 +445,7 @@
       INTEGER(LONG), PARAMETER :: DEDAT_Q8_POFFS_KEY  =  12      ! Delta in EDAT for QUAD8 to get from EID to the offset key
       INTEGER(LONG), PARAMETER :: DEDAT_Q8_SHELL_KEY  =  13      ! Delta in EDAT for QUAD8 to get from EID to the shell/pcomp key
       INTEGER(LONG), PARAMETER :: DEDAT_Q8_THICK_KEY  =  14      ! Delta in EDAT for QUAD8 to get from EID to the thickness key
-      INTEGER(LONG), PARAMETER :: MAX_FEMAP_COLS      =  22      ! Max number of columns for array FEMAP_ELEM_VECS
+      INTEGER(LONG), PARAMETER :: MAX_FEMAP_COLS      =  24      ! Max number of columns for array FEMAP_ELEM_VECS
       INTEGER(LONG), PARAMETER :: MAX_NUM_STR         =   9      ! Number of different stresses/strains
       INTEGER(LONG), PARAMETER :: MAX_ORDER_GAUSS     =  10      ! Max order that can be used when subr ORDER_GAUSS is called
       INTEGER(LONG), PARAMETER :: MAX_ORDER_TETRA     =   4      ! Max order that can be used when subr ORDER_TETRA is called
@@ -460,6 +466,8 @@
       INTEGER(LONG), PARAMETER :: MEDAT_CHEXA20       =  22      ! No. terms that go into EDAT array for CHEXA  elems with 20 nodes
       INTEGER(LONG), PARAMETER :: MEDAT_CPENTA6       =   8      ! No. terms that go into EDAT array for CPENTA elems with  6 nodes
       INTEGER(LONG), PARAMETER :: MEDAT_CPENTA15      =  17      ! No. terms that go into EDAT array for CPENTA elems with 15 nodes
+      INTEGER(LONG), PARAMETER :: MEDAT_CPYRA5        =   7      ! No. terms that go into EDAT array for CPYRA  elems with  5 nodes
+      INTEGER(LONG), PARAMETER :: MEDAT_CPYRA14       =  16      ! No. terms that go into EDAT array for CPYRA  elems with 14 nodes
       INTEGER(LONG), PARAMETER :: MEDAT_CQUAD         =  11      ! No. terms that go into EDAT array for CQUAD  elems
       INTEGER(LONG), PARAMETER :: MEDAT_CQUAD8        =  15      ! No. terms that go into EDAT array for CQUAD8 elems
       INTEGER(LONG), PARAMETER :: MEDAT_CROD          =   4      ! No. terms that go into EDAT array for CROD   elems
@@ -481,27 +489,30 @@
       INTEGER(LONG), PARAMETER :: MEOFIL              =   4      ! Max no. elem disk debug output files
       INTEGER(LONG), PARAMETER :: MEPROP              =  50      ! Max no. element properties that cab be stored in array EPROP
       INTEGER(LONG), PARAMETER :: MEPSIL              =   6      ! Max no. variables in EPSIL array
-      INTEGER(LONG), PARAMETER :: METYPE              =  23      ! Max number of element types
+      INTEGER(LONG), PARAMETER :: METYPE              =  23      ! Max number of element types ! 
       INTEGER(LONG), PARAMETER :: MFIJ                =   5      ! Max number of disk files for WRT_FIJ (F21, F22, etc files)
       INTEGER(LONG), PARAMETER :: MGRID               =   6      ! No. cols allowed in dimensioning array GRID
-      INTEGER(LONG), PARAMETER :: MGROUTS             =   6      ! No. of types of grid related outputs
+      INTEGER(LONG), PARAMETER :: MGROUTS             =   7      ! No. of types of grid related outputs
 !                                                                  (ACCE, DISP, OLOA, SPCF, GPFO, MPCF)
       INTEGER(LONG), PARAMETER :: MMATL               =   2      ! No. cols allowed in dimensioning array MATL
       INTEGER(LONG), PARAMETER :: MMSPRNT             =   3      ! No. cols allowed in dimensioning array MSPRNT
       INTEGER(LONG), PARAMETER :: MOGEL               =  12      ! No. cols allowed in dimensioning array OGEL
-      INTEGER(LONG), PARAMETER :: MPDAT_PLOAD1        =   2      ! No. pressures on PLOAD1 Bulk Data card
+! --- cbeam_add begin --- !
+      INTEGER(LONG), PARAMETER :: MPDAT_PLOAD1        =  26      ! Beam/bar PLOAD1 data slots (6 comps x [P1,P2,X1,X2]) + 2 legacy dir flags
       INTEGER(LONG), PARAMETER :: MPDAT_PLOAD2        =   1      ! No. pressures on PLOAD2 Bulk Data card
       INTEGER(LONG), PARAMETER :: MPDAT_PLOAD4        =   4      ! No. pressuresa on PLOAD4 Bulk Data card
       INTEGER(LONG), PARAMETER :: MPBAR               =   3      ! No. cols allowed in dimensioning array PBAR
       INTEGER(LONG), PARAMETER :: MPBARLU             =   6      ! Max num of dec places in format for writing PBAR equivs of PBARL
       INTEGER(LONG), PARAMETER :: MPBEAM              =   4      ! No. cols allowed in dimensioning array PBEAM
+      INTEGER(LONG), PARAMETER :: MPBEAM_STATIONS     =  11      ! Max stored x/L stations for NX-style PBEAM/CBEAM output
       INTEGER(LONG), PARAMETER :: MPBUSH              =   2      ! No. cols allowed in dimensioning array PBUSH
       INTEGER(LONG), PARAMETER :: MPLOAD4_3D_DATA     =   5      ! No. cols allowed for array PLOAD4_3D_DATA
       INTEGER(LONG), PARAMETER :: MPCOMP0             =   6      ! No. integer data on PCOMP parent entry (PID,FT,LAM) + NUM_LAYERS
       INTEGER(LONG), PARAMETER :: MPCOMP_PLIES        =   2      ! No. integer data for each layer on PCOMP (MIDi, SOUTi)
       INTEGER(LONG), PARAMETER :: MPELAS              =   1      ! No. cols allowed in dimensioning array PELAS
       INTEGER(LONG), PARAMETER :: MPMASS              =   1      ! No. cols allowed in dimensioning array PMASS
-      INTEGER(LONG), PARAMETER :: MPRESS              =   3      ! No. rows allowed in dimensioning array PRESS
+      INTEGER(LONG), PARAMETER :: MPRESS              =  26      ! No. rows allowed in dimensioning array PRESS
+! --- cbeam_add end --- !
       INTEGER(LONG), PARAMETER :: MPROD               =   2      ! No. cols allowed in dimensioning array PROD
       INTEGER(LONG), PARAMETER :: MPSHEAR             =   2      ! No. cols allowed in dimensioning array PSHEAR
       INTEGER(LONG), PARAMETER :: MPSHEL              =   6      ! No. cols allowed in dimensioning array PSHEL

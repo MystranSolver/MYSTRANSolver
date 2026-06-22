@@ -48,11 +48,18 @@
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! The 10 fields of characters making up CARD
       CHARACTER(LEN(JCARD))           :: CORD_CID          ! Field 2 of CORD card (coord sys ID)
       CHARACTER(LEN(JCARD))           :: CORD_NAME         ! Name of coors sys
+! cbeam_add - add cord2 
+      CHARACTER(LEN=32)               :: FREE_TOK(12)      ! Tokens for free-field CORD2 parent/child entries
+      CHARACTER(LEN=32)               :: FREE_TOK2(12)     ! Tokens for free-field CORD2 continuation entries
+      CHARACTER( 3*BYTE)              :: FREEFLD           ! 'YES' when CARD is raw free-field text
 
       INTEGER(LONG)                   :: J                 ! DO loop index
       INTEGER(LONG)                   :: I4INP     = 0     ! A value read from input file that should be an integer value
       INTEGER(LONG)                   :: ICONT     = 0     ! Indicator of whether a cont card exists. Output from subr NEXTC
       INTEGER(LONG)                   :: IERR      = 0     ! Error indicator returned from subr NEXTC called herein
+! cbeam_add - add cord2 
+      INTEGER(LONG)                   :: IOS       = 0     ! IOSTAT helper for one-line free-field CORD2 parsing
+      INTEGER(LONG)                   :: NTOK      = 0     ! Number of tokens on a comma-delimited CORD2 card
 
 
 
@@ -90,7 +97,109 @@
 !    2      C1             RCORD(ncord,7)
 !    3      C2             RCORD(ncord,8)
 !    4      C3             RCORD(ncord,9)
+! cbeam_add - add cord2 - begin
+      IF ((INDEX(CARD,',') > 0) .OR. (INDEX(CARD,ACHAR(9)) > 0)) THEN
+         FREEFLD = 'YES'
+      ELSE
+         FREEFLD = 'NO '
+      ENDIF
 
+      IF ((FREEFLD == 'YES') .AND. (CARD(1:5) == 'CORD2')) THEN
+         CALL PARSE_FREE_FIELD_CARD ( CARD, NTOK, FREE_TOK )
+
+         NCORD2 = NCORD2 + 1
+         NCORD  = NCORD  + 1
+
+         CORD_CID  = FREE_TOK(2)
+         CORD_NAME = FREE_TOK(1)
+
+         IF      (FREE_TOK(1)(1:6) == 'CORD2R') THEN
+            CORD(NCORD,1) = 21
+         ELSE IF (FREE_TOK(1)(1:6) == 'CORD2C') THEN
+            CORD(NCORD,1) = 22
+         ELSE IF (FREE_TOK(1)(1:6) == 'CORD2S') THEN
+            CORD(NCORD,1) = 23
+         ENDIF
+
+         READ(FREE_TOK(2),*,IOSTAT=IOS) I4INP
+         IF (IOS == 0) THEN
+            IF (I4INP < 0) THEN
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1169) 2, CORD_NAME, FREE_TOK(2), FREE_TOK(2)
+               WRITE(F06,1169) 2, CORD_NAME, FREE_TOK(2), FREE_TOK(2)
+            ELSE IF (I4INP == 0) THEN
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1170) 2, CORD_NAME, FREE_TOK(2), FREE_TOK(2)
+               WRITE(F06,1170) 2, CORD_NAME, FREE_TOK(2), FREE_TOK(2)
+            ELSE
+               CORD(NCORD,2) = I4INP
+            ENDIF
+         ENDIF
+
+         READ(FREE_TOK(3),*,IOSTAT=IOS) I4INP
+         IF (IOS == 0) THEN
+            IF (I4INP >= 0) THEN
+               CORD(NCORD,3) = I4INP
+            ELSE
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1169) 3, CORD_NAME, FREE_TOK(3), FREE_TOK(3)
+               WRITE(F06,1169) 3, CORD_NAME, FREE_TOK(3), FREE_TOK(3)
+            ENDIF
+         ENDIF
+
+         IF (NTOK >= 9) THEN
+            DO J = 1,6
+               READ(FREE_TOK(J+3),*,IOSTAT=IOS) RCORD(NCORD,J)
+               IF (IOS /= 0) CALL R8FLD ( FREE_TOK(J+3), J+3, RCORD(NCORD,J) )
+            ENDDO
+         ENDIF
+
+         IF (NTOK >= 12) THEN
+            READ(FREE_TOK(10),*,IOSTAT=IOS) RCORD(NCORD,7)
+            IF (IOS /= 0) CALL R8FLD ( FREE_TOK(10), 10, RCORD(NCORD,7) )
+            READ(FREE_TOK(11),*,IOSTAT=IOS) RCORD(NCORD,8)
+            IF (IOS /= 0) CALL R8FLD ( FREE_TOK(11), 11, RCORD(NCORD,8) )
+            READ(FREE_TOK(12),*,IOSTAT=IOS) RCORD(NCORD,9)
+            IF (IOS /= 0) CALL R8FLD ( FREE_TOK(12), 12, RCORD(NCORD,9) )
+         ELSE
+            IF (LARGE_FLD_INP == 'N') THEN
+               CALL NEXTC  ( CARD, ICONT, IERR )
+            ELSE
+               CALL NEXTC2 ( CARD, ICONT, IERR, CHILD )
+               CARD = CHILD
+            ENDIF
+
+            IF (ICONT == 1) THEN
+               IF ((INDEX(CARD,',') > 0) .OR. (INDEX(CARD,ACHAR(9)) > 0)) THEN
+                  CALL PARSE_FREE_FIELD_CARD ( CARD, NTOK, FREE_TOK2 )
+                  IF (NTOK >= 4) THEN
+                     READ(FREE_TOK2(2),*,IOSTAT=IOS) RCORD(NCORD,7)
+                     IF (IOS /= 0) CALL R8FLD ( FREE_TOK2(2), 2, RCORD(NCORD,7) )
+                     READ(FREE_TOK2(3),*,IOSTAT=IOS) RCORD(NCORD,8)
+                     IF (IOS /= 0) CALL R8FLD ( FREE_TOK2(3), 3, RCORD(NCORD,8) )
+                     READ(FREE_TOK2(4),*,IOSTAT=IOS) RCORD(NCORD,9)
+                     IF (IOS /= 0) CALL R8FLD ( FREE_TOK2(4), 4, RCORD(NCORD,9) )
+                  ELSE
+                     FATAL_ERR = FATAL_ERR + 1
+                     WRITE(ERR,1136) CORD_NAME, CORD_CID
+                     WRITE(F06,1136) CORD_NAME, CORD_CID
+                  ENDIF
+               ELSE
+                  CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
+                  CALL R8FLD ( JCARD(2), JF(2), RCORD(NCORD,7) )
+                  CALL R8FLD ( JCARD(3), JF(3), RCORD(NCORD,8) )
+                  CALL R8FLD ( JCARD(4), JF(4), RCORD(NCORD,9) )
+               ENDIF
+            ELSE
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1136) CORD_NAME, CORD_CID
+               WRITE(F06,1136) CORD_NAME, CORD_CID
+            ENDIF
+         ENDIF
+
+         RETURN
+      ENDIF
+! cbeam_add - add cord2 - end
 ! Make JCARD from CARD
 
       CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
@@ -275,27 +384,58 @@
 
          CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,9 )
          CALL CRDERR ( CARD )
+! cbeam_add - add free field - begin
+         CALL PARSE_FREE_FIELD_CARD ( CARD, NTOK, FREE_TOK )
 
-         IF (LARGE_FLD_INP == 'N') THEN
-            CALL NEXTC  ( CARD, ICONT, IERR )              ! Read 2nd card
+         IF (NTOK >= 12) THEN
+            READ(FREE_TOK(10),*,IOSTAT=IOS) RCORD(NCORD,7)
+            IF (IOS /= 0) CALL R8FLD ( FREE_TOK(10), 10, RCORD(NCORD,7) )
+            READ(FREE_TOK(11),*,IOSTAT=IOS) RCORD(NCORD,8)
+            IF (IOS /= 0) CALL R8FLD ( FREE_TOK(11), 10, RCORD(NCORD,8) )
+            READ(FREE_TOK(12),*,IOSTAT=IOS) RCORD(NCORD,9)
+            IF (IOS /= 0) CALL R8FLD ( FREE_TOK(12), 10, RCORD(NCORD,9) )
          ELSE
-            CALL NEXTC2 ( CARD, ICONT, IERR, CHILD )
-            CARD = CHILD
-         ENDIF
-         CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
-         IF (ICONT == 1) THEN
-            CALL R8FLD ( JCARD(2), JF(2), RCORD(NCORD,7) )
-            CALL R8FLD ( JCARD(3), JF(3), RCORD(NCORD,8) )
-            CALL R8FLD ( JCARD(4), JF(4), RCORD(NCORD,9) )
+! cbeam_add - add free field - end
+            IF (LARGE_FLD_INP == 'N') THEN
+               CALL NEXTC  ( CARD, ICONT, IERR )           ! Read 2nd card
+            ELSE
+               CALL NEXTC2 ( CARD, ICONT, IERR, CHILD )
+               CARD = CHILD
+            ENDIF
+            IF (ICONT == 1) THEN
+! cbeam_add - mkjcard if - begin
+               IF ((INDEX(CARD,',') > 0) .OR. (INDEX(CARD,ACHAR(9)) > 0)) THEN
+                  CALL PARSE_FREE_FIELD_CARD ( CARD, NTOK, FREE_TOK2 )
+                  IF (NTOK >= 4) THEN
+                     READ(FREE_TOK2(2),*,IOSTAT=IOS) RCORD(NCORD,7)
+                     IF (IOS /= 0) CALL R8FLD ( FREE_TOK2(2), 2, RCORD(NCORD,7) )
+                     READ(FREE_TOK2(3),*,IOSTAT=IOS) RCORD(NCORD,8)
+                     IF (IOS /= 0) CALL R8FLD ( FREE_TOK2(3), 3, RCORD(NCORD,8) )
+                     READ(FREE_TOK2(4),*,IOSTAT=IOS) RCORD(NCORD,9)
+                     IF (IOS /= 0) CALL R8FLD ( FREE_TOK2(4), 4, RCORD(NCORD,9) )
+                  ELSE
+                     FATAL_ERR = FATAL_ERR + 1
+                     WRITE(ERR,1136) CORD_NAME, CORD_CID
+                     WRITE(F06,1136) CORD_NAME, CORD_CID
+                  ENDIF
+               ELSE
+                  CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
+! cbeam_add - mkjcard if - end
+                  CALL R8FLD ( JCARD(2), JF(2), RCORD(NCORD,7) )
+                  CALL R8FLD ( JCARD(3), JF(3), RCORD(NCORD,8) )
+                  CALL R8FLD ( JCARD(4), JF(4), RCORD(NCORD,9) )
 
-            CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,0,0,0,0,0 )
-            CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,5,6,7,8,9 )
-            CALL CRDERR ( CARD )
+                  CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,0,0,0,0,0 )
+                  CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,5,6,7,8,9 )
+                  CALL CRDERR ( CARD )
+               ENDIF
 
-         ELSE
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1136) CORD_NAME, CORD_CID
-            WRITE(F06,1136) CORD_NAME, CORD_CID
+
+            ELSE
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1136) CORD_NAME, CORD_CID
+               WRITE(F06,1136) CORD_NAME, CORD_CID
+            ENDIF
          ENDIF
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
@@ -314,7 +454,51 @@
  1169 FORMAT(' *ERROR  1169: FIELD ',I3,' ON ',A,' ID ',A,' CANNOT BE NEGATIVE. VALUE IS = ',A)
 
  1170 FORMAT(' *ERROR  1170: FIELD ',I3,' ON ',A,' ID ',A,' CANNOT BE 0 (CANNOT DEFINE BASIC SYSTEM). VALUE IS = ',A)
+! cbeam_add - parser free fied - begin
+      CONTAINS
 
+      SUBROUTINE PARSE_FREE_FIELD_CARD ( CARD_IN, NUM_TOKENS, TOKENS )
+
+      CHARACTER(LEN=*), INTENT(IN)    :: CARD_IN
+      INTEGER(LONG), INTENT(OUT)      :: NUM_TOKENS
+      CHARACTER(LEN=*), INTENT(OUT)   :: TOKENS(12)
+
+      INTEGER(LONG)                   :: I
+      INTEGER(LONG)                   :: LENC
+      INTEGER(LONG)                   :: START
+      INTEGER(LONG)                   :: STOP
+
+      NUM_TOKENS = 0
+      DO I=1,12
+         TOKENS(I) = ' '
+      ENDDO
+
+      LENC = LEN_TRIM(CARD_IN)
+      IF (LENC <= 0) THEN
+         RETURN
+      ENDIF
+
+      START = 1
+      DO
+         IF (NUM_TOKENS >= 12) THEN
+            EXIT
+         ENDIF
+         STOP = INDEX(CARD_IN(START:), ',')
+         NUM_TOKENS = NUM_TOKENS + 1
+         IF (STOP == 0) THEN
+            TOKENS(NUM_TOKENS) = ADJUSTL(CARD_IN(START:LENC))
+            EXIT
+         ELSE
+            TOKENS(NUM_TOKENS) = ADJUSTL(CARD_IN(START:START+STOP-2))
+            START = START + STOP
+            IF (START > LENC) THEN
+               EXIT
+            ENDIF
+         ENDIF
+      ENDDO
+
+      END SUBROUTINE PARSE_FREE_FIELD_CARD
+! cbeam_add - parser free field - end
 ! **********************************************************************************************************************************
 
       END SUBROUTINE BD_CORD

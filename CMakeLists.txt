@@ -59,25 +59,117 @@ else()
 endif()
 
 # submodules (i.e. SuperLU)
+
+# -----------------------------------------------------------------------
+# User-facing options declared EARLY so they are available when the git
+# submodule auto-init block runs (which needs to know which submodules
+# are actually required before downloading them).
+# -----------------------------------------------------------------------
+
+# SuperLU variant
+option(USE_SUPERLU_MT
+  "Use multi-threaded SuperLU_MT instead of regular SuperLU" OFF)
+
+# External prebuilt SuperLU
+option(MYSTRAN_USE_EXTERNAL_SUPERLU
+  "Link a prebuilt regular SuperLU archive instead of building the bundled submodule"
+  OFF)
+
+# METIS partitioner (affects which submodules are needed)
+option(TPL_ENABLE_METISLIB "Enable METIS partitioner for SuperLU" ON)
+
+# BLAS+LAPACK provider
+set(MYSTRAN_BLAS_LAPACK "AUTO"
+  CACHE STRING "BLAS+LAPACK provider: AUTO, SYSTEM, or EMBEDDED")
+set_property(CACHE MYSTRAN_BLAS_LAPACK PROPERTY STRINGS AUTO SYSTEM EMBEDDED)
+
 find_package(Git QUIET)
 
+# -----------------------------------------------------------------------
+# Selective submodule initialisation
+#
+# The old unconditional `git submodule update --init --recursive` pulled
+# every submodule (GKlib, METIS, lapack, superlu, superlu_mt) even when
+# the user only needs one of them.  The new logic initialises only the
+# submodules that are actually required by the current option set:
+#
+#   GIT_SUBMODULE=OFF            – skip all auto-init (user manages manually)
+#   MYSTRAN_USE_EXTERNAL_SUPERLU – skip superlu / superlu_mt
+#   MYSTRAN_BLAS_LAPACK=SYSTEM   – skip lapack
+#   TPL_ENABLE_METISLIB=OFF      – skip GKlib / METIS
+#   USE_SUPERLU_MT=OFF           – skip superlu_mt
+#
+# Individual submodules are still validated below with EXISTS checks so a
+# missing submodule produces a clear FATAL_ERROR rather than a silent
+# build failure.
+# -----------------------------------------------------------------------
 if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
-  option(GIT_SUBMODULE "Check submodules during build" ON)
+  option(GIT_SUBMODULE "Auto-init only the required git submodules during configure" ON)
 
   if(GIT_SUBMODULE)
-    message(STATUS "Updating submodules")
-    execute_process(
-      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive --force
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      RESULT_VARIABLE GIT_SUBMOD_RESULT
-    )
+    # Build the list of submodule paths that are actually needed.
+    set(_REQUIRED_SUBMODULES "")
 
-    if(NOT GIT_SUBMOD_RESULT EQUAL "0")
-      message(
-        FATAL_ERROR
-        "git submodule update --init --recursive --force failed"
-      )
+    # SuperLU (regular) – skip when using a prebuilt archive or MT variant
+    if(NOT MYSTRAN_USE_EXTERNAL_SUPERLU AND NOT USE_SUPERLU_MT)
+      list(APPEND _REQUIRED_SUBMODULES "submodules/superlu")
     endif()
+
+    # SuperLU_MT – only when explicitly requested
+    if(USE_SUPERLU_MT)
+      list(APPEND _REQUIRED_SUBMODULES "submodules/superlu_mt")
+    endif()
+
+    # GKlib + METIS
+    if(TPL_ENABLE_METISLIB)
+      list(APPEND _REQUIRED_SUBMODULES "submodules/GKlib")
+      list(APPEND _REQUIRED_SUBMODULES "submodules/metis")
+    endif()
+
+    # Reference-LAPACK – skip when system BLAS+LAPACK is available/forced
+    if(NOT MYSTRAN_BLAS_LAPACK STREQUAL "SYSTEM")
+      # We also skip it in AUTO mode when system libs were already found,
+      # but at this point AUTO hasn't been resolved yet.  We conservatively
+      # include the submodule so it's available as fallback; add_subdirectory
+      # is guarded by _MYSTRAN_BLAS_LAPACK_MODE later.
+      if(NOT MYSTRAN_BLAS_LAPACK STREQUAL "SYSTEM")
+        list(APPEND _REQUIRED_SUBMODULES "submodules/lapack")
+      endif()
+    endif()
+
+    if(_REQUIRED_SUBMODULES)
+      list(JOIN _REQUIRED_SUBMODULES " " _SUBMOD_LIST_STR)
+      message(STATUS "Initialising required submodules: ${_SUBMOD_LIST_STR}")
+
+      foreach(_submod IN LISTS _REQUIRED_SUBMODULES)
+        # Skip submodules that are already populated (CMakeLists.txt present).
+        # This avoids unnecessary network traffic on re-configure.
+        set(_submod_abs "${PROJECT_SOURCE_DIR}/${_submod}")
+        file(GLOB _submod_contents "${_submod_abs}/*")
+
+        if(NOT _submod_contents)
+          message(STATUS "  git submodule update --init ${_submod}")
+          execute_process(
+            COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive --force -- "${_submod}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE GIT_SUBMOD_RESULT
+          )
+
+          if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+            message(FATAL_ERROR
+              "git submodule update --init failed for '${_submod}'. "
+              "Check your network connection or initialise it manually:\n"
+              "  git submodule update --init --recursive -- ${_submod}")
+          endif()
+        else()
+          message(STATUS "  Submodule already populated: ${_submod}")
+        endif()
+      endforeach()
+    else()
+      message(STATUS "No submodules required for the current configuration.")
+    endif()
+  else()
+    message(STATUS "GIT_SUBMODULE=OFF: skipping automatic submodule initialisation.")
   endif()
 endif()
 
@@ -87,15 +179,24 @@ set(SUPERLU_DIR "${SUBMODULES_DIR}/superlu")
 set(SUPERLU_PATCHES_DIR "${SUBMODULES_DIR}/superlu_patches")
 set(SUPERLU_MT_DIR "${SUBMODULES_DIR}/superlu_mt")
 set(SUPERLU_MT_PATCHES_DIR "${SUBMODULES_DIR}/superlu_mt_patches")
+
+
 set(METIS_DIR "${SUBMODULES_DIR}/metis")
 set(GKLIB_DIR "${SUBMODULES_DIR}/GKlib")
 set(METIS_PATCHES_DIR "${SUBMODULES_DIR}/metis_patches")
 set(GKLIB_PATCHES_DIR "${SUBMODULES_DIR}/gklib_patches")
 set(MYSTRAN_LAPACK_DIR "${SUBMODULES_DIR}/lapack")
 
+# TPL_ENABLE_METISLIB was declared as option() early in this file.
+# The block below is kept only for backward compat with old build dirs
+# that have the variable in cache without the option() declaration.
 if(NOT DEFINED TPL_ENABLE_METISLIB)
   set(TPL_ENABLE_METISLIB ON CACHE BOOL "Enable METIS for SuperLU")
 endif()
+
+
+
+
 
 if(TPL_ENABLE_METISLIB)
   if(NOT EXISTS "${GKLIB_DIR}/CMakeLists.txt")
@@ -224,9 +325,7 @@ if(DEFINED MYSTRAN_BLAS AND NOT _MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED)
   set(_MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED TRUE CACHE INTERNAL "")
 endif()
 
-set(MYSTRAN_BLAS_LAPACK "AUTO"
-  CACHE STRING "BLAS+LAPACK provider: AUTO, SYSTEM, or EMBEDDED")
-set_property(CACHE MYSTRAN_BLAS_LAPACK PROPERTY STRINGS AUTO SYSTEM EMBEDDED)
+# MYSTRAN_BLAS_LAPACK set() -- declared early in this file
 
 if(NOT MYSTRAN_BLAS_LAPACK MATCHES "^(AUTO|SYSTEM|EMBEDDED)$")
   message(FATAL_ERROR
@@ -237,15 +336,157 @@ endif()
 set(_MYSTRAN_HAVE_SYSTEM_BLAS_LAPACK FALSE)
 
 if(NOT MYSTRAN_BLAS_LAPACK STREQUAL "EMBEDDED")
+  # -----------------------------------------------------------------------
+  # Step 1: Normalise TPL_BLAS_LIBRARIES / TPL_LAPACK_LIBRARIES.
+  #
+  # Users often pass a relative path like "../Binaries/lib/libopenblas.dll.a"
+  # from the build directory.  CMake's EXISTS() only works with absolute paths,
+  # so we resolve the path here relative to CMAKE_BINARY_DIR (the build dir
+  # where cmake was invoked, i.e. the `build/` subdirectory).
+  # -----------------------------------------------------------------------
   if(TPL_BLAS_LIBRARIES)
-    set(BLAS_FOUND TRUE)
-    set(BLAS_LIBRARIES "${TPL_BLAS_LIBRARIES}")
-  else()
-    find_package(BLAS QUIET)
+    get_filename_component(_TPL_BLAS_ABS "${TPL_BLAS_LIBRARIES}" ABSOLUTE
+      BASE_DIR "${CMAKE_BINARY_DIR}")
+    if(NOT "${_TPL_BLAS_ABS}" STREQUAL "${TPL_BLAS_LIBRARIES}")
+      message(STATUS
+        "TPL_BLAS_LIBRARIES: resolved relative path
+"
+        "  input : ${TPL_BLAS_LIBRARIES}
+"
+        "  absolute: ${_TPL_BLAS_ABS}")
+    endif()
+    set(TPL_BLAS_LIBRARIES "${_TPL_BLAS_ABS}" CACHE FILEPATH
+      "BLAS library (absolute path resolved from user input)" FORCE)
   endif()
 
-  if(BLAS_FOUND)
-    find_package(LAPACK QUIET)
+  if(TPL_LAPACK_LIBRARIES)
+    get_filename_component(_TPL_LAPACK_ABS "${TPL_LAPACK_LIBRARIES}" ABSOLUTE
+      BASE_DIR "${CMAKE_BINARY_DIR}")
+    set(TPL_LAPACK_LIBRARIES "${_TPL_LAPACK_ABS}" CACHE FILEPATH
+      "LAPACK library (absolute path resolved from user input)" FORCE)
+  endif()
+
+  # -----------------------------------------------------------------------
+  # Step 2: Windows / MinGW OpenBLAS auto-detection.
+  #
+  # find_package(BLAS) on MinGW often returns a path baked into the
+  # cross-compiler toolchain (e.g. /home/gfortran/.../libopenblas.dll.a)
+  # which does not exist on this machine.  We search well-known local paths
+  # first and set TPL_BLAS_LIBRARIES so find_package is bypassed entirely.
+  # This block runs only when TPL_BLAS_LIBRARIES is still unset/invalid.
+  # -----------------------------------------------------------------------
+  if(WIN32)
+    # Validate whatever is currently in TPL_BLAS_LIBRARIES (may have been
+    # set by the user or resolved above).  If the file does not exist, clear
+    # it so the auto-detect candidates below can kick in.
+    if(TPL_BLAS_LIBRARIES AND NOT EXISTS "${TPL_BLAS_LIBRARIES}")
+      message(WARNING
+        "TPL_BLAS_LIBRARIES points to a file that does not exist:
+"
+        "  ${TPL_BLAS_LIBRARIES}
+"
+        "Clearing it and attempting auto-detection.")
+      unset(TPL_BLAS_LIBRARIES CACHE)
+      unset(TPL_BLAS_LIBRARIES)
+    endif()
+  endif()
+
+  if(WIN32 AND NOT TPL_BLAS_LIBRARIES)
+    # Candidate paths searched in order of preference.
+    # PROJECT_SOURCE_DIR/../Binaries/lib covers the layout where Binaries/
+    # sits next to the source tree root (common MYSTRAN checkout structure).
+    set(_WIN_OPENBLAS_CANDIDATES
+      "${PROJECT_BINARY_DIR}/lib/libopenblas.dll.a"
+      "${PROJECT_BINARY_DIR}/lib/libopenblas.a"
+      "${PROJECT_SOURCE_DIR}/Binaries/lib/libopenblas.dll.a"
+      "${PROJECT_SOURCE_DIR}/Binaries/lib/libopenblas.a"
+      "C:/gcc/openblas32/lib/libopenblas.dll.a"
+      "C:/msys64/mingw64/lib/libopenblas.dll.a"
+      "C:/msys64/mingw64/lib/libopenblas.a"
+      "C:/msys64/ucrt64/lib/libopenblas.dll.a"
+      "C:/msys64/ucrt64/lib/libopenblas.a"
+      "/mingw64/lib/libopenblas.dll.a"
+      "/mingw64/lib/libopenblas.a"
+    )
+
+    foreach(_cand IN LISTS _WIN_OPENBLAS_CANDIDATES)
+      if(EXISTS "${_cand}")
+        message(STATUS "Windows OpenBLAS auto-detected: ${_cand}")
+        set(TPL_BLAS_LIBRARIES "${_cand}" CACHE FILEPATH
+          "OpenBLAS import library (auto-detected on Windows)" FORCE)
+        set(TPL_LAPACK_LIBRARIES "${_cand}" CACHE FILEPATH
+          "OpenBLAS also provides LAPACK (auto-detected on Windows)" FORCE)
+        break()
+      endif()
+    endforeach()
+
+    if(NOT TPL_BLAS_LIBRARIES)
+      message(STATUS
+        "Windows OpenBLAS auto-detection: not found in well-known paths.
+"
+        "Searched:
+"
+        "  ${PROJECT_BINARY_DIR}/lib/
+"
+        "  ${PROJECT_SOURCE_DIR}/Binaries/lib/
+"
+        "  C:/msys64/mingw64/lib/  C:/msys64/ucrt64/lib/  /mingw64/lib/
+"
+        "Set -DTPL_BLAS_LIBRARIES=<absolute/path/to/libopenblas.dll.a> or "
+        "use -DMYSTRAN_BLAS_LAPACK=EMBEDDED.")
+    endif()
+  endif()
+
+  if(TPL_BLAS_LIBRARIES)
+    # TPL_BLAS_LIBRARIES was either supplied directly or auto-detected.
+    # On Windows, import libraries (.dll.a) are valid linker inputs even
+    # though they are not standalone executables -- do NOT use EXISTS() to
+    # validate them here; the path was already checked/resolved above.
+    set(BLAS_FOUND TRUE)
+    set(BLAS_LIBRARIES "${TPL_BLAS_LIBRARIES}")
+    message(STATUS "BLAS: using TPL_BLAS_LIBRARIES = ${TPL_BLAS_LIBRARIES}")
+
+    # LAPACK: OpenBLAS ships a full LAPACK implementation inside the same
+    # archive / import library, so we can reuse it for LAPACK as well.
+    if(TPL_LAPACK_LIBRARIES)
+      set(LAPACK_FOUND TRUE)
+      set(LAPACK_LIBRARIES "${TPL_LAPACK_LIBRARIES}")
+      message(STATUS "LAPACK: using TPL_LAPACK_LIBRARIES = ${TPL_LAPACK_LIBRARIES}")
+    else()
+      # Same library provides LAPACK (true for OpenBLAS, MKL, ATLAS, BLIS).
+      set(LAPACK_FOUND TRUE)
+      set(LAPACK_LIBRARIES "${TPL_BLAS_LIBRARIES}")
+      message(STATUS "LAPACK: reusing BLAS library (OpenBLAS provides LAPACK)")
+    endif()
+  else()
+    # No TPL path given -- let CMake discover BLAS/LAPACK via its modules.
+    find_package(BLAS QUIET)
+
+    if(BLAS_FOUND)
+      # On Windows, cross-compiler toolchains sometimes embed a sysroot path
+      # (e.g. /home/gfortran/...) that only exists on the build server.
+      # Detect this by checking whether every absolute path actually exists.
+      if(WIN32)
+        foreach(_blib IN LISTS BLAS_LIBRARIES)
+          if(NOT _blib MATCHES "^-" AND NOT EXISTS "${_blib}")
+            message(WARNING
+              "find_package(BLAS) returned a stale cross-compiler path:
+"
+              "  ${_blib}
+"
+              "Discarding. Set -DTPL_BLAS_LIBRARIES=/absolute/path/to/libopenblas.dll.a")
+            set(BLAS_FOUND FALSE)
+            unset(BLAS_LIBRARIES CACHE)
+            unset(BLAS_LIBRARIES)
+            break()
+          endif()
+        endforeach()
+      endif()
+    endif()
+
+    if(BLAS_FOUND)
+      find_package(LAPACK QUIET)
+    endif()
   endif()
 
   if(BLAS_FOUND AND LAPACK_FOUND)
@@ -343,6 +584,210 @@ else()
     "MYSTRAN BLAS+LAPACK mode: EMBEDDED (Reference-LAPACK submodule)")
 endif()
 
+# -----------------------------------------------------------------------
+# Already-built SuperLU option
+#
+# When MYSTRAN_USE_EXTERNAL_SUPERLU=ON the build system skips the SuperLU
+# submodule entirely and links a caller-supplied prebuilt archive.
+#
+# Two archive layouts are accepted (auto-detected in order):
+#   1. libdgssv.a          – bare SuperLU C archive exposing dgssv_()
+#   2. libsuperlu_fortran.a – combined archive that already includes the
+#                             Fortran driver wrapper (c_fortran_dgssv.o)
+#
+# CMake variables (all have sensible defaults; override on the command line):
+#   MYSTRAN_EXTERNAL_SUPERLU_LIB        – path to the main SuperLU archive
+#   MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR– directory containing slu_ddefs.h
+#   MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR – directory containing superlu_config.h
+#   MYSTRAN_EXTERNAL_SUPERLU_DRIVER     – secondary archive that bundles the
+#                                         Fortran wrapper; may equal the main
+#                                         archive or be left empty when the
+#                                         wrapper is compiled inline (layout 1)
+# -----------------------------------------------------------------------
+# option(MYSTRAN_USE_EXTERNAL_SUPERLU) -- declared early in this file
+
+set(MYSTRAN_EXTERNAL_SUPERLU_LIB
+  "${PROJECT_BINARY_DIR}/lib/libsuperlu.a"
+  CACHE FILEPATH "Prebuilt regular SuperLU archive to link when MYSTRAN_USE_EXTERNAL_SUPERLU=ON")
+
+if(EXISTS "C:/gcc/libsuperlu/libsuperlu.a")
+  set(MYSTRAN_EXTERNAL_SUPERLU_LIB
+    "C:/gcc/libsuperlu/libsuperlu.a"
+    CACHE FILEPATH "Prebuilt regular SuperLU archive to link when MYSTRAN_USE_EXTERNAL_SUPERLU=ON" FORCE)
+endif()
+
+set(MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR
+  "${SUPERLU_DIR}/SRC"
+  CACHE PATH "Directory containing SuperLU headers such as slu_ddefs.h")
+
+# superlu_config.h is a CMake-generated file (not in the SuperLU source tree).
+# Default: look in Binaries/include where a prior `cmake` + `make` of SuperLU
+# would have placed it.  If it is not found there, CMakeLists.txt will
+# auto-generate a minimal version so the build does not fail.
+set(MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR
+  "${PROJECT_BINARY_DIR}/include"
+  CACHE PATH
+  "Directory containing superlu_config.h for the prebuilt SuperLU. This is a generated file, NOT in the source tree. Default = Binaries/include. Set to wherever your prior SuperLU build placed it, or leave at default to let MYSTRAN auto-generate a minimal one.")
+
+set(MYSTRAN_EXTERNAL_SUPERLU_DRIVER
+  "${PROJECT_BINARY_DIR}/lib/libsuperlu_fortran.a"
+  CACHE FILEPATH
+  "Secondary archive with Fortran wrapper c_fortran_dgssv. Leave empty or equal to _LIB for single-archive layout.")
+
+# ---- Validate and resolve the external SuperLU layout ----
+if(MYSTRAN_USE_EXTERNAL_SUPERLU AND NOT USE_SUPERLU_MT)
+
+  # --- Validate main archive ---
+  if(NOT EXISTS "${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+    message(FATAL_ERROR
+      "MYSTRAN_USE_EXTERNAL_SUPERLU=ON but the main SuperLU archive was not "
+      "found at:\n  ${MYSTRAN_EXTERNAL_SUPERLU_LIB}\n"
+      "Set MYSTRAN_EXTERNAL_SUPERLU_LIB to the correct path.")
+  endif()
+
+  # --- Determine archive layout ---
+  # Layout A: libsuperlu_fortran.a  (wrapper already inside the driver archive)
+  # Layout B: libdgssv.a            (bare C archive; wrapper compiled inline)
+  get_filename_component(_EXT_SLU_MAIN_NAME "${MYSTRAN_EXTERNAL_SUPERLU_LIB}" NAME)
+
+  # Check whether the driver archive exists and differs from the main one.
+  if(EXISTS "${MYSTRAN_EXTERNAL_SUPERLU_DRIVER}" AND
+     NOT "${MYSTRAN_EXTERNAL_SUPERLU_DRIVER}" STREQUAL "${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+    set(_EXT_SLU_LAYOUT "FORTRAN_ARCHIVE")
+    message(STATUS
+      "External SuperLU layout: libsuperlu_fortran.a\n"
+      "  main archive : ${MYSTRAN_EXTERNAL_SUPERLU_LIB}\n"
+      "  driver archive: ${MYSTRAN_EXTERNAL_SUPERLU_DRIVER}")
+  else()
+    # Fall back: detect by filename keyword
+    string(TOLOWER "${_EXT_SLU_MAIN_NAME}" _EXT_SLU_MAIN_NAME_LC)
+    if(_EXT_SLU_MAIN_NAME_LC MATCHES "dgssv|superlu_fortran")
+      set(_EXT_SLU_LAYOUT "FORTRAN_ARCHIVE")
+      set(MYSTRAN_EXTERNAL_SUPERLU_DRIVER "${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+      message(STATUS
+        "External SuperLU layout: libsuperlu_fortran.a (single archive)\n"
+        "  archive: ${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+    else()
+      set(_EXT_SLU_LAYOUT "DGSSV")
+      message(STATUS
+        "External SuperLU layout: libdgssv.a (bare C archive; wrapper compiled inline)\n"
+        "  archive: ${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+    endif()
+  endif()
+
+  # --- Validate include directories ---
+  if(NOT EXISTS "${MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR}/slu_ddefs.h")
+    message(WARNING
+      "MYSTRAN_USE_EXTERNAL_SUPERLU=ON but slu_ddefs.h was not found under:\n"
+      "  ${MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR}\n"
+      "Set MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR to the directory that contains "
+      "slu_ddefs.h, or the build may fail at compile time.")
+  endif()
+
+  # --- superlu_config.h: locate or auto-generate ---
+  #
+  # superlu_config.h is produced by SuperLU's own CMake configure step
+  # (it is NOT a static file in the source tree).  When using a prebuilt
+  # SuperLU archive there are three possible situations:
+  #
+  #   A. The prior SuperLU build left superlu_config.h in Binaries/include
+  #      (or wherever MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR points).
+  #   B. The header was copied to the same directory as the other SuperLU
+  #      headers (MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR / SRC).
+  #   C. It is nowhere to be found — auto-generate a minimal version that
+  #      works for the default double-precision / non-complex build.
+  #
+  set(_SLU_CONFIG_H "${MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR}/superlu_config.h")
+
+  # Probe location B as a fallback before giving up.
+  if(NOT EXISTS "${_SLU_CONFIG_H}")
+    set(_SLU_CONFIG_H_ALT "${MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR}/superlu_config.h")
+    if(EXISTS "${_SLU_CONFIG_H_ALT}")
+      message(STATUS
+        "superlu_config.h found in INCLUDE_DIR (not CONFIG_DIR): ${_SLU_CONFIG_H_ALT}")
+      set(_SLU_CONFIG_H "${_SLU_CONFIG_H_ALT}")
+      # Update CONFIG_DIR so the include_directories() call below picks it up.
+      set(MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR
+        "${MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR}" CACHE PATH "" FORCE)
+    endif()
+  endif()
+
+  if(NOT EXISTS "${_SLU_CONFIG_H}")
+    # Auto-generate a minimal superlu_config.h (situation C).
+    # The content mirrors what SuperLU's CMake produces for a standard
+    # double-precision build without complex arithmetic or long int indices.
+    message(STATUS
+      "superlu_config.h not found -- auto-generating a minimal version in:
+"
+      "  ${MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR}")
+    file(MAKE_DIRECTORY "${MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR}")
+    file(WRITE "${_SLU_CONFIG_H}"
+"/* superlu_config.h -- auto-generated by MYSTRAN CMakeLists.txt */
+/* Matches a standard SuperLU build: double precision, 32-bit int indices. */
+#ifndef __SUPERLU_CONFIG
+#define __SUPERLU_CONFIG
+
+/* Uncomment to use 64-bit integer indices: */
+/* #define XSDK_INDEX_SIZE 64 */
+
+/* BLAS integer width -- must match the BLAS library linked (usually 32-bit). */
+#define BLAS_MATGEN
+
+/* Complex arithmetic -- not used by MYSTRAN (DGSSV is double real only). */
+/* #define SLU_HAVE_LAPACK */
+
+#endif /* __SUPERLU_CONFIG */
+")
+    message(STATUS "Auto-generated superlu_config.h written.")
+  else()
+    message(STATUS "superlu_config.h found: ${_SLU_CONFIG_H}")
+  endif()
+
+  # --- Wire include paths ---
+  include_directories(
+    "${MYSTRAN_EXTERNAL_SUPERLU_INCLUDE_DIR}"
+    "${MYSTRAN_EXTERNAL_SUPERLU_CONFIG_DIR}"
+  )
+
+  # --- Import the main SuperLU archive as an IMPORTED target ---
+  add_library(superlu_external STATIC IMPORTED GLOBAL)
+  set_target_properties(superlu_external PROPERTIES
+    IMPORTED_LOCATION "${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+
+  # --- Determine SLU_DRIVER for this layout ---
+  if(_EXT_SLU_LAYOUT STREQUAL "FORTRAN_ARCHIVE")
+    # The Fortran wrapper is already inside the driver archive; no extra
+    # source file is needed.  We represent the driver as an IMPORTED target
+    # and leave SLU_DRIVER empty so add_executable() does not try to compile it.
+    if(NOT "${MYSTRAN_EXTERNAL_SUPERLU_DRIVER}" STREQUAL "${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+      add_library(superlu_fortran_driver STATIC IMPORTED GLOBAL)
+      set_target_properties(superlu_fortran_driver PROPERTIES
+        IMPORTED_LOCATION "${MYSTRAN_EXTERNAL_SUPERLU_DRIVER}")
+      set(_EXT_SLU_DRIVER_TARGET superlu_fortran_driver)
+    else()
+      # Single-archive case: driver == main
+      set(_EXT_SLU_DRIVER_TARGET superlu_external)
+    endif()
+    set(SLU_DRIVER "")   # no inline source to compile
+  else()
+    # DGSSV layout: compile the Fortran wrapper from the submodule source.
+    # The wrapper file lives at submodules/superlu/FORTRAN/c_fortran_dgssv.c.
+    if(EXISTS "${SUPERLU_DIR}/FORTRAN/c_fortran_dgssv.c")
+      set(SLU_DRIVER "${SUPERLU_DIR}/FORTRAN/c_fortran_dgssv.c")
+    else()
+      message(FATAL_ERROR
+        "External SuperLU layout is libdgssv.a but the Fortran wrapper source\n"
+        "  ${SUPERLU_DIR}/FORTRAN/c_fortran_dgssv.c\n"
+        "was not found.  Either initialise the superlu submodule or switch to "
+        "the libsuperlu_fortran.a layout by setting MYSTRAN_EXTERNAL_SUPERLU_DRIVER.")
+    endif()
+    set(_EXT_SLU_DRIVER_TARGET "")   # no extra archive; driver compiled inline
+  endif()
+
+  message(STATUS "Will link against external (prebuilt) SuperLU: ${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+
+endif() # MYSTRAN_USE_EXTERNAL_SUPERLU && !USE_SUPERLU_MT
+
 if(USE_SUPERLU_MT)
   message(STATUS "Will link against faster SuperLU_MT.")
   set(PLAT "_OPENMP" CACHE STRING "threading flavor _PTHREAD/_OPENMP" FORCE)
@@ -407,6 +852,11 @@ if(USE_SUPERLU_MT)
   endif()
 
   set(SLU_DRIVER "${SUPERLU_MT_DIR}/SRC/c_fortran_pdgssv.c")
+elseif(MYSTRAN_USE_EXTERNAL_SUPERLU)
+  # SLU_DRIVER was already set (or cleared) in the MYSTRAN_USE_EXTERNAL_SUPERLU
+  # validation block above.  Nothing else to do here; the IMPORTED targets
+  # (superlu_external, superlu_fortran_driver) were created there as well.
+  message(STATUS "Skipping SuperLU submodule build (using prebuilt archive).")
 else()
   message(STATUS "Will link against regular SuperLU.")
 
@@ -468,6 +918,14 @@ if(USE_SUPERLU_MT)
   if(TPL_ENABLE_METISLIB)
     target_compile_definitions(mystran PRIVATE HAVE_METIS)
   endif()
+elseif(MYSTRAN_USE_EXTERNAL_SUPERLU)
+  # Link the prebuilt archive(s).
+  # Order matters: driver wrapper first (if separate), then the core archive.
+  if(_EXT_SLU_DRIVER_TARGET AND
+     NOT "${_EXT_SLU_DRIVER_TARGET}" STREQUAL "superlu_external")
+    target_link_libraries(mystran "${_EXT_SLU_DRIVER_TARGET}")
+  endif()
+  target_link_libraries(mystran superlu_external)
 else()
   target_link_libraries(mystran superlu)
 endif()
@@ -519,6 +977,16 @@ if(USE_SUPERLU_MT)
     endif()
   elseif(PLAT STREQUAL "_PTHREAD")
     list(APPEND _MYSTRAN_STATIC_NAMES libsuperlu_mt_PTHREAD.a)
+  endif()
+elseif(MYSTRAN_USE_EXTERNAL_SUPERLU)
+  list(APPEND _MYSTRAN_STATIC_DEFS _STATIC_SUPERLU)
+  # Record the actual filename(s) of the prebuilt archive(s).
+  get_filename_component(_ext_slu_main_fname "${MYSTRAN_EXTERNAL_SUPERLU_LIB}" NAME)
+  list(APPEND _MYSTRAN_STATIC_NAMES "${_ext_slu_main_fname} (external/prebuilt)")
+  if(_EXT_SLU_LAYOUT STREQUAL "FORTRAN_ARCHIVE" AND
+     NOT "${MYSTRAN_EXTERNAL_SUPERLU_DRIVER}" STREQUAL "${MYSTRAN_EXTERNAL_SUPERLU_LIB}")
+    get_filename_component(_ext_slu_drv_fname "${MYSTRAN_EXTERNAL_SUPERLU_DRIVER}" NAME)
+    list(APPEND _MYSTRAN_STATIC_NAMES "${_ext_slu_drv_fname} (external Fortran driver)")
   endif()
 else()
   list(APPEND _MYSTRAN_STATIC_DEFS _STATIC_SUPERLU)
@@ -653,19 +1121,114 @@ list(APPEND _MYSTRAN_STATIC_DEFS _STATIC_ARPACK)
 #
 # Add new entries here whenever a new statically-linked library is added.
 # -----------------------------------------------------------------------
-set(_MYSTRAN_LICENSE_MAP
-  "SUPERLU:submodules/superlu/License.txt:SuperLU:sparse solver"
-  "SUPERLU_MT:submodules/superlu_mt/License.txt:SuperLU_MT:multi-threaded sparse solver"
-  "METIS:submodules/metis/LICENSE:METIS:graph partitioner for SuperLU"
-  "GKLIB:submodules/GKlib/LICENSE.txt:GKlib:utility library for METIS"
+# -----------------------------------------------------------------------
+# License map: only include entries for libraries that are actually linked.
+# This avoids spurious warnings when submodules are not downloaded because
+# they are not needed (e.g. SUPERLU_MT / METIS when building with external
+# prebuilt SuperLU and no METIS).
+#
+# For each entry: "TAG:path/to/license:Human Name:Description"
+# path is relative to PROJECT_SOURCE_DIR.
+# -----------------------------------------------------------------------
+set(_MYSTRAN_LICENSE_MAP "")
+
+# --- SuperLU (regular) ---
+if(USE_SUPERLU_MT)
+  # SuperLU_MT replaces regular SuperLU
+elseif(MYSTRAN_USE_EXTERNAL_SUPERLU)
+  # Prebuilt external SuperLU: the submodule may not be present.
+  # Try to use the license from the submodule if it was checked out;
+  # otherwise download it from the canonical GitHub URL at configure time.
+  set(_SUPERLU_LICENSE_FILE "${SUPERLU_DIR}/License.txt")
+  set(_SUPERLU_LICENSE_CACHE "${PROJECT_SOURCE_DIR}/extra_licenses/superlu_external.txt")
+
+  if(NOT EXISTS "${_SUPERLU_LICENSE_FILE}" AND NOT EXISTS "${_SUPERLU_LICENSE_CACHE}")
+    if(GIT_FOUND)
+      message(STATUS "Fetching SuperLU license from GitHub...")
+      file(MAKE_DIRECTORY "${PROJECT_SOURCE_DIR}/extra_licenses")
+      file(DOWNLOAD
+        "https://raw.githubusercontent.com/xiaoyeli/superlu/master/License.txt"
+        "${_SUPERLU_LICENSE_CACHE}"
+        TIMEOUT 15
+        STATUS _DL_STATUS
+        LOG    _DL_LOG
+      )
+      list(GET _DL_STATUS 0 _DL_CODE)
+      if(NOT _DL_CODE EQUAL 0)
+        message(WARNING
+          "Could not download SuperLU license (${_DL_STATUS}).
+"
+          "The binary will be built without an embedded SuperLU license.
+"
+          "You can add it manually: ${_SUPERLU_LICENSE_CACHE}")
+      else()
+        message(STATUS "SuperLU license downloaded to ${_SUPERLU_LICENSE_CACHE}")
+      endif()
+    else()
+      message(WARNING
+        "Git not found and SuperLU license file is missing.
+"
+        "Place the SuperLU License.txt at:
+  ${_SUPERLU_LICENSE_CACHE}")
+    endif()
+  endif()
+
+  # Prefer submodule license; fall back to downloaded/cached copy.
+  if(EXISTS "${_SUPERLU_LICENSE_FILE}")
+    list(APPEND _MYSTRAN_LICENSE_MAP
+      "SUPERLU:submodules/superlu/License.txt:SuperLU:sparse solver (prebuilt)")
+  elseif(EXISTS "${_SUPERLU_LICENSE_CACHE}")
+    list(APPEND _MYSTRAN_LICENSE_MAP
+      "SUPERLU:extra_licenses/superlu_external.txt:SuperLU:sparse solver (prebuilt)")
+  endif()
+else()
+  # Built from submodule — license is always present after git init
+  list(APPEND _MYSTRAN_LICENSE_MAP
+    "SUPERLU:submodules/superlu/License.txt:SuperLU:sparse solver")
+endif()
+
+# --- SuperLU_MT (only when USE_SUPERLU_MT=ON) ---
+if(USE_SUPERLU_MT)
+  list(APPEND _MYSTRAN_LICENSE_MAP
+    "SUPERLU_MT:submodules/superlu_mt/License.txt:SuperLU_MT:multi-threaded sparse solver")
+endif()
+
+# --- METIS + GKlib (only when TPL_ENABLE_METISLIB=ON) ---
+if(TPL_ENABLE_METISLIB)
+  list(APPEND _MYSTRAN_LICENSE_MAP
+    "METIS:submodules/metis/LICENSE:METIS:graph partitioner for SuperLU"
+    "GKLIB:submodules/GKlib/LICENSE.txt:GKlib:utility library for METIS")
+endif()
+
+# --- Always-present licenses ---
+list(APPEND _MYSTRAN_LICENSE_MAP
   "ARPACK:extra_licenses/arpack.txt:ARPACK:Lanczos eigensolver implementation"
-  "GOMP:extra_licenses/gpl-3.0-with-gcc-exception.txt:libgomp:GNU OpenMP runtime"
   "GFORTRAN:extra_licenses/gpl-3.0-with-gcc-exception.txt:libgfortran:GNU Fortran runtime"
   "GCC:extra_licenses/gpl-3.0-with-gcc-exception.txt:libgcc:GNU C runtime"
-  "WINPTHREAD:extra_licenses/libwinpthread.txt:libwinpthread:Windows POSIX threads, used by SuperLU_MT"
-  "PTHREAD:extra_licenses/lgpl-2.1.txt:libpthread:POSIX threads, used by SuperLU_MT"
-  "REGEX:extra_licenses/lgpl-2.1.txt:libregex:POSIX regexes, used by GKlib"
 )
+
+# --- OpenMP runtime (only when SuperLU_MT with OpenMP) ---
+if(USE_SUPERLU_MT AND PLAT STREQUAL "_OPENMP")
+  list(APPEND _MYSTRAN_LICENSE_MAP
+    "GOMP:extra_licenses/gpl-3.0-with-gcc-exception.txt:libgomp:GNU OpenMP runtime")
+endif()
+
+# --- Threading libraries ---
+if(USE_SUPERLU_MT)
+  if(WIN32)
+    list(APPEND _MYSTRAN_LICENSE_MAP
+      "WINPTHREAD:extra_licenses/libwinpthread.txt:libwinpthread:Windows POSIX threads, used by SuperLU_MT")
+  else()
+    list(APPEND _MYSTRAN_LICENSE_MAP
+      "PTHREAD:extra_licenses/lgpl-2.1.txt:libpthread:POSIX threads, used by SuperLU_MT")
+  endif()
+endif()
+
+# --- POSIX regex (only on Linux with GKlib/METIS) ---
+if(TPL_ENABLE_METISLIB AND NOT WIN32)
+  list(APPEND _MYSTRAN_LICENSE_MAP
+    "REGEX:extra_licenses/lgpl-2.1.txt:libregex:POSIX regexes, used by GKlib")
+endif()
 
 # BLAS/LAPACK license entry depends on which provider was selected.
 # EMBEDDED -> Reference-LAPACK submodule ships its own LICENSE.

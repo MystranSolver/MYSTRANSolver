@@ -35,7 +35,9 @@
       USE TIMDAT, ONLY                :  TSEC
       USE LINK9_STUFF, ONLY           :  GID_OUT_ARRAY, EID_OUT_ARRAY, FTNAME, MAXREQ, MSPRNT, OGEL, POLY_FIT_ERR,                 &
                                          POLY_FIT_ERR_INDEX
-
+! --- cbeam_add begin --- !
+      USE LINK9_STUFF, ONLY           :  CBEAM_XL_OUT
+! --- cbeam_add end --- !
       USE ALLOCATE_LINK9_STUF_USE_IFs
 
       IMPLICIT NONE
@@ -70,7 +72,31 @@
       MB_ALLOCATED = ZERO
       NROWS = MAXREQ
       JERR = 0
-
+! --- cbeam_add begin --- !
+! Allocate array for CBEAM_XL_OUT
+      NAME = 'CBEAM_XL_OUT'
+      NCOLS = 1
+      IF (ALLOCATED(CBEAM_XL_OUT)) THEN
+         WRITE(ERR,990) SUBR_NAME, NAME
+         WRITE(F06,990) SUBR_NAME, NAME
+         FATAL_ERR = FATAL_ERR + 1
+         JERR = JERR + 1
+      ELSE
+         ALLOCATE (CBEAM_XL_OUT(MAXREQ),STAT=IERR)
+         MB_ALLOCATED = RDOUBLE*REAL(MAXREQ)/ONEPP6
+         IF (IERR == 0) THEN
+            CALL ALLOCATED_MEMORY ( NAME, MB_ALLOCATED, 'ALLOC', 'Y', CUR_MB_ALLOCATED, SUBR_NAME )
+            DO I=1,MAXREQ
+               CBEAM_XL_OUT(I) = ZERO
+            ENDDO
+         ELSE
+            WRITE(ERR,991) MB_ALLOCATED,NAME,SUBR_NAME,IERR
+            WRITE(F06,991) MB_ALLOCATED,NAME,SUBR_NAME,IERR
+            FATAL_ERR = FATAL_ERR + 1
+            JERR = JERR + 1
+         ENDIF
+      ENDIF
+! --- cbeam_add end --- !
 ! Allocate array for GID_OUT_ARRAY
 
       NAME = 'GID_OUT_ARRAY'

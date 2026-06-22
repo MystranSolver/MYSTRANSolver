@@ -32,7 +32,7 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE CONSTANTS_1, ONLY           :  ONEPM4, ZERO, TEN, ONE
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, CC_ENTRY_LEN, JCARD_LEN, MELDTS, MEMATR, MEMATC, MEPROP, METYPE,            &
-                                         MPSOLID, MEFE, MEFEI, MEFER, MEWE, MEWEI, MEWER, MAX_STRESS_POINTS
+                                         MPSOLID, MEFE, MEFEI, MEFER, MEWE, MEWEI, MEWER, MAX_STRESS_POINTS, MPBEAM_STATIONS
 
       IMPLICIT NONE
 
@@ -601,6 +601,9 @@
       INTEGER(LONG), ALLOCATABLE      :: MATL   (:,:)         ! See description below
       INTEGER(LONG), ALLOCATABLE      :: PBAR   (:,:)         ! See description below
       INTEGER(LONG), ALLOCATABLE      :: PBEAM  (:,:)         ! See description below
+! --- CBEAM_standard begin --- !
+      INTEGER(LONG), ALLOCATABLE      :: PBEAM_NSTATIONS(:)   ! Number of stored station x/L values for each PBEAM property
+! --- CBEAM_standard end --- !
       INTEGER(LONG), ALLOCATABLE      :: PBUSH  (:,:)         ! See description below
       INTEGER(LONG), ALLOCATABLE      :: PCOMP  (:,:)         ! See description below
       INTEGER(LONG), ALLOCATABLE      :: PELAS  (:,:)         ! See description below
@@ -614,6 +617,10 @@
       REAL(DOUBLE) , ALLOCATABLE      :: RMATL  (:,:)         ! See description below
       REAL(DOUBLE) , ALLOCATABLE      :: RPBAR  (:,:)         ! See description below
       REAL(DOUBLE) , ALLOCATABLE      :: RPBEAM (:,:)         ! See description below
+! --- CBEAM_standard begin --- !
+      REAL(DOUBLE) , ALLOCATABLE      :: PBEAM_XL(:,:)        ! Stored station x/L values for each PBEAM property
+      REAL(DOUBLE) , ALLOCATABLE      :: PBEAM_RPROPS(:,:,:)  ! Stored [A,I1,I2,I12,J,NSM] for each PBEAM station
+! --- CBEAM_standard end --- !
       REAL(DOUBLE) , ALLOCATABLE      :: RPBUSH (:,:)         ! See description below
       REAL(DOUBLE) , ALLOCATABLE      :: RPCOMP (:,:)         ! See description below
       REAL(DOUBLE) , ALLOCATABLE      :: RPELAS (:,:)         ! See description below
@@ -648,6 +655,9 @@
 !  PBEAM  = Array of integer data from PBEAM Bulk Data entries. Each row is for one PBEAM entry read in B.D. and contains:
 !             ( 1) Col  1: Property ID
 !             ( 2) Col  2: Material ID
+!
+!  PBEAM_NSTATIONS = Number of station x/L values stored for each PBEAM property. For NX-oriented beam work this includes:
+!                    station 1 = 0.0 at end A, followed by each continuation station found on the PBEAM entry.
 
 !  RPBEAM = Array of real data from PBEAM Bulk Data entries. Each row is for one PBEAM entry read in B.D. and contains:
 !             ( 1) Col  1: Cross sectional area, A       : end A          , (parent        entry, field 4)
@@ -694,6 +704,17 @@
 !             (42) Col 42: z coord of neutral axis for end A, N2(A)       , (optional  6th entry, field 7)
 !             (43) Col 43: y coord of neutral axis for end B, N1(B)       , (optional  6th entry, field 8)
 !             (44) Col 44: z coord of neutral axis for end B, N2(B)       , (optional  6th entry, field 9)
+!
+!  PBEAM_XL = Stored x/L station values for each PBEAM property. Phase-1 beam redevelopment stores the continuation chain explicitly
+!             so that CBEAM output can later be made station-aware independently of legacy CBAR end-only output.
+!
+!  PBEAM_RPROPS = Stored real section properties for each PBEAM station. The 3rd index stores:
+!             (1) A
+!             (2) I1
+!             (3) I2
+!             (4) I12
+!             (5) J
+!             (6) NSM
 
 !  PBUSH  = Array of integer data from PBUSH Bulk Data entries
 !             ( 1) Col  1: PID          Prop ID
@@ -1105,6 +1126,22 @@
 ! BEAM element specific data
 ! --------------------------
 
+! --- cbeam_stations begin --- !
+      INTEGER(LONG)                   :: CBEAM_ACTIVE_NSTATIONS = 0
+                                                             ! Number of active x/L stations copied into the current BEAM runtime state
+
+      REAL(DOUBLE)                    :: CBEAM_ACTIVE_XL(MPBEAM_STATIONS) = (/ (ZERO, I=1,MPBEAM_STATIONS) /)
+                                                             ! Active x/L station positions for the current BEAM runtime state
+      REAL(DOUBLE)                    :: CBEAM_ACTIVE_RPROPS(MPBEAM_STATIONS,6) = ZERO
+                                                             ! Active [A,I1,I2,I12,J,NSM] station properties for the current BEAM runtime state
+      REAL(DOUBLE)                    :: CBEAM_ACTIVE_AREA_SCALE = ONE
+                                                             ! Active stiffness-only area scale for the current BEAM runtime state
+      REAL(DOUBLE)                    :: CBEAM_FORCE_B1(3,6) = ZERO
+                                                             ! Beam section-force-to-stress map at the reference side
+      REAL(DOUBLE)                    :: CBEAM_FORCE_B2(3,6) = ZERO
+                                                             ! Beam section-force-to-stress map used in station interpolation
+! --- cbeam_stations end --- !
+
       CHARACTER( 9*BYTE)              :: BEAMOR_VVEC_TYPE    = '         '
                                                              ! Indicator of type of V vec on BEAMOR B.D. entry (grid or vector)
 
@@ -1257,7 +1294,9 @@
 
                                                              ! Array of number of stress recovery points for various elem types
       INTEGER(LONG)                   :: NUM_SEi(METYPE)     =  (/ 1,             & ! BAR      1
-                                                                   1,             & ! BEAM     2
+! --- cbeam_stations begin --- !
+                                                                  10,             & ! BEAM     2
+! --- cbeam_stations end --- !
                                                                    1,             & ! BUSH     3
                                                                    1,             & ! ELAS1    4
                                                                    1,             & ! ELAS2    5
@@ -1806,7 +1845,7 @@
                                                              ! For Lanczos, the shift frequency
 
       REAL(DOUBLE)                    :: MAXMIJ              = ZERO
-                                                             ! Largest off-diag term in generalized mass matrix.
+                                                             ! Largest off-diag term in generalized mass matrix.                                                            
 ! **********************************************************************************************************************************
 ! Per-subcase eigenvalue extraction parameters (Feature A: SOL 103 multi-METHOD).
 !
@@ -1876,6 +1915,46 @@
 ! Per-subcase eigen result tally (allocated alongside EIG_PARAMS by ALLOCATE_MODEL_STUF). The full per-subcase result
 ! buffers live as allocatable components inside EIG_PARAMS(ISUB).
       INTEGER(LONG)     , ALLOCATABLE :: NUM_EIGENS_SUB(:)   ! No. of eigenvalues extracted per modes-subcase
+                                                             
+! --- feast_add --- begin !
+      CHARACTER(LEN=JCARD_LEN)        :: EIG_EXTRACT_METHOD  = 'ARPACK'
+                                                             ! Extract backend selected for EIGRL/LANCZOS family.
+
+      CHARACTER(LEN=JCARD_LEN)        :: EIG_EXTRACT_MODE    = ' '
+                                                             ! Optional method-specific mode selector from EIGRL continuation.
+
+      CHARACTER(LEN=JCARD_LEN)        :: EIG_EXTRACT_SOURCE  = 'DEFAULT'
+                                                             ! DEFAULT/EIGRL/PARAM source for extract-method selection.
+
+      INTEGER(LONG)                   :: EIG_FEAST_M0        = 48
+                                                             ! FEAST search subspace size.
+
+      INTEGER(LONG)                   :: EIG_FEAST_TOL_DIGITS= 8
+                                                             ! FEAST convergence digits (fpm(3)).
+
+      INTEGER(LONG)                   :: EIG_FEAST_MAX_LOOP  = 60
+                                                             ! FEAST iteration limit (fpm(4)).
+
+      INTEGER(LONG)                   :: EIG_FEAST_N_CONTOUR = 8
+                                                             ! FEAST contour integration points (fpm(8)).
+
+      INTEGER(LONG)                   :: EIG_SUBSPACE_NSUB   = 24
+                                                             ! Dense inverse-subspace working subspace dimension.
+
+      INTEGER(LONG)                   :: EIG_SUBSPACE_MAX_ITER = 40
+                                                             ! Dense inverse-subspace iteration limit.
+
+      INTEGER(LONG)                   :: EIG_DENSE_NEX       = 64
+                                                             ! Reserved dense oversampling/workspace knob for parity with other methods.
+                                                             
+      REAL(DOUBLE)                    :: EIG_FEAST_SEARCH_SCALE = 1.10D0
+                                                             ! FEAST range expansion factor when upper frequency is requested.
+
+      REAL(DOUBLE)                    :: EIG_SUBSPACE_TOL    = 1.0D-06
+                                                             ! Dense inverse-subspace convergence tolerance.
+                                                             
+! --- feast_add --- end !
+
 ! **********************************************************************************************************************************
 ! Rigid element ID's
 

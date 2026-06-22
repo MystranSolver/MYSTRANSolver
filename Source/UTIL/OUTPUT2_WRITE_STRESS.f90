@@ -44,11 +44,13 @@
       IF      ((ETYPE == 'BAR     ') .OR. (ETYPE == 'BEAM    ')) THEN
         TABLE_NAME_NEW= TABLE_NAME_BAR !"OES1X   "
         RETURN_FLAG = .FALSE.
-      ELSE IF ((ETYPE == 'ELAS1   ') .OR. (ETYPE == 'ELAS2   ') .OR. (ETYPE == 'ELAS3   ') .OR. (ETYPE == 'ELAS4   ') .OR.         &
-               (ETYPE == 'BUSH    ') .OR. (ETYPE == 'ROD     ') .OR.                                                               &
-               (ETYPE == 'TRIA3   ') .OR. (ETYPE == 'QUAD4   ') .OR. (ETYPE == 'SHEAR   ') .OR.                                    &
-               (ETYPE == 'HEXA8   ') .OR. (ETYPE == 'PENTA6  ') .OR. (ETYPE == 'TETRA4  ') .OR.                                    &
-               (ETYPE == 'HEXA20  ') .OR. (ETYPE == 'PENTA15 ') .OR. (ETYPE == 'TETRA10 ')) THEN
+
+       ELSE IF ((ETYPE == 'ELAS1   ') .OR. (ETYPE == 'ELAS2   ') .OR. (ETYPE == 'ELAS3   ') .OR. (ETYPE == 'ELAS4   ') .OR.        &
+                (ETYPE == 'BUSH    ') .OR. (ETYPE == 'ROD     ') .OR.                                                              &
+                (ETYPE == 'TRIA3   ') .OR. (ETYPE == 'QUAD4   ') .OR. (ETYPE == 'SHEAR   ') .OR.                                   &
+                (ETYPE == 'HEXA8   ') .OR. (ETYPE == 'PENTA6  ') .OR. (ETYPE == 'TETRA4  ') .OR.                                   &
+                (ETYPE == 'HEXA20  ') .OR. (ETYPE == 'PENTA15 ') .OR. (ETYPE == 'TETRA10 ')) THEN
+
         TABLE_NAME_NEW= TABLE_NAME_SHELL_SOLID !"OES1X1  "
         WRITE(ERR,3) "OES1X1 found",ETYPE
         RETURN_FLAG = .FALSE.
@@ -84,7 +86,7 @@
 
         ! if we started/restarted, we need to write the TABLE_NAME
         IF (ITABLE == -1) THEN
-          WRITE(ERR,2) "creating stress table",TABLE_NAME,ITABLE
+          WRITE(ERR,2) "creating stress table",TABLE_NAME,ITABLE	
           CALL WRITE_TABLE_HEADER(TABLE_NAME)
           ITABLE = -3
         ENDIF
@@ -163,6 +165,31 @@
       END SUBROUTINE WRITE_OES3_STATIC
 
 ! ##################################################################################################################################
+      SUBROUTINE WRITE_OES3_STATIC_AC(ITABLE, ISUBCASE, DEVICE_CODE, ANALYSIS_CODE, ELEM_TYPE, NUM_WIDE, STRESS_CODE, &
+                                      TITLE, LABEL, SUBTITLE, FIELD5_INT_MODE, FIELD6_EIGENVALUE)
+!     Removed in DEV..
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      IMPLICIT NONE
+      INTEGER(LONG), INTENT(INOUT) :: ITABLE
+      INTEGER(LONG), INTENT(IN) :: ISUBCASE
+      INTEGER(LONG), INTENT(IN) :: DEVICE_CODE
+      INTEGER(LONG), INTENT(IN) :: ANALYSIS_CODE
+      INTEGER(LONG), INTENT(IN) :: ELEM_TYPE
+      INTEGER(LONG), INTENT(IN) :: NUM_WIDE
+      INTEGER(LONG), INTENT(IN) :: STRESS_CODE
+      CHARACTER(LEN=128), INTENT(IN) :: TITLE
+      CHARACTER(LEN=128), INTENT(IN) :: SUBTITLE
+      CHARACTER(LEN=128), INTENT(IN) :: LABEL
+      INTEGER(LONG), INTENT(IN)      :: FIELD5_INT_MODE
+      REAL(DOUBLE), INTENT(IN)       :: FIELD6_EIGENVALUE
+      INTEGER(LONG)                  :: FORMAT_CODE
+
+      FORMAT_CODE = 1
+      CALL WRITE_OES3(ITABLE, ANALYSIS_CODE, ISUBCASE, DEVICE_CODE, FORMAT_CODE, ELEM_TYPE, NUM_WIDE, STRESS_CODE, &
+                      TITLE, LABEL, SUBTITLE, FIELD5_INT_MODE, FIELD6_EIGENVALUE)
+      END SUBROUTINE WRITE_OES3_STATIC_AC
+
+! ##################################################################################################################################
       SUBROUTINE WRITE_OES3(ITABLE, ANALYSIS_CODE, ISUBCASE, DEVICE_CODE, FORMAT_CODE, ELEM_TYPE, NUM_WIDE, STRESS_CODE, &
                             TITLE, LABEL, SUBTITLE, FIELD5_INT_MODE, FIELD6_EIGENVALUE)
 !      Parameters
@@ -202,7 +229,7 @@
 
       CALL WRITE_ITABLE(ITABLE)  ! write the -3, -5, ... subtable header
  1    FORMAT("WRITE_OES3: ITABLE_START=",I8)
-      WRITE(ERR,1) ITABLE
+      WRITE(ERR,1) ITABLE	
 
       IF ((ANALYSIS_CODE == 1) .OR. (ANALYSIS_CODE == 10)) THEN
         ! statics

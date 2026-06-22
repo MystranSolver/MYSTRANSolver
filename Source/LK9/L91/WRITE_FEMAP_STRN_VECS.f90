@@ -1,3 +1,4 @@
+!--- cbeam add --- begin!
 ! ##################################################################################################################################
 ! Begin MIT license text.
 ! _______________________________________________________________________________________________________
@@ -58,7 +59,7 @@
       INTEGER(LONG)                   :: ELEM_NAME_LEN          ! Length of ELEM_TYP without trailing blanks
 
                                                                 ! Col from FEMAP_EL_NUMS (elem ID's)
-      INTEGER(LONG)                   :: ELEM_NUMS(NUM_FEMAP_ROWS)
+      INTEGER(LONG), ALLOCATABLE      :: ELEM_NUMS(:)
 
       INTEGER(LONG)                   :: I,J                    ! DO loop indices
       INTEGER(LONG)                   :: ID(20)                 ! Vector ID's for FEMAP output
@@ -66,7 +67,7 @@
       INTEGER(LONG)                   :: VEC_ID                 ! Vector ID for FEMAP output
 
 
-      REAL(DOUBLE)                    :: ELEM_VEC(NUM_FEMAP_ROWS)    ! One column from FEMAP_EL_VECS
+      REAL(DOUBLE), ALLOCATABLE       :: ELEM_VEC(:)                 ! One column from FEMAP_EL_VECS
       REAL(DOUBLE)                    :: VEC_ABS                ! Abs value in vector
       REAL(DOUBLE)                    :: VEC_MAX                ! Max value in vector
       REAL(DOUBLE)                    :: VEC_MIN                ! Min value in vector
@@ -83,6 +84,9 @@
             EXIT
          ENDIF
       ENDDO
+
+      ALLOCATE ( ELEM_NUMS(NUM_FEMAP_ROWS) )
+      ALLOCATE ( ELEM_VEC(NUM_FEMAP_ROWS) )
 
       IF      (ELEM_TYP == 'TRIA3K  ') THEN
          VEC_ID_OFFSET = 70400
@@ -106,6 +110,10 @@
          VEC_ID_OFFSET = 71300
       ELSE IF (ELEM_TYP == 'SHEAR   ') THEN
          VEC_ID_OFFSET = 71400
+!---  cbeam add begin --- !
+      ELSE IF (ELEM_TYP == 'BEAM    ') THEN
+         VEC_ID_OFFSET = 71500
+!---  cbeam add end --- !
       ELSE
          WARN_ERR = WARN_ERR + 1
          WRITE(ERR,943) TRIM(ELEM_TYP), 'STRAIN', TRIM(SUBR_NAME)
@@ -115,8 +123,46 @@
       ENDIF
 
 ! Process elements
+!---  cbeam add begin --- !
+      IF (ELEM_TYP == 'BEAM    ') THEN
 
-      IF ((ELEM_TYP(1:5) == 'TRIA3') .OR. (ELEM_TYP(1:5) == 'QUAD4')) THEN
+         TITLE_E( 1) = 'EndA Pt1 Comb Strain';   CALC_WARN( 1) = '0';   COMP_DIR( 1) = '3';   CENT_TOTAL( 1) = '1'
+         TITLE_E( 2) = 'EndB Pt1 Comb Strain';   CALC_WARN( 2) = '0';   COMP_DIR( 2) = '3';   CENT_TOTAL( 2) = '1'
+         TITLE_E( 3) = 'EndA Pt2 Comb Strain';   CALC_WARN( 3) = '0';   COMP_DIR( 3) = '3';   CENT_TOTAL( 3) = '1'
+         TITLE_E( 4) = 'EndB Pt2 Comb Strain';   CALC_WARN( 4) = '0';   COMP_DIR( 4) = '3';   CENT_TOTAL( 4) = '1'
+         TITLE_E( 5) = 'EndA Pt3 Comb Strain';   CALC_WARN( 5) = '0';   COMP_DIR( 5) = '3';   CENT_TOTAL( 5) = '1'
+         TITLE_E( 6) = 'EndB Pt3 Comb Strain';   CALC_WARN( 6) = '0';   COMP_DIR( 6) = '3';   CENT_TOTAL( 6) = '1'
+         TITLE_E( 7) = 'EndA Pt4 Comb Strain';   CALC_WARN( 7) = '0';   COMP_DIR( 7) = '3';   CENT_TOTAL( 7) = '1'
+         TITLE_E( 8) = 'EndB Pt4 Comb Strain';   CALC_WARN( 8) = '0';   COMP_DIR( 8) = '3';   CENT_TOTAL( 8) = '1'
+         TITLE_E( 9) = 'EndA Max Strain'     ;   CALC_WARN( 9) = '1';   COMP_DIR( 9) = '3';   CENT_TOTAL( 9) = '1'
+         TITLE_E(10) = 'EndB Max Strain'     ;   CALC_WARN(10) = '1';   COMP_DIR(10) = '3';   CENT_TOTAL(10) = '1'
+         TITLE_E(11) = 'EndA Min Strain'     ;   CALC_WARN(11) = '1';   COMP_DIR(11) = '3';   CENT_TOTAL(11) = '1'
+         TITLE_E(12) = 'EndB Min Strain'     ;   CALC_WARN(12) = '1';   COMP_DIR(12) = '3';   CENT_TOTAL(12) = '1'
+
+         DO J=1,12
+            VEC_ID = VEC_ID_OFFSET + J
+            WRITE(NEU,1001) FEMAP_SET_ID, VEC_ID
+            WRITE(NEU,1002) ELEM_NAME(1:ELEM_NAME_LEN), TITLE_E(J)
+            DO I=1,NUM_FEMAP_ROWS
+               ELEM_VEC(I)  = FEMAP_EL_VECS(I,J)
+               ELEM_NUMS(I) = FEMAP_EL_NUMS(I,1)
+            ENDDO
+            CALL GET_VEC_MIN_MAX_ABS ( NUM_FEMAP_ROWS, ELEM_NUMS, ELEM_VEC, VEC_MIN, VEC_MAX, VEC_ABS, ELEM_MIN, ELEM_MAX )
+            WRITE(NEU,1003) VEC_MIN, VEC_MAX, VEC_ABS
+            DO I=1,20
+               ID(I) = 0
+            ENDDO
+            WRITE(NEU,1004) (ID(I),I= 1,10)
+            WRITE(NEU,1004) (ID(I),I=11,20)
+            WRITE(NEU,1005) ELEM_MIN, ELEM_MAX, OUT_TYPE, ENT_TYPE
+            WRITE(NEU,1006) CALC_WARN(J), COMP_DIR(J), CENT_TOTAL(J)
+            DO I=1,NUM_FEMAP_ROWS
+               WRITE(NEU,1007) FEMAP_EL_NUMS(I,1), ELEM_VEC(I)
+            ENDDO
+            WRITE(NEU,1008)
+         ENDDO
+!---  cbeam add end --- !	
+      ELSE IF ((ELEM_TYP(1:5) == 'TRIA3') .OR. (ELEM_TYP(1:5) == 'QUAD4')) THEN
 
          IF (IS_PCOMP == 'N') THEN
 
@@ -271,6 +317,13 @@
 
 
 
+      IF (ALLOCATED(ELEM_NUMS)) THEN
+         DEALLOCATE ( ELEM_NUMS )
+      ENDIF
+      IF (ALLOCATED(ELEM_VEC)) THEN
+         DEALLOCATE ( ELEM_VEC )
+      ENDIF
+
       RETURN
 
 ! **********************************************************************************************************************************
@@ -295,3 +348,5 @@
 ! **********************************************************************************************************************************
 
       END SUBROUTINE WRITE_FEMAP_STRN_VECS
+
+

@@ -40,12 +40,30 @@
       INTEGER(LONG), INTENT(IN)       :: IGRID             ! An internal grid number
       INTEGER(LONG), INTENT(OUT)      :: NUM_COMPS         ! 6 if GRID_NUM is an physical grid, 1 if an SPOINT
 
+      INTEGER(LONG)                   :: I
+      INTEGER(LONG)                   :: NGRID
+
+      NGRID = SIZE(GRID,1)
+
 ! **********************************************************************************************************************************
 
-      NUM_COMPS = GRID(IGRID, 6)
+      ! Most callers pass an internal grid row number, but some report/output paths
+      ! can hand us the external grid ID. Accept either form to avoid a bounds crash.
+      IF ((IGRID >= 1) .AND. (IGRID <= NGRID)) THEN
+         NUM_COMPS = GRID(IGRID, 6)
+      ELSE
+         NUM_COMPS = 6
+         DO I = 1, NGRID
+            IF (GRID(I,1) == IGRID) THEN
+               NUM_COMPS = GRID(I, 6)
+               EXIT
+            ENDIF
+         ENDDO
+      ENDIF
 
       RETURN
 
 ! **********************************************************************************************************************************
 
       END SUBROUTINE GET_GRID_NUM_COMPS
+

@@ -30,7 +30,7 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR,     F06,     L1G
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, DATA_NAM_LEN, MMATL, MPBAR, MPBEAM, MPBUSH, MPELAS, MPROD, MPSHEL,          &
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, DATA_NAM_LEN, MMATL, MPBAR, MPBEAM, MPBEAM_STATIONS, MPBUSH, MPELAS, MPROD, MPSHEL,          &
                                          MPSOLID, MPUSER1,MPUSERIN, MRMATLC, MRPBAR, MRPBEAM, MRPBUSH, MRPELAS, MRPROD, MPSHEAR,   &
                                          MRPSHEAR, MRPSHEL, MRPUSER1, NBAROFF, NBUSHOFF, NEDAT, NELE, NMATANGLE, NMATL, MPCOMP0,   &
                                          MRPCOMP0, MPCOMP_PLIES, MRPCOMP_PLIES, MUSERIN_MAT_NAMES, NPBAR, NPBEAM, NPBUSH, NPCOMP,  &
@@ -38,7 +38,7 @@
       USE PARAMS, ONLY                :  CBMIN3, CBMIN4, IORQ1M, IORQ1S, IORQ1B, IORQ2B, IORQ2T
       USE TIMDAT, ONLY                :  TSEC
       USE MODEL_STUF, ONLY            :  BAROFF, BUSHOFF, EDAT, EOFF, EPNT, ESORT1, ESORT2, ETYPE, MATANGLE, MATL, RMATL,PBAR,     &
-                                         RPBAR, PBEAM, RPBEAM, PBUSH, RPBUSH, PCOMP, RPCOMP, PELAS, RPELAS, PROD, RPROD, PSHEAR,   &
+                                         RPBAR, PBEAM, PBEAM_NSTATIONS, PBEAM_XL, PBEAM_RPROPS, RPBEAM, PBUSH, RPBUSH, PCOMP, RPCOMP, PELAS, RPELAS, PROD, RPROD, PSHEAR,   &
                                          RPSHEAR, PSHEL, RPSHEL, PSOLID, PUSER1, RPUSER1, PUSERIN, PLATEOFF, PLATETHICK,           &
                                          USERIN_MAT_NAMES, VVEC
       USE ELSAVE_USE_IFs
@@ -160,6 +160,18 @@
       DO I = 1,NPBEAM
          DO J=1,MPBEAM
             WRITE(L1G) PBEAM(I,J)
+         ENDDO
+         WRITE(L1G) PBEAM_NSTATIONS(I)
+         DO J=1,MPBEAM_STATIONS
+            WRITE(L1G) PBEAM_XL(I,J)
+         ENDDO
+         DO J=1,MPBEAM_STATIONS
+            WRITE(L1G) PBEAM_RPROPS(I,J,1)
+            WRITE(L1G) PBEAM_RPROPS(I,J,2)
+            WRITE(L1G) PBEAM_RPROPS(I,J,3)
+            WRITE(L1G) PBEAM_RPROPS(I,J,4)
+            WRITE(L1G) PBEAM_RPROPS(I,J,5)
+            WRITE(L1G) PBEAM_RPROPS(I,J,6)
          ENDDO
          DO J = 1,MRPBEAM
             WRITE(L1G) RPBEAM(I,J)

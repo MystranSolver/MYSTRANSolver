@@ -43,12 +43,13 @@
                                          NMATANGLE, NMATL, NPBAR, NPBEAM, NPBUSH, NPCOMP, NPCARD, NPDAT, NPELAS, NPROD, NPSHEAR,   &
                                          NPSHEL, NPSOLID, NPLATEOFF, NPLATETHICK, NPLOAD4_3D, NPUSER1, NPUSERIN, NSEQ, NSUB,       &
                                          NTCARD, NTDAT, NTSUB, NVVEC, SOL_NAME
+      USE SCONTR, ONLY                :  MPBEAM_STATIONS
 
       USE TIMDAT, ONLY                :  TSEC
       USE PARAMS, ONLY                :  CBMIN3, CBMIN4, IORQ1M, IORQ1S, IORQ1B, IORQ2B, IORQ2T
 
       USE MODEL_STUF, ONLY            :  BAROFF, BUSHOFF, EDAT, EOFF, EPNT, ESORT1, ESORT2, ETYPE, PLATEOFF, PLATETHICK, VVEC
-      USE MODEL_STUF, ONLY            :  MATANGLE, MATL, RMATL, PBAR, RPBAR, PBEAM, RPBEAM, PBUSH, RPBUSH, PCOMP, RPCOMP, PELAS,   &
+      USE MODEL_STUF, ONLY            :  MATANGLE, MATL, RMATL, PBAR, RPBAR, PBEAM, PBEAM_NSTATIONS, PBEAM_XL, PBEAM_RPROPS, RPBEAM, PBUSH, RPBUSH, PCOMP, RPCOMP, PELAS,   &
                                          RPELAS, PROD, RPROD, PSHEAR, RPSHEAR, PSHEL, PSOLID, RPSHEL, PUSER1, RPUSER1, PUSERIN,    &
                                          USERIN_MAT_NAMES
       USE MODEL_STUF, ONLY            :  ELDT, ELOUT, GROUT, OELDT, OELOUT, OGROUT, SCNUM, SUBLOD, TITLE, STITLE, LABEL
@@ -524,6 +525,26 @@
       DO I=1,NPBEAM
          DO J=1,MPBEAM
             READ(UNT,IOSTAT=IOCHK) PBEAM(I,J)                                   ; REC_NO = REC_NO + 1
+            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+         ENDDO
+         READ(UNT,IOSTAT=IOCHK) PBEAM_NSTATIONS(I)                              ; REC_NO = REC_NO + 1
+         CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+         DO J=1,MPBEAM_STATIONS
+            READ(UNT,IOSTAT=IOCHK) PBEAM_XL(I,J)                                ; REC_NO = REC_NO + 1
+            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+         ENDDO
+         DO J=1,MPBEAM_STATIONS
+            READ(UNT,IOSTAT=IOCHK) PBEAM_RPROPS(I,J,1)                          ; REC_NO = REC_NO + 1
+            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+            READ(UNT,IOSTAT=IOCHK) PBEAM_RPROPS(I,J,2)                          ; REC_NO = REC_NO + 1
+            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+            READ(UNT,IOSTAT=IOCHK) PBEAM_RPROPS(I,J,3)                          ; REC_NO = REC_NO + 1
+            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+            READ(UNT,IOSTAT=IOCHK) PBEAM_RPROPS(I,J,4)                          ; REC_NO = REC_NO + 1
+            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+            READ(UNT,IOSTAT=IOCHK) PBEAM_RPROPS(I,J,5)                          ; REC_NO = REC_NO + 1
+            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+            READ(UNT,IOSTAT=IOCHK) PBEAM_RPROPS(I,J,6)                          ; REC_NO = REC_NO + 1
             CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
          ENDDO
          DO J=1,MRPBEAM

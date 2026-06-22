@@ -41,6 +41,7 @@
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10), JCARD0(10) ! 10 fields of 8 characters of CARD
       CHARACTER(24*BYTE)              :: MESSAG            ! Message for output error purposes
       CHARACTER(1*BYTE)               :: NEWCHAR           ! first character of new line
+      CHARACTER(3*BYTE)               :: RAW_PARENT        ! 'YES' if parent card came in as raw free-field text
       CHARACTER(LEN(JCARD))           :: NEWTAG            ! Field 1  of cont   card
       CHARACTER(LEN(JCARD))           :: OLDTAG            ! Field 10 of parent card
       CHARACTER(LEN=LEN(CARD))        :: TCARD             ! Temporary version of CARD
@@ -62,6 +63,8 @@
       IERR = 0
       ICONTINUE = 0
       NEWCHAR = ' '
+      RAW_PARENT = 'NO '
+      IF ((INDEX(CARD,',') > 0) .OR. (INDEX(CARD,ACHAR(9)) > 0)) RAW_PARENT = 'YES'
 
       ! Make units for writing errors the error file and output file
       OUNT(1) = ERR
@@ -110,6 +113,8 @@
          BACKSPACE(IN1)
          return
 
+      ELSE IF ((RAW_PARENT == 'YES') .AND. (CARD_IN(1:1) == '+')) THEN
+         ICONTINUE = 1
       ELSE IF (NEWTAG == OLDTAG) THEN
          ICONTINUE = 1
       ELSE IF ((OLDTAG(1:1) == '+') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
@@ -124,8 +129,15 @@
          CARD = TCARD
          RETURN
       ELSE
-         ! can't find the continuation marker.  FATAL :)
          BACKSPACE(IN1)
+         IF (RAW_PARENT == 'YES') THEN
+            RETURN
+         ENDIF
+         IF (((JCARD0(1)(1:4) == 'CBAR') .OR. (JCARD0(1)(1:5) == 'CBEAM')) .AND.                                                    &
+             (INDEX('0123456789',OLDTAG(1:1)) > 0)) THEN
+            RETURN
+         ENDIF
+         ! can't find the continuation marker.  FATAL :)
          WRITE(F06,102) OLDTAG
          WRITE(ERR,102) OLDTAG
          WRITE(F06,103)
@@ -140,7 +152,11 @@
          CALL OUTA_HERE('Y')  ! FATAL error
          RETURN
       ENDIF
-      CARD = TCARD
+      IF (RAW_PARENT == 'YES') THEN
+         CARD = CARD_IN
+      ELSE
+         CARD = TCARD
+      ENDIF
       IF (ECHO(1:4) /= 'NONE') THEN
           WRITE(F06, 101) CARD_IN
       ENDIF

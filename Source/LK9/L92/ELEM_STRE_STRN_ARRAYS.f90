@@ -45,6 +45,9 @@
       USE CONSTANTS_1, ONLY           :  ZERO, one, four
       USE MODEL_STUF, ONLY            :  ALPVEC, BE1, BE2, BE3, DT, EM, EB, ES, ET, ELDOF, PEL, PHI_SQ, STRAIN, STRESS, SUBLOD,    &
                                          TREF, TYPE, UEL, UEB, SE1, SE2, SE3, STE1, STE2, STE3, ELGP, ISOLID
+! --- cbeam_add begin --- !
+      USE MODEL_STUF, ONLY            :  CBEAM_ACTIVE_XL, CBEAM_ACTIVE_NSTATIONS, CBEAM_FORCE_B1, CBEAM_FORCE_B2, EID, SHELL_T
+! --- cbeam_add end --- !
       USE DEBUG_PARAMETERS
       USE PARAMS, ONLY                :  STR_CID, QUAD4TYP
 
@@ -85,7 +88,9 @@
       REAL(DOUBLE)                    :: STRESS3_MECH(3)   ! Part of array STRESS3
       REAL(DOUBLE)                    :: TBAR              ! Average elem temperature
       REAL(DOUBLE)                    :: STR_TENSOR(3,3)   ! 2D stress or strain tensor
-
+! --- cbeam_add begin --- !
+      REAL(DOUBLE)                    :: XI_STA            ! Active beam station coordinate x/L
+! --- cbeam_add end --- !
 
 
 ! **********************************************************************************************************************************
@@ -98,9 +103,68 @@
 
 ! **********************************************************************************************************************************
 ! Calc stresses for 1D elements
+! --- cbeam_add begin --- !
+      IF (TYPE == 'BEAM    ') THEN
 
-      IF ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BUSH') .OR. (TYPE(1:4) == 'ELAS') .OR. (TYPE(1:3) == 'ROD') .OR.                &
-          (TYPE(1:5) == 'USER1')) THEN
+         DUM31(:) = ZERO
+         DUM32(:) = ZERO
+         DO I=1,3
+            DO J=1,6
+               DUM31(I) = DUM31(I) + CBEAM_FORCE_B1(I,J)*PEL(J)
+               DUM32(I) = DUM32(I) + CBEAM_FORCE_B2(I,J)*PEL(J)
+            ENDDO
+         ENDDO
+
+         XI_STA = ZERO
+         IF (CBEAM_ACTIVE_NSTATIONS > 1) XI_STA = CBEAM_ACTIVE_XL(STR_PT_NUM)
+
+         STRESS(1) = DUM31(1)
+         STRESS(2) = (ONE - XI_STA)*DUM31(2) + XI_STA*DUM32(1)
+         STRESS(3) = (ONE - XI_STA)*DUM31(3) + XI_STA*DUM32(2)
+         STRESS(4) = STRESS(2)
+         STRESS(5) = STRESS(3)
+         STRESS(6) = DUM32(3)
+
+         IF (DEBUG(233) > 0) THEN
+            WRITE(F06,9101) EID, STR_PT_NUM, XI_STA
+            WRITE(ERR,9101) EID, STR_PT_NUM, XI_STA
+            WRITE(F06,9102) PEL(1), PEL(2), PEL(3), PEL(4), PEL(5), PEL(6)
+            WRITE(ERR,9102) PEL(1), PEL(2), PEL(3), PEL(4), PEL(5), PEL(6)
+            WRITE(F06,9103) CBEAM_FORCE_B1(1,1), CBEAM_FORCE_B1(1,2), CBEAM_FORCE_B1(1,3), CBEAM_FORCE_B1(1,4),                &
+                            CBEAM_FORCE_B1(1,5), CBEAM_FORCE_B1(1,6)
+            WRITE(ERR,9103) CBEAM_FORCE_B1(1,1), CBEAM_FORCE_B1(1,2), CBEAM_FORCE_B1(1,3), CBEAM_FORCE_B1(1,4),                &
+                            CBEAM_FORCE_B1(1,5), CBEAM_FORCE_B1(1,6)
+            WRITE(F06,9103) CBEAM_FORCE_B1(2,1), CBEAM_FORCE_B1(2,2), CBEAM_FORCE_B1(2,3), CBEAM_FORCE_B1(2,4),                &
+                            CBEAM_FORCE_B1(2,5), CBEAM_FORCE_B1(2,6)
+            WRITE(ERR,9103) CBEAM_FORCE_B1(2,1), CBEAM_FORCE_B1(2,2), CBEAM_FORCE_B1(2,3), CBEAM_FORCE_B1(2,4),                &
+                            CBEAM_FORCE_B1(2,5), CBEAM_FORCE_B1(2,6)
+            WRITE(F06,9103) CBEAM_FORCE_B1(3,1), CBEAM_FORCE_B1(3,2), CBEAM_FORCE_B1(3,3), CBEAM_FORCE_B1(3,4),                &
+                            CBEAM_FORCE_B1(3,5), CBEAM_FORCE_B1(3,6)
+            WRITE(ERR,9103) CBEAM_FORCE_B1(3,1), CBEAM_FORCE_B1(3,2), CBEAM_FORCE_B1(3,3), CBEAM_FORCE_B1(3,4),                &
+                            CBEAM_FORCE_B1(3,5), CBEAM_FORCE_B1(3,6)
+            WRITE(F06,9104) CBEAM_FORCE_B2(1,1), CBEAM_FORCE_B2(1,2), CBEAM_FORCE_B2(1,3), CBEAM_FORCE_B2(1,4),                &
+                            CBEAM_FORCE_B2(1,5), CBEAM_FORCE_B2(1,6)
+            WRITE(ERR,9104) CBEAM_FORCE_B2(1,1), CBEAM_FORCE_B2(1,2), CBEAM_FORCE_B2(1,3), CBEAM_FORCE_B2(1,4),                &
+                            CBEAM_FORCE_B2(1,5), CBEAM_FORCE_B2(1,6)
+            WRITE(F06,9104) CBEAM_FORCE_B2(2,1), CBEAM_FORCE_B2(2,2), CBEAM_FORCE_B2(2,3), CBEAM_FORCE_B2(2,4),                &
+                            CBEAM_FORCE_B2(2,5), CBEAM_FORCE_B2(2,6)
+            WRITE(ERR,9104) CBEAM_FORCE_B2(2,1), CBEAM_FORCE_B2(2,2), CBEAM_FORCE_B2(2,3), CBEAM_FORCE_B2(2,4),                &
+                            CBEAM_FORCE_B2(2,5), CBEAM_FORCE_B2(2,6)
+            WRITE(F06,9104) CBEAM_FORCE_B2(3,1), CBEAM_FORCE_B2(3,2), CBEAM_FORCE_B2(3,3), CBEAM_FORCE_B2(3,4),                &
+                            CBEAM_FORCE_B2(3,5), CBEAM_FORCE_B2(3,6)
+            WRITE(ERR,9104) CBEAM_FORCE_B2(3,1), CBEAM_FORCE_B2(3,2), CBEAM_FORCE_B2(3,3), CBEAM_FORCE_B2(3,4),                &
+                            CBEAM_FORCE_B2(3,5), CBEAM_FORCE_B2(3,6)
+            WRITE(F06,9105) DUM31(1), DUM31(2), DUM31(3), DUM32(1), DUM32(2), DUM32(3)
+            WRITE(ERR,9105) DUM31(1), DUM31(2), DUM31(3), DUM32(1), DUM32(2), DUM32(3)
+            WRITE(F06,9106) STRESS(1), STRESS(2), STRESS(3), STRESS(4), STRESS(5), STRESS(6)
+            WRITE(ERR,9106) STRESS(1), STRESS(2), STRESS(3), STRESS(4), STRESS(5), STRESS(6)
+         ENDIF
+
+! --- cbeam_stations begin --- !
+      ELSE IF ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BUSH') .OR. (TYPE(1:4) == 'ELAS') .OR.                                     &
+          (TYPE(1:3) == 'ROD') .OR. (TYPE(1:5) == 'USER1')) THEN
+! --- cbeam_stations end --- !
+! --- cbeam_add end --- !
 
          DO I=1,3
             STRESS(I) = ZERO
@@ -114,7 +178,11 @@
             ENDIF
          ENDDO
 
+! --- cbeam_stations begin --- !
+         ! CBEAM recovers STRESS(1:6) in the dedicated branch above.
+         ! Do not overwrite STRESS(4:6) here with the generic SE2 path.
          IF ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BUSH')) THEN
+! --- cbeam_add end --- !
             K = 0
             DO I=4,6
                STRESS(I) = ZERO
@@ -155,6 +223,7 @@
 
 ! **********************************************************************************************************************************
 ! Calc strains, then stresses for 2D elements
+
 
       ELSE IF ((TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'QUAD4') .OR. (TYPE(1:5) == 'QUAD8') .OR.                                 &
                (TYPE(1:5) == 'SHEAR') .OR. (TYPE(1:5) == 'USER1')) THEN
@@ -457,7 +526,18 @@
       RETURN
 
 ! **********************************************************************************************************************************
- 9203 FORMAT(' *ERROR  9203: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
+ 9101 FORMAT('*** CBEAM STRESS RECOVERY DEBUG *******************************************',/, &
+             '  Element ID       : ',I8,/, &
+             '  Station index    : ',I4,/, &
+             '  x/L              : ',1ES14.6)
+ 9102 FORMAT('  PEL(1:6)         :',6(1X,1ES14.6))
+ 9103 FORMAT('  B1 row           :',6(1X,1ES14.6))
+ 9104 FORMAT('  B2 row           :',6(1X,1ES14.6))
+ 9105 FORMAT('  End forces       :',6(1X,1ES14.6))
+ 9106 FORMAT('  Recovered stress :',6(1X,1ES14.6),/, &
+             '***************************************************************************')
+
+  9203 FORMAT(' *ERROR  9203: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' INCORRECT ELEMENT TYPE = "',A,'"')
 
  9303 FORMAT(' *ERROR  9303: PARAM,STR_CID not implemented for QUAD and TRIA elements.' )

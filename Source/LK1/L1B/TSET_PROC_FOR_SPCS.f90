@@ -32,11 +32,11 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, L1H, L1O, L1O_MSG, LINK1O
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ENFORCED, FATAL_ERR, LSPCADDC, NDOFSB, NDOFSE, NDOFSG, NGRID, NSPCADD,      &
-                                         NUM_SPC_RECORDS, NUM_SPC1_RECORDS, NUM_SPCSIDS
+                                         NUM_SPC_RECORDS, NUM_SPC1_RECORDS, NUM_SPCSIDS, NSUB
       USE TIMDAT, ONLY                :  TSEC
       USE PARAMS, ONLY                :  EPSIL
       USE DOF_TABLES, ONLY            :  TSET_CHR_LEN, TSET
-      USE MODEL_STUF, ONLY            :  GRID, GRID_ID, SPCADD_SIDS, SPCSET, SPCSIDS
+      USE MODEL_STUF, ONLY            :  GRID, GRID_ID, SPCADD_SIDS, SPCSET, SPCSIDS, SUBLOD
 
       USE TSET_PROC_FOR_SPCS_USE_IFs                       ! Added 2019/07/14
 
@@ -59,6 +59,7 @@
       INTEGER(LONG)                   :: OUNT(2)           ! File units to write messages to.
       INTEGER(LONG)                   :: REC_NO    = 0     ! Record number when reading a file
       INTEGER(LONG)                   :: SETID             ! An SPC set ID read from file LINK1O
+      LOGICAL                         :: PROCESS_SETID     ! True when this SPC/SPCD record is active for current run
 
 
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
@@ -168,82 +169,98 @@ i_do6:DO I=1,NUM_SPC_RECORDS + NUM_SPC1_RECORDS
 
 ! No error, so processes data. First, make sure SETID is the one called for in Case Control:
 
-j_do6:   DO J=1,NUM_SPCSIDS
-
+         PROCESS_SETID = .FALSE.
+         DO J=1,NUM_SPCSIDS
             IF (SETID == SPCSIDS(J)) THEN
-                                                           ! Check for existence of grid pt
-               CALL RDOF ( ICOMP, CDOF )                   ! Convert ICOMP to CDOF char form for use below
+               PROCESS_SETID = .TRUE.
+               EXIT
+            ENDIF
+         ENDDO
+         IF (.NOT. PROCESS_SETID) THEN
+            DO J=1,NSUB
+               IF (SETID == SUBLOD(J,1)) THEN
+                  PROCESS_SETID = .TRUE.
+                  EXIT
+               ENDIF
+            ENDDO
+         ENDIF
 
-               CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID1, GRID_ID_ROW_NUM )
+         IF (PROCESS_SETID) THEN
+                                                        ! Check for existence of grid pt
+            CALL RDOF ( ICOMP, CDOF )                   ! Convert ICOMP to CDOF char form for use below
+
+            CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID1, GRID_ID_ROW_NUM )
+            IF (GRID_ID_ROW_NUM == -1) THEN
+               GID_ERR = GID_ERR + 1
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1822) 'GRID ', GRID1, 'SPC OR SPC1/SPCD', SETID
+               WRITE(F06,1822) 'GRID ', GRID1, 'SPC OR SPC1/SPCD', SETID
+            ENDIF
+            IF (GRID2 /= GRID1) THEN
+               CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID2, GRID_ID_ROW_NUM )
                IF (GRID_ID_ROW_NUM == -1) THEN
                   GID_ERR = GID_ERR + 1
                   FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,1822) 'GRID ', GRID1, 'SPC OR SPC1', SPCSIDS(J)
-                  WRITE(F06,1822) 'GRID ', GRID1, 'SPC OR SPC1', SPCSIDS(J)
+                  WRITE(ERR,1822) 'GRID ', GRID2, 'SPC OR SPC1/SPCD', SETID
+                  WRITE(F06,1822) 'GRID ', GRID2, 'SPC OR SPC1/SPCD', SETID
                ENDIF
-               IF (GRID2 /= GRID1) THEN
-                  CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID2, GRID_ID_ROW_NUM )
-                  IF (GRID_ID_ROW_NUM == -1) THEN
-                     GID_ERR = GID_ERR + 1
-                     FATAL_ERR = FATAL_ERR + 1
-                     WRITE(ERR,1822) 'GRID ', GRID2, 'SPC OR SPC1', SPCSIDS(J)
-                     WRITE(F06,1822) 'GRID ', GRID2, 'SPC OR SPC1', SPCSIDS(J)
-                  ENDIF
-               ENDIF
+            ENDIF
 
-               IF (GID_ERR == 0) THEN                      ! Put CDOF data in TSET for GRID1 thru GRID2
-                  DO GRID_NUM=GRID1,GRID2                  ! GRID2 >= GRID1 was checked in subr BD_SPC1
-                     CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID_NUM, GRID_ID_ROW_NUM )
-                     IF (GRID_ID_ROW_NUM /= -1) THEN
-                        CALL GET_GRID_NUM_COMPS ( GRID_ID_ROW_NUM, NUM_COMPS, SUBR_NAME )
-                        DO K = 1,NUM_COMPS                 ! Put data in TSET and write enforced displ to L1H.
-                           IF (CDOF(K) == '1') THEN
-                              IF      (DOFSET == 'SE') THEN
-                                 IF (TSET(GRID_ID_ROW_NUM,K) == '  ') THEN
-                                    TSET(GRID_ID_ROW_NUM,K) = 'SE'
-                                    NDOFSE = NDOFSE + 1
-                                                           ! Write enforced displs to L1H. If ENFORCED = 'Y' write all terms
-                                    IF (ENFORCED == 'Y') THEN
-                                       IF (DOFSET == 'SE') THEN
-                                          WRITE(L1H) GRID_ID_ROW_NUM, K, RSPC
-                                       ENDIF
-                                    ELSE                   ! If ENFORCED = 'N' write only nonzero terms
-                                       IF ((DOFSET == 'SE') .AND. (ABS(RSPC) > EPS1)) THEN
-                                          WRITE(L1H) GRID_ID_ROW_NUM, K, RSPC
-                                       ENDIF
-                                    ENDIF
-                                 ELSE
-                                    DOF_ERR = DOF_ERR + 1
-                                    FATAL_ERR = FATAL_ERR + 1
-                                    WRITE(ERR,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
-                                    WRITE(F06,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
+            IF (GID_ERR == 0) THEN                      ! Put CDOF data in TSET for GRID1 thru GRID2
+               DO GRID_NUM=GRID1,GRID2                  ! GRID2 >= GRID1 was checked in subr BD_SPC1
+                  CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID_NUM, GRID_ID_ROW_NUM )
+                  IF (GRID_ID_ROW_NUM /= -1) THEN
+                     CALL GET_GRID_NUM_COMPS ( GRID_ID_ROW_NUM, NUM_COMPS, SUBR_NAME )
+                     DO K = 1,NUM_COMPS                 ! Put data in TSET and write enforced displ to L1H.
+                        IF (CDOF(K) == '1') THEN
+                           IF      (DOFSET == 'SE') THEN
+! --- cbeam_005f_enforced_spc begin --- !
+                              IF ((TSET(GRID_ID_ROW_NUM,K) == '  ') .OR. (TSET(GRID_ID_ROW_NUM,K) == 'SB')) THEN
+                                 IF (TSET(GRID_ID_ROW_NUM,K) == 'SB') THEN
+                                    NDOFSB = NDOFSB - 1
                                  ENDIF
-                              ELSE IF (DOFSET == 'SB') THEN
-                                 IF ((TSET(GRID_ID_ROW_NUM,K) == '  ') .OR. (TSET(GRID_ID_ROW_NUM,K) == 'SG') .OR.                 &
-                                     (TSET(GRID_ID_ROW_NUM,K) == 'SB')) THEN
-                                    TSET(GRID_ID_ROW_NUM,K) = 'SB'
-                                    NDOFSB = NDOFSB + 1
+                                 TSET(GRID_ID_ROW_NUM,K) = 'SE'
+                                 NDOFSE = NDOFSE + 1
+                                                           ! Write enforced displs to L1H. If ENFORCED = 'Y' write all terms
+                                 IF (ENFORCED == 'Y') THEN
+                                    IF (DOFSET == 'SE') THEN
+                                       WRITE(L1H) GRID_ID_ROW_NUM, K, RSPC
+                                    ENDIF
+                                 ELSE                   ! If ENFORCED = 'N' write only nonzero terms
+                                    IF ((DOFSET == 'SE') .AND. (ABS(RSPC) > EPS1)) THEN
+                                       WRITE(L1H) GRID_ID_ROW_NUM, K, RSPC
+                                    ENDIF
+                                 ENDIF
+                              ELSE
+                                 DOF_ERR = DOF_ERR + 1
+                                 FATAL_ERR = FATAL_ERR + 1
+                                 WRITE(ERR,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
+                                 WRITE(F06,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
+                              ENDIF
+! --- cbeam_005f_enforced_spc end --- !
+                           ELSE IF (DOFSET == 'SB') THEN
+                              IF ((TSET(GRID_ID_ROW_NUM,K) == '  ') .OR. (TSET(GRID_ID_ROW_NUM,K) == 'SG') .OR.                 &
+                                  (TSET(GRID_ID_ROW_NUM,K) == 'SB')) THEN
+                                 TSET(GRID_ID_ROW_NUM,K) = 'SB'
+                                 NDOFSB = NDOFSB + 1
+                              ELSE IF (TSET(GRID_ID_ROW_NUM,K) == 'SE') THEN
+                                 CONTINUE
 !xx-DOFSET CAN'T BE 'SE' HERE       IF ((DOFSET == 'SE') .AND. (DABS(RSPC) > EPS1)) THEN
 !xx-DUE TO TEST 4 LINES ABOVE          WRITE(L1H) GRID_ID_ROW_NUM, K, RSPC
 !xx-MOD ON 12/28/06                 ENDIF
-                                 ELSE
-                                    DOF_ERR = DOF_ERR + 1
-                                    FATAL_ERR = FATAL_ERR + 1
-                                    WRITE(ERR,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
-                                    WRITE(F06,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
-                                 ENDIF
+                              ELSE
+                                 DOF_ERR = DOF_ERR + 1
+                                 FATAL_ERR = FATAL_ERR + 1
+                                 WRITE(ERR,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
+                                 WRITE(F06,1332) SETID, GRID_NUM, K, DOFSET, TSET(GRID_ID_ROW_NUM,K)
                               ENDIF
                            ENDIF
-                        ENDDO
-                     ENDIF
-                  ENDDO
-               ENDIF
-
-               EXIT j_do6                                     ! We found and processed the SPC set, so quit
-
+                        ENDIF
+                     ENDDO
+                  ENDIF
+               ENDDO
             ENDIF
-
-         ENDDO j_do6
+         ENDIF
 
       ENDDO i_do6
 

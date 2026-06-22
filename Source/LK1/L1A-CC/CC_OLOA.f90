@@ -74,10 +74,14 @@
       ! concatenate the strings
       OLOA_OUT = TRIM(FOUND_PRINT) // TRIM(FOUND_PLOT) // TRIM(FOUND_PUNCH) // TRIM(FOUND_NEU) // TRIM(FOUND_CSV)
 
-      ! default to print
+! --- op2_upgraded begin --- !
+      ! For bare "OLOAD = ALL" requests, default to PRINT+PLOT so classic
+      ! OP2 applied-load output (OPG1) is emitted without requiring explicit
+      ! "(PLOT)" qualifiers on the Case Control entry.
       IF (OLOA_OUT(1:5) == 'NNNNN') THEN
-        OLOA_OUT = 'YNNNN'
+        OLOA_OUT = 'YYNNN'
       ENDIF
+! --- op2_upgraded end --- !
 
 
       ! Set CASE CONTROL output request variable to SETID

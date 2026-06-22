@@ -39,6 +39,9 @@
       USE LINK9_STUFF, ONLY           :  MSPRNT, OGEL
       USE FEMAP_ARRAYS, ONLY          :  FEMAP_EL_VECS
       USE PARAMS, ONLY                :  PRTNEU
+! --- cbeam_add begin --- !
+      USE DEBUG_PARAMETERS
+! --- cbeam_add end--- !
 
       USE ONE_D_STRESS_OUTPUTS_USE_IFs
 
@@ -67,23 +70,53 @@
       REAL(DOUBLE)                    :: SBMAX,SBMIN        ! Max & min stresses from points "C", "D", "E" and "F" at end-b of CBAR
       LOGICAL                         :: WRITE_NEU
 
-      INTRINSIC DMAX1,DMIN1
-
+! --- cbeam_add begin --- !
+      LOGICAL                         :: HAVE_SECTION_POINTS
+      INTRINSIC DABS, DMAX1,DMIN1
+! --- cbeam_add end--- !
 
       WRITE_NEU = (PRTNEU == 'Y')
 
 ! **********************************************************************************************************************************
 ! Calc engineering stresses from array STRESS and put into array OGEL
 
-      IF      (TYPE == 'BAR     ') THEN                    ! BAR1 elements
-         C1 = ZS(1)
-         C2 = ZS(2)
-         D1 = ZS(3)
-         D2 = ZS(4)
-         E1 = ZS(5)
-         E2 = ZS(6)
-         F1 = ZS(7)
-         F2 = ZS(8)
+! --- cbeam_add begin --- !
+! Phase-1 transition: CBEAM is explicitly admitted here, but still uses the legacy end-A/end-B bar-shaped recovery body.
+! NX-style intermediate stations will be split into a dedicated BEAM writer path later without changing CBAR behavior.
+      IF      ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ')) THEN ! BAR1/CBEAM transition path
+
+! If section y/z stress points are not defined yet, do not fail. Fall back to zero
+! fiber offsets so CBEAM can still output axial/torsional terms while station/F06
+! work is being developed.
+         HAVE_SECTION_POINTS = .FALSE.
+         DO ICOL=1,8
+            IF (DABS(ZS(ICOL)) > ZERO) THEN
+               HAVE_SECTION_POINTS = .TRUE.
+               EXIT
+            ENDIF
+         ENDDO
+         IF (HAVE_SECTION_POINTS) THEN
+! --- cbeam_add end --- !
+            C1 = ZS(1)
+            C2 = ZS(2)
+            D1 = ZS(3)
+            D2 = ZS(4)
+            E1 = ZS(5)
+            E2 = ZS(6)
+            F1 = ZS(7)
+            F2 = ZS(8)
+! --- cbeam_add begin --- !
+         ELSE
+            C1 = ZERO
+            C2 = ZERO
+            D1 = ZERO
+            D2 = ZERO
+            E1 = ZERO
+            E2 = ZERO
+            F1 = ZERO
+            F2 = ZERO
+         ENDIF
+! --- cbeam_add end --- !
          SA    =   STRESS(1)
          SA1   = -(C1*STRESS(2) + C2*STRESS(3))
          SA2   = -(D1*STRESS(2) + D2*STRESS(3))
@@ -98,6 +131,13 @@
          SBMAX = SA + DMAX1(SB1,SB2,SB3,SB4)
          SAMIN = SA + DMIN1(SA1,SA2,SA3,SA4)
          SBMIN = SA + DMIN1(SB1,SB2,SB3,SB4)
+! --- cbeam_add begin --- !
+         IF (DEBUG(233) > 0) THEN
+            WRITE(ERR,9100) TYPE
+            WRITE(ERR,9101) STRESS(1), STRESS(2), STRESS(3), STRESS(4), STRESS(5), STRESS(6)
+            WRITE(ERR,9102) SA, SA1, SA2, SA3, SA4, SB1, SB2, SB3, SB4, ST, SAMAX, SBMAX, SAMIN, SBMIN
+         ENDIF
+! --- cbeam_add end --- !
          ICOL = 1
          CALL BAR_MARGIN ( ICOL, SAMAX, SBMAX, SAMIN, SBMIN, ST, MS1, MS2, MS3, MSP1, MSP2, MSP3 )
          IF (WRITE_OGEL == 'Y') THEN
@@ -230,7 +270,14 @@
 
 
       RETURN
-
+! --- cbeam_add begin --- !
+! **********************************************************************************************************************************
+ 9100 FORMAT('*** CBEAM ONE_D STRESS DEBUG ***********************************************',/, &
+             '  Element type     : "',A8,'"')
+ 9101 FORMAT('  Raw STRESS(1:6)  :',6(1X,1ES14.6))
+ 9102 FORMAT('  SA/pts/max/min   :',14(1X,1ES14.6),/, &
+             '***************************************************************************')
+! --- cbeam_add end --- !
 ! **********************************************************************************************************************************
  9200 FORMAT(' *ERROR  9200: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' ARRAY OGEL WAS ALLOCATED TO HAVE ',I12,' ROWS. ATTEMPT TO WRITE TO OGEL BEYOND THIS')

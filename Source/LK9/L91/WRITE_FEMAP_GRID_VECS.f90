@@ -41,18 +41,18 @@
 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'WRITE_FEMAP_GRID_VECS'
       CHARACTER(LEN=*), INTENT(IN)    :: WHAT              ! Indicator if GRID_VEC is DISP, OLOA, SPCF or MPCF
-      CHARACTER(LEN= 3*BYTE)          :: TITLE1(4,2)       ! Titles for vectors written to NEU
+      CHARACTER(LEN= 5*BYTE)          :: TITLE1(4,2)       ! Titles for vectors written to NEU
       CHARACTER(LEN=20*BYTE)          :: TITLE2(2)         ! Titles for vectors written to NEU
 
       INTEGER(LONG), INTENT(IN)       :: FEMAP_SET_ID      ! FEMAP set ID to write out
       INTEGER(LONG)                   :: ACID_G            ! Actual coordinate system ID for a grid
       INTEGER(LONG)                   :: GRID_MAX          ! Grid ID where vector is max
       INTEGER(LONG)                   :: GRID_MIN          ! Grid ID where vector is min
-      INTEGER(LONG)                   :: GRID_NUMS(NGRID)  ! Grid ID's in global order
+      INTEGER(LONG), ALLOCATABLE      :: GRID_NUMS(:)      ! Grid ID's in global order
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG)                   :: ICID              ! Internal coord sys no. corresponding to an actual coord sys no.
       INTEGER(LONG)                   :: IGRID             ! Internal grid ID for a grid in array GRID_NUMS
-      INTEGER(LONG)                   :: IARRAY(NGRID)     ! Original GRID_NUMS array
+      INTEGER(LONG), ALLOCATABLE      :: IARRAY(:)         ! Original GRID_NUMS array
       INTEGER(LONG)                   :: IDOFG             ! A G-set DOF number
       INTEGER(LONG)                   :: ID(20)            ! Vector ID's for FEMAP output
       INTEGER(LONG)                   :: J                 ! Counter
@@ -65,14 +65,14 @@
       REAL(DOUBLE)                    :: DIS(3)            ! Array of 3 translation components
       REAL(DOUBLE)                    :: ROT(3)            ! Array of 3 rotation components
       REAL(DOUBLE)                    :: PHID, THETAD      ! Outputs from subr GEN_T0L
-      REAL(DOUBLE)                    :: TOTR_VEC(NGRID)   ! RSS of 6 rotation    components in  GRID_VEC
-      REAL(DOUBLE)                    :: TOTT_VEC(NGRID)   ! RSS of 6 translation components in  GRID_VEC
-      REAL(DOUBLE)                    :: T1_VEC(NGRID)     ! T1 translation component from GRID_VEC
-      REAL(DOUBLE)                    :: T2_VEC(NGRID)     ! T2 translation component from GRID_VEC
-      REAL(DOUBLE)                    :: T3_VEC(NGRID)     ! T3 translation component from GRID_VEC
-      REAL(DOUBLE)                    :: R1_VEC(NGRID)     ! R1 rotation    component from GRID_VEC
-      REAL(DOUBLE)                    :: R2_VEC(NGRID)     ! R2 rotation    component from GRID_VEC
-      REAL(DOUBLE)                    :: R3_VEC(NGRID)     ! R3 rotation    component from GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: TOTR_VEC(:)       ! RSS of 6 rotation    components in  GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: TOTT_VEC(:)       ! RSS of 6 translation components in  GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: T1_VEC(:)         ! T1 translation component from GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: T2_VEC(:)         ! T2 translation component from GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: T3_VEC(:)         ! T3 translation component from GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: R1_VEC(:)         ! R1 rotation    component from GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: R2_VEC(:)         ! R2 rotation    component from GRID_VEC
+      REAL(DOUBLE), ALLOCATABLE       :: R3_VEC(:)         ! R3 rotation    component from GRID_VEC
       REAL(DOUBLE)                    :: T0G(3,3)           ! Matrix to transform offsets from global to basic  coords
       REAL(DOUBLE)                    :: VEC_ABS           ! Abs value in vector
       REAL(DOUBLE)                    :: VEC_MAX           ! Max value in vector
@@ -91,17 +91,27 @@
       TITLE1(4,2) = 'R3'
 
       IF      (WHAT == 'DISP') THEN
-         VEC_ID_OFFSET = 10000
-         TITLE2(1) = ' translation'
-         TITLE2(2) = ' rotation'
+! --- neu_upgrade begin --- !
+         VEC_ID_OFFSET = 0
+         TITLE1(1,1) = 'Total'
+         TITLE1(1,2) = 'Total'
+         TITLE2(1) = ' Translation'
+         TITLE2(2) = ' Rotation'
+! --- neu_upgrade end --- !
       ELSE IF (WHAT == 'OLOA') THEN
          VEC_ID_OFFSET = 20000
-         TITLE2(1) = ' applied force'
-         TITLE2(2) = ' applied moment'
+          TITLE1(1,1) = 'Total'
+          TITLE1(1,2) = 'Total'
+          TITLE2(1) = ' Applied Force'
+          TITLE2(2) = ' Applied Moment'
       ELSE IF (WHAT == 'SPCF') THEN
          VEC_ID_OFFSET = 30000
-         TITLE2(1) = ' SPC force'
-         TITLE2(2) = ' SPC moment'
+! --- neu_upgrade begin --- !
+          TITLE1(1,1) = 'Total'
+          TITLE1(1,2) = 'Total'
+         TITLE2(1) = ' Constraint Force'
+         TITLE2(2) = ' Constraint Moment'
+! --- neu_upgrade end --- !
       ELSE IF (WHAT == 'MPCF') THEN
          VEC_ID_OFFSET = 40000
          TITLE2(1) = ' MPC force'
@@ -112,6 +122,9 @@
          WRITE(F06,939) SUBR_NAME, WHAT
          CALL OUTA_HERE ( 'Y' )
       ENDIF
+
+      ALLOCATE ( GRID_NUMS(NGRID), IARRAY(NGRID), TOTT_VEC(NGRID), TOTR_VEC(NGRID), T1_VEC(NGRID), T2_VEC(NGRID), T3_VEC(NGRID), &
+                 R1_VEC(NGRID), R2_VEC(NGRID), R3_VEC(NGRID) )
 
       IDOFG = 0
       DO I=1,NGRID
@@ -386,6 +399,17 @@
       WRITE(NEU,1007)
 
 
+
+      IF (ALLOCATED(GRID_NUMS)) DEALLOCATE(GRID_NUMS)
+      IF (ALLOCATED(IARRAY   )) DEALLOCATE(IARRAY)
+      IF (ALLOCATED(TOTT_VEC )) DEALLOCATE(TOTT_VEC)
+      IF (ALLOCATED(TOTR_VEC )) DEALLOCATE(TOTR_VEC)
+      IF (ALLOCATED(T1_VEC   )) DEALLOCATE(T1_VEC)
+      IF (ALLOCATED(T2_VEC   )) DEALLOCATE(T2_VEC)
+      IF (ALLOCATED(T3_VEC   )) DEALLOCATE(T3_VEC)
+      IF (ALLOCATED(R1_VEC   )) DEALLOCATE(R1_VEC)
+      IF (ALLOCATED(R2_VEC   )) DEALLOCATE(R2_VEC)
+      IF (ALLOCATED(R3_VEC   )) DEALLOCATE(R3_VEC)
 
       RETURN
 

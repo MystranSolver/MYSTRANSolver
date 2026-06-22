@@ -42,7 +42,10 @@
                                          MPMASS, MPRESS, MPLOAD4_3D_DATA, MPROD, MPSHEAR, MPSHEL, MPSOLID, MPUSER1, MPUSERIN,      &
                                          MRCONM2, MRCORD,                                                                          &
                                          MRGRID, MRMATLC, MRPBAR, MRPBEAM, MRPBUSH, MRPCOMP_PLIES, MRPCOMP0, MRPELAS, MRPMASS,     &
-                                         MRPROD, MRPSHEAR, MRPSHEL, MRPUSER1, MRSNORM, MSNORM, MGRID_SNORM, MUSERIN_MAT_NAMES
+                                         MRPROD, MRPSHEAR, MRPSHEL, MRPUSER1, MRSNORM, MSNORM, MGRID_SNORM, MUSERIN_MAT_NAMES  
+! --- cbeam_add begin --- !
+      USE SCONTR, ONLY                :  MPBEAM_STATIONS
+! --- cbeam_add end--- !                                         
       USE SCONTR, ONLY                :  NDOFG, NGRID, NMPC, NPCOMP, NPLOAD4_3D, NRBAR, NRBE1, NRBE2, NSPC, NTSUB, NUM_MPCSIDS,    &
                                          NUM_SPCSIDS
       USE TIMDAT, ONLY                :  TSEC
@@ -65,6 +68,9 @@
       USE MODEL_STUF, ONLY            :  MATL, RMATL, PBAR, RPBAR, PBEAM, RPBEAM, PBUSH, RPBUSH, PCOMP, RPCOMP, PELAS, RPELAS,     &
                                          PROD, RPROD, PSHEAR, RPSHEAR, PSHEL, RPSHEL, PSOLID, PUSER1, RPUSER1, PUSERIN,            &
                                          USERIN_ACT_COMPS, USERIN_ACT_GRIDS, USERIN_MAT_NAMES
+! --- cbeam_add begin --- !
+      USE MODEL_STUF, ONLY            :  PBEAM_NSTATIONS, PBEAM_XL, PBEAM_RPROPS
+! --- cbeam_add end --- !                                                                                 
       USE MODEL_STUF, ONLY            :  MPC_SIDS, MPCSIDS, MPCADD_SIDS
       USE MODEL_STUF, ONLY            :  SPC_SIDS, SPC1_SIDS, SPCSIDS, SPCADD_SIDS
       USE MODEL_STUF, ONLY            :  ALL_SETS_ARRAY, ONE_SET_ARRAY, SETS_IDS, SC_ACCE, SC_DISP, SC_ELFN, SC_ELFE, SC_GPFO,     &
@@ -615,6 +621,7 @@
             ENDIF
             ! Defaults from EIG_PARAMS_TYPE component initializers are applied automatically.
          ENDIF
+
 
       ELSE IF (NAME_IN == 'SUBLOD') THEN                      ! Allocate array SUBLOD
 
@@ -1366,6 +1373,80 @@
                JERR = JERR + 1
             ENDIF
          ENDIF
+
+! --- CBEAM_add begin --- !
+         NAME = 'PBEAM_NSTATIONS'
+         IF (ALLOCATED(PBEAM_NSTATIONS)) THEN
+            CONTINUE
+         ELSE
+            ALLOCATE (PBEAM_NSTATIONS(LPBEAM),STAT=IERR)
+            NROWS = LPBEAM
+            NCOLS = 1
+            MB_ALLOCATED = RLONG*REAL(LPBEAM)/ONEPP6
+            IF (IERR == 0) THEN
+               CALL ALLOCATED_MEMORY ( NAME, MB_ALLOCATED, 'ALLOC', 'Y', CUR_MB_ALLOCATED, SUBR_NAME )
+               DO I=1,LPBEAM
+                  PBEAM_NSTATIONS(I) = 0
+               ENDDO
+            ELSE
+               WRITE(ERR,991) MB_ALLOCATED, NAME,SUBR_NAME, IERR
+               WRITE(F06,991) MB_ALLOCATED, NAME,SUBR_NAME, IERR
+               FATAL_ERR = FATAL_ERR + 1
+               JERR = JERR + 1
+            ENDIF
+         ENDIF
+
+         NAME = 'PBEAM_XL'
+         IF (ALLOCATED(PBEAM_XL)) THEN
+            CONTINUE
+         ELSE
+            ALLOCATE (PBEAM_XL(LPBEAM,MPBEAM_STATIONS),STAT=IERR)
+            NROWS = LPBEAM
+            NCOLS = MPBEAM_STATIONS
+            MB_ALLOCATED = RDOUBLE*REAL(LPBEAM)*REAL(MPBEAM_STATIONS)/ONEPP6
+            IF (IERR == 0) THEN
+               CALL ALLOCATED_MEMORY ( NAME, MB_ALLOCATED, 'ALLOC', 'Y', CUR_MB_ALLOCATED, SUBR_NAME )
+               DO I=1,LPBEAM
+                  DO J=1,MPBEAM_STATIONS
+                     PBEAM_XL(I,J) = ZERO
+                  ENDDO
+               ENDDO
+            ELSE
+               WRITE(ERR,991) MB_ALLOCATED, NAME,SUBR_NAME, IERR
+               WRITE(F06,991) MB_ALLOCATED, NAME,SUBR_NAME, IERR
+               FATAL_ERR = FATAL_ERR + 1
+               JERR = JERR + 1
+            ENDIF
+         ENDIF
+
+         NAME = 'PBEAM_RPROPS'
+         IF (ALLOCATED(PBEAM_RPROPS)) THEN
+            CONTINUE
+         ELSE
+            ALLOCATE (PBEAM_RPROPS(LPBEAM,MPBEAM_STATIONS,6),STAT=IERR)
+            NROWS = LPBEAM
+            NCOLS = MPBEAM_STATIONS*6
+            MB_ALLOCATED = RDOUBLE*REAL(LPBEAM)*REAL(MPBEAM_STATIONS)*6.0/ONEPP6
+            IF (IERR == 0) THEN
+               CALL ALLOCATED_MEMORY ( NAME, MB_ALLOCATED, 'ALLOC', 'Y', CUR_MB_ALLOCATED, SUBR_NAME )
+               DO I=1,LPBEAM
+                  DO J=1,MPBEAM_STATIONS
+                     PBEAM_RPROPS(I,J,1) = ZERO
+                     PBEAM_RPROPS(I,J,2) = ZERO
+                     PBEAM_RPROPS(I,J,3) = ZERO
+                     PBEAM_RPROPS(I,J,4) = ZERO
+                     PBEAM_RPROPS(I,J,5) = ZERO
+                     PBEAM_RPROPS(I,J,6) = ZERO
+                  ENDDO
+               ENDDO
+            ELSE
+               WRITE(ERR,991) MB_ALLOCATED, NAME,SUBR_NAME, IERR
+               WRITE(F06,991) MB_ALLOCATED, NAME,SUBR_NAME, IERR
+               FATAL_ERR = FATAL_ERR + 1
+               JERR = JERR + 1
+            ENDIF
+         ENDIF
+! --- CBEAM_add end --- !
 
          NAME = 'PBUSH'
          IF (ALLOCATED(PBUSH)) THEN

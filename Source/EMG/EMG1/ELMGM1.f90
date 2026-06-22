@@ -1,48 +1,50 @@
+
 ! ##################################################################################################################################
-! Begin MIT license text.
+! Begin MIT license text.                                                                                    
 ! _______________________________________________________________________________________________________
-
-! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)
-
-! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+                                                                                                         
+! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)                                              
+                                                                                                         
+! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and      
 ! associated documentation files (the "Software"), to deal in the Software without restriction, including
 ! without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
-! the following conditions:
-
-! The above copyright notice and this permission notice shall be included in all copies or substantial
-! portions of the Software and documentation.
-
-! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-! THE SOFTWARE.
+! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to   
+! the following conditions:                                                                              
+                                                                                                         
+! The above copyright notice and this permission notice shall be included in all copies or substantial   
+! portions of the Software and documentation.                                                                              
+                                                                                                         
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS                                
+! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                            
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE                            
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                                 
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,                          
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN                              
+! THE SOFTWARE.                                                                                          
 ! _______________________________________________________________________________________________________
-
-! End MIT license text.
-
+                                                                                                      
+! End MIT license text.                                                                                      
+ 
       SUBROUTINE ELMGM1 ( INT_ELEM_ID, WRITE_WARN )
-
+ 
 ! Calculates and checks some elem geometry for ROD, BAR, BEAM, triangles and provides a transformation matrix (TE) to transform the
 ! element stiffness matrix in the element system to the basic coordinate system. Calculates grid point coords in local coord system.
-
+  
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, MELGP, MOFFSET, NCORD, FATAL_ERR
       USE TIMDAT, ONLY                :  TSEC
+
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE PARAMS, ONLY                :  EPSIL
       USE MODEL_STUF, ONLY            :  BGRID, CAN_ELEM_TYPE_OFFSET, CORD, EID, ELEM_LEN_12, ELEM_LEN_AB, ELGP,NUM_EMG_FATAL_ERRS,&
                                          EOFF, GRID, OFFDIS, OFFDIS_O, OFFDIS_B, OFFDIS_G, RCORD, TE, TE_IDENT, TYPE, XEB, XEL
-
+ 
       USE ELMGM1_USE_IFs
 
       IMPLICIT NONE
-
+ 
       CHARACTER( 1*BYTE)              :: ID(3)              ! Used in deciding whether TE_IDENT = 'Y' or 'N'
       CHARACTER( 5*BYTE)              :: SORT_ORDER         ! Order in which the VX(i) have been sorted in subr CALC_VEC_SORT_ORDER
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'ELMGM1'
@@ -53,15 +55,15 @@
       INTEGER(LONG), INTENT(IN)       :: INT_ELEM_ID        ! Internal element ID for which
       INTEGER(LONG)                   :: ACID_G             ! Actual coordinate system ID
       INTEGER(LONG)                   :: I,J,K              ! DO loop indices
-      INTEGER(LONG)                   :: I3_IN(3)           ! Integer array used in sorting VX.
+      INTEGER(LONG)                   :: I3_IN(3)           ! Integer array used in sorting VX. 
 
       INTEGER(LONG)                   :: I3_OUT(3)          ! Integer array giving order of VX comps. If VX is in the order with
-!                                                             comp 2 smallest then comp 3 then comp 1 then I3_OUT is 2, 3, 1
+!                                                             comp 2 smallest then comp 3 then comp 1 then I3_OUT is 2, 3, 1 
 
-      INTEGER(LONG)                   :: ICID               ! Internal coord sys no. corresponding to an actual coord sys no.
+      INTEGER(LONG)                   :: ICID               ! Internal coord sys no. corresponding to an actual coord sys no. 
       INTEGER(LONG)                   :: ROWNUM             ! A row number in an array
 
-
+  
       REAL(DOUBLE)                    :: DX1(3)             ! Array used in intermediate calc's
       REAL(DOUBLE)                    :: DX2(3)             ! Array used in intermediate calc's
       REAL(DOUBLE)                    :: EPS1               ! A small number to compare to real zero
@@ -69,33 +71,33 @@
       REAL(DOUBLE)                    :: MAGY               ! Magnitude of vector VY
       REAL(DOUBLE)                    :: MAGZ               ! Magnitude of vector VZ
       REAL(DOUBLE)                    :: PHID, THETAD       ! Outputs from subr GEN_T0L
-      REAL(DOUBLE)                    :: T0G(3,3)           ! Matrix to transform offsets from global to basic  coords
-      REAL(DOUBLE)                    :: TG0(3,3)           ! Matrix to transform offsets from basic  to global coords
-      REAL(DOUBLE)                    :: TET(3,3)           ! Transpose of TE: UEL = TE*UEB
+      REAL(DOUBLE)                    :: T0G(3,3)           ! Matrix to transform offsets from global to basic  coords 
+      REAL(DOUBLE)                    :: TG0(3,3)           ! Matrix to transform offsets from basic  to global coords 
+      REAL(DOUBLE)                    :: TET(3,3)           ! Transpose of TE: UEL = TE*UEB 
       REAL(DOUBLE)                    :: VX(3)              ! A vector in the elem x dir
       REAL(DOUBLE)                    :: VY(3)              ! A vector in the elem y dir
       REAL(DOUBLE)                    :: VZ(3)              ! A vector in the elem z dir
       REAL(DOUBLE)                    :: V13(3)             ! A vector from grid 1 to grid 3 (for BAR, BEAM or USER1 it is V vector)
-
+  
 
 
 ! **********************************************************************************************************************************
       EPS1 = EPSIL(1)
-
+ 
 ! Initialize
-
+  
       DO I=1,MELGP
         DO J=1,3
            XEL(I,J) = ZERO
-        ENDDO
-      ENDDO
-
+        ENDDO 
+      ENDDO 
+ 
       DO I=1,3
         DO J=1,3
            TE(I,J) = ZERO
-        ENDDO
-      ENDDO
-
+        ENDDO 
+      ENDDO 
+ 
       DO I=1,3
          VX(I) = ZERO
       ENDDO
@@ -136,16 +138,16 @@
                         ICID = J
                         EXIT
                      ENDIF
-                  ENDDO
+                  ENDDO   
 
                   CALL GEN_T0L ( BGRID(I), ICID, THETAD, PHID, T0G )
                   DO J=1,3
-                     OFFDIS_B(I,J) = T0G(J,1)*OFFDIS(I,1) + T0G(J,2)*OFFDIS(I,2) + T0G(J,3)*OFFDIS(I,3)
-                  ENDDO
+                     OFFDIS_B(I,J) = T0G(J,1)*OFFDIS(I,1) + T0G(J,2)*OFFDIS(I,2) + T0G(J,3)*OFFDIS(I,3) 
+                  ENDDO   
                ELSE                                        ! Offset was in basic coords
                   DO J=1,3
                      OFFDIS_B(I,J) = OFFDIS(I,J)
-                  ENDDO
+                  ENDDO   
                ENDIF
             ENDDO
          ELSE                                              ! There are no offsets so set OFFDIS_B to zero
@@ -154,12 +156,12 @@
                   OFFDIS_B(I,J) = ZERO
                ENDDO
             ENDDO
-         ENDIF
-
+         ENDIF 
+         
       ENDIF
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-! Calculate a vector between ends of the element in basic coords (not between grids if there are offsets).
+! Calculate a vector between ends of the element in basic coords (not between grids if there are offsets). 
 
       IF ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ') .OR. (TYPE == 'ROD     ')) THEN
          VX(1) = ( XEB(2,1) + OFFDIS_B(2,1) ) - ( XEB(1,1) + OFFDIS_B(1,1) )
@@ -261,7 +263,7 @@
             ELSE
                ID(I) = 'N'
             ENDIF
-         ENDDO
+         ENDDO 
          IF ((ID(1) == 'Y') .AND. (ID(2) == 'Y') .AND. (ID(3) == 'Y')) THEN
             TE_IDENT = 'Y'
          ENDIF
@@ -270,23 +272,23 @@
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
 ! Calculate remainder of TE for elements other than ROD
-
+ 
 ! Calculate V13, vector from G.P.-1 to G.P.-3. For BAR, BEAM, BUDH, USER1 the V13 vector is the v vector = XEB(ELGP+1,i)
-
+ 
 begn: IF (TYPE /= 'ROD     ') THEN
-
+    
          IF ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ') .OR. (TYPE == 'USER1   ')) THEN
             ROWNUM = ELGP + 1
-         ELSE
+         ELSE      
             ROWNUM = 3
          ENDIF
-         DO I=1,3
+         DO I=1,3  
             V13(I) = XEB(ROWNUM,I) - XEB(1,I)
-         ENDDO
-
+         ENDDO 
+ 
 ! Calculate VX x V13 and unit vector in elem z dir. (Col. 3 of TE). If MAGZ is equal to zero, then vector from G.P. 1
 ! to G.P. 3 is parallel to vector from G.P.-1 to G.P.-2 so write error and quit.
-
+ 
          CALL CROSS ( VX, V13, VZ )
          MAGZ = DSQRT(VZ(1)*VZ(1) + VZ(2)*VZ(2) + VZ(3)*VZ(3))
          IF (MAGZ <=  EPS1) THEN
@@ -319,8 +321,27 @@ begn: IF (TYPE /= 'ROD     ') THEN
          ENDIF
          DO I=1,3
             TE(2,I) = VY(I)/MAGY
-         ENDDO
-                                                       ! Now set TE_IDENT to be 'Y' if TE is an identity matrix.
+         ENDDO 
+
+!--- cbeam add --- begin!
+!*** ADDED  -- 2026-04-20 -- FOR BEAM DSB ***
+         IF (DEBUG(204) > 0) THEN
+            IF ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ')) THEN
+               WRITE(F06,*)
+               WRITE(F06,2104) EID, TRIM(TYPE)
+               WRITE(F06,2105) 'VX   (A->B)            = ', VX(1), VX(2), VX(3)
+               WRITE(F06,2105) 'V13  (from input V/G0) = ', V13(1), V13(2), V13(3)
+               WRITE(F06,2105) 'Ye (local y)           = ', TE(2,1), TE(2,2), TE(2,3)
+               WRITE(F06,2105) 'Ze (local z)           = ', TE(3,1), TE(3,2), TE(3,3)
+               WRITE(F06,2105) 'Xe (local x)           = ', TE(1,1), TE(1,2), TE(1,3)
+               WRITE(F06,2106) TE(1,1), TE(1,2), TE(1,3)
+               WRITE(F06,2106) TE(2,1), TE(2,2), TE(2,3)
+               WRITE(F06,2106) TE(3,1), TE(3,2), TE(3,3)
+               WRITE(F06,*)
+            ENDIF
+         ENDIF
+!---  cbeam add --- end!
+                                                       ! Now set TE_IDENT to be 'Y' if TE is an identity matrix. 
          TE_IDENT = 'N'
          DO I=1,3
             ID(I) = 'N'
@@ -331,31 +352,30 @@ begn: IF (TYPE /= 'ROD     ') THEN
             ELSE
                ID(I) = 'N'
             ENDIF
-         ENDDO
+         ENDDO 
          IF ((ID(1) == 'Y') .AND. (ID(2) == 'Y') .AND. (ID(3) == 'Y')) THEN
             TE_IDENT = 'Y'
          ENDIF
-
+ 
       ENDIF begn
 
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
 ! Use TE to get array of elem coords in local system.
-
+ 
       XEL(1,1) = ZERO
       XEL(1,2) = ZERO
       XEL(1,3) = ZERO
-
+  
       DO I=2,ELGP
          DO J=1,3
             XEL(I,J) = ZERO
             DO K=1,3
                XEL(I,J) = XEL(I,J) + (XEB(I,K) - XEB(1,K))*TE(J,K)
-            ENDDO
-         ENDDO
-      ENDDO
-
-
+            ENDDO 
+         ENDDO 
+      ENDDO 
+  
 
       RETURN
 
@@ -375,13 +395,17 @@ begn: IF (TYPE /= 'ROD     ') THEN
                     ,/,14X,' THE VECTOR COMPONENTS CALCULATED WERE ',3(1ES14.6))
 
  1944 FORMAT(' *ERROR  1944: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
-                    ,/,14X,' THE VX VECTOR FOR ',A,' ELEMENT ',I8,' WAS LEFT UNSORTED. IT MUST BE SORTED TO DETERMINE VY, VZ')
+                    ,/,14X,' THE VX VECTOR FOR ',A,' ELEMENT ',I8,' WAS LEFT UNSORTED. IT MUST BE SORTED TO DETERMINE VY, VZ') 
 
  1954 FORMAT(' *ERROR  1954: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' DIMENSION OF ARRAYS OFFDIS, OFFSET ARE ONLY ',I8,' BUT MUST BE ',I8,' FOR ELEM TYPE ',A)
 
- 1959 FORMAT(' *ERROR  1959: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
+1959 FORMAT(' *ERROR  1959: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,15X,A,I8,' HAS LENGTH (INCL EFFECTS OF OFFSETS) = ',1ES9.2,'. SHOULD BE ZERO')
+
+ 2104 FORMAT(' CBEAM/CBAR AXIS DEBUG: EID = ',I8,' TYPE = ',A)
+ 2105 FORMAT(1X,A,3(1ES14.6))
+ 2106 FORMAT(1X,'TE row = ',3(1ES14.6))
 
 
 
@@ -395,3 +419,5 @@ begn: IF (TYPE /= 'ROD     ') THEN
 ! **********************************************************************************************************************************
 
       END SUBROUTINE ELMGM1
+
+

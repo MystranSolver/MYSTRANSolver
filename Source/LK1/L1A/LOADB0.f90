@@ -1,35 +1,36 @@
+!--- cbeam add --- begin!
 ! ##################################################################################################################################
-! Begin MIT license text.
+! Begin MIT license text.                                                                                    
 ! _______________________________________________________________________________________________________
-
-! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)
-
-! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+                                                                                                         
+! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)                                              
+                                                                                                         
+! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and      
 ! associated documentation files (the "Software"), to deal in the Software without restriction, including
 ! without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
-! the following conditions:
-
-! The above copyright notice and this permission notice shall be included in all copies or substantial
-! portions of the Software and documentation.
-
-! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-! THE SOFTWARE.
+! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to   
+! the following conditions:                                                                              
+                                                                                                         
+! The above copyright notice and this permission notice shall be included in all copies or substantial   
+! portions of the Software and documentation.                                                                              
+                                                                                                         
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS                                
+! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                            
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE                            
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                                 
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,                          
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN                              
+! THE SOFTWARE.                                                                                          
 ! _______________________________________________________________________________________________________
-
-! End MIT license text.
+                                                                                                        
+! End MIT license text.                                                                                      
 
       SUBROUTINE LOADB0
 
       ! Preliminary reading of the Bulk Data to count several data sizes so
       ! that arrays may be allocated prior to the final reading of the Bulk Data.
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, IN1
+      USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, IN1                
       USE SCONTR, ONLY                :  BD_ENTRY_LEN, BLNK_SUB_NAM, FATAL_ERR, LCMASS, LDOFG, LELE,                               &
                                          LEDAT, LFORCE, LCONM2, LCORD, LGRAV, LGRID, LGUSERIN, LLOADC, LLOADR,                     &
                                          LMATL, LMPC, LMPCADDC, LMPCADDR, LPBAR, LPBEAM, LPBUSH, LPCOMP, LPCOMP_PLIES, LPDAT,      &
@@ -40,15 +41,18 @@
                                          MEDAT_CQUAD, MEDAT_CQUAD8, MEDAT_CROD, MEDAT_CSHEAR, MEDAT_CTRIA, MEDAT_CUSER1,           &
                                          MEDAT0_CUSERIN, MMPC,                                                                     &
                                          MPDAT_PLOAD2, MPDAT_PLOAD4, MEDAT_PLOTEL, MRBE3, MRSPLINE, MTDAT_TEMPRB, MTDAT_TEMPP1,    &
+! add pload1
+                                         MPDAT_PLOAD1,                                                                             &
                                          NPBARL, NSPOINT, PROG_NAME
       USE TIMDAT, ONLY                :  TSEC
+
       USE MODEL_STUF, ONLY            :  GRDSET3, GRDSET7, GRDSET8
       USE PARAMS, ONLY                :  GRIDSEQ
-
+ 
       USE LOADB0_USE_IFs
 
       IMPLICIT NONE
-
+ 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME   = 'LOADB0'
       CHARACTER( 7*BYTE), PARAMETER   :: END_CARD    = 'ENDDATA'
 
@@ -80,8 +84,7 @@
       INTEGER(LONG)                   :: NG_USERIN         ! Number of grids found on USERIN elems (not incl SPOINT's)
       INTEGER(LONG)                   :: NS_USERIN         ! Number of SPOINT's found on USERIN elems
 
-
-
+ 
 
 ! **********************************************************************************************************************************
       CARD(1:) = ' '
@@ -92,7 +95,7 @@
       MRSPLINE = 1
 
 ! Process Bulk Data cards in a loop that runs until either an ENDDATA card is found or when an error or EOF/EOR occurs
-
+    
       ICNT = 0
 !xx   REWIND (IN1)
       DO
@@ -160,7 +163,7 @@
                   FATAL_ERR = FATAL_ERR + 1
                   CALL OUTA_HERE ( 'Y' )
                ENDIF
-
+ 
                IF (IOCHK > 0) THEN
                   WRITE(ERR,1010) DECK_NAME
                   WRITE(F06,1010) DECK_NAME
@@ -168,7 +171,7 @@
                   FATAL_ERR = FATAL_ERR + 1
                   CYCLE
                ENDIF
-
+ 
                COMMENT_COL = 1
                DO I=2,BD_ENTRY_LEN
                   IF (CARD2(I:I) == '$') THEN
@@ -205,10 +208,10 @@
 
             IF (IERR /= 0) THEN
                CYCLE
-            ENDIF
+            ENDIF 
 
          ENDIF
-
+ 
           ! No errors, so process Bulk Data card. No need to check for
           ! imbedded blanks found when FFIELD was run - this will be
           ! checked when LOADB reads the bulk data
@@ -257,33 +260,33 @@
 
          ELSE IF (CARD(1:6) == 'CMASS1'  )  THEN
             LCMASS = LCMASS + 1
-
+  
          ELSE IF (CARD(1:6) == 'CMASS2'  )  THEN
             LCMASS = LCMASS + 1
             LPMASS = LPMASS + 1
-
+  
          ELSE IF (CARD(1:6) == 'CMASS3'  )  THEN
             LCMASS = LCMASS + 1
-
+  
          ELSE IF (CARD(1:6) == 'CMASS4'  )  THEN
             LCMASS = LCMASS + 1
             LPMASS = LPMASS + 1
-
+  
          ELSE IF (CARD(1:5) == 'CONM2'   )  THEN
             LCONM2 = LCONM2 + 1
-
+  
          ELSE IF (CARD(1:6) == 'CONROD'  )  THEN
             LELE  = LELE  + 1
             LPROD = LPROD + 1
             LEDAT = LEDAT + MEDAT_CROD
-
+  
          ELSE IF((CARD(1:6) == 'CORD1C'  ) .OR. (CARD(1:6) == 'CORD1R'  ) .OR. (CARD(1:6) == 'CORD1S'  )) THEN
             LCORD = LCORD + 1
             IF (CARD(41:48) /= '        ') LCORD = LCORD + 1
-
+  
          ELSE IF((CARD(1:6) == 'CORD2C'  ) .OR. (CARD(1:6) == 'CORD2R'  ) .OR. (CARD(1:6) == 'CORD2S'  )) THEN
             LCORD = LCORD + 1
-
+  
          ELSE IF (CARD(1:6) == 'CPENTA'  ) THEN
             LELE  = LELE + 1
             CALL BD_CPENTA0 ( CARD, LARGE_FLD_INP, DELTA_LEDAT )
@@ -298,15 +301,15 @@
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CQUAD8
             CALL BD_CQUAD80 ( CARD, LARGE_FLD_INP )
-
+   
          ELSE IF (CARD(1:4) == 'CROD'    )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CROD
-
+  
          ELSE IF (CARD(1:6) == 'CSHEAR'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CSHEAR
-
+  
          ELSE IF (CARD(1:6) == 'CTETRA'  ) THEN
             LELE  = LELE + 1
             CALL BD_CTETRA0 ( CARD, LARGE_FLD_INP, DELTA_LEDAT )
@@ -316,7 +319,7 @@
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CTRIA
             CALL BD_CTRIA0 ( CARD, LARGE_FLD_INP )
-
+   
          ELSE IF (CARD(1:6) == 'CUSER1'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CUSER1
@@ -335,20 +338,20 @@
 
          ELSE IF (CARD(1:5) == 'DEBUG'   )  THEN
             CALL BD_DEBUG0 ( CARD )
-
+ 
          ELSE IF((CARD(1:5) == 'FORCE'   ) .OR. (CARD(1:6) == 'MOMENT'  )) THEN
             LFORCE = LFORCE +1
-
+ 
          ELSE IF (CARD(1:4) == 'GRAV'    )  THEN
             LGRAV = LGRAV + 1
-
+ 
          ELSE IF (CARD(1:6) == 'GRDSET'  )  THEN
             CALL BD_GRDSET0 ( CARD )
-
+ 
          ELSE IF (CARD(1:4) == 'GRID'    )  THEN
             LGRID = LGRID + 1
             LDOFG = LDOFG + 6
-
+ 
          ELSE IF (CARD(1:4) == 'LOAD'    )  THEN
             LLOADR = LLOADR + 1
             CALL BD_LOAD0 ( CARD, LARGE_FLD_INP, ILOAD )
@@ -376,20 +379,23 @@
 
          ELSE IF (CARD(1:6) == 'PARAM '  )  THEN
             CALL BD_PARAM0 ( CARD )
-
+ 
          ELSE IF((CARD(1:5) == 'PBAR '   ) .OR. (CARD(1:5) == 'PBAR*'   ))  THEN
             LPBAR = LPBAR + 1
-
+ 
          ELSE IF (CARD(1:5) == 'PBARL'   )  THEN
             LPBAR  = LPBAR  + 1
             NPBARL = NPBARL + 1
-
+ ! --- cbeam_add begin --- !
+         ELSE IF (CARD(1:6) == 'PBEAML'  )  THEN
+            LPBEAM = LPBEAM + 1
+ ! --- cbeam_add end --- !
          ELSE IF (CARD(1:5) == 'PBEAM'   )  THEN
             LPBEAM = LPBEAM + 1
-
+ 
          ELSE IF (CARD(1:5) == 'PBUSH'   )  THEN
             LPBUSH = LPBUSH + 1
-
+ 
          ELSE IF (CARD(1:5) == 'PCOMP'   )  THEN
             LPCOMP = LPCOMP + 1
             CALL BD_PCOMP0 ( CARD, LARGE_FLD_INP, IPLIES )
@@ -406,19 +412,24 @@
 
          ELSE IF (CARD(1:5) == 'PELAS'   )  THEN
             LPELAS = LPELAS + 1
-
-         ELSE IF (CARD(1:6) == 'PLOAD2'  )  THEN
-            LPDAT  = LPDAT  + MPDAT_PLOAD2
+ ! --- cbeam_add begin --- !
+         ELSE IF ((CARD(1:6) == 'PLOAD1'  ) .OR. (CARD(1:6) == 'PLOAD2'  ))  THEN
+            IF (CARD(1:6) == 'PLOAD1') THEN
+               LPDAT  = LPDAT  + MPDAT_PLOAD1               ! Beam/bar PLOAD1 data slots
+            ELSE
+               LPDAT  = LPDAT  + MPDAT_PLOAD2
+            ENDIF
             LPLOAD = LPLOAD + 1
+ ! --- cbeam_add end --- !
 
          ELSE IF (CARD(1:6) == 'PLOAD4'  )  THEN
             LPDAT  = LPDAT  + MPDAT_PLOAD4
             LPLOAD = LPLOAD + 1
-
+ 
          ELSE IF (CARD(1:6) == 'PLOTEL'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_PLOTEL
-
+ 
          ELSE IF (CARD(1:5) == 'PMASS'   )  THEN
             LPMASS = LPMASS + 4
 
@@ -427,19 +438,19 @@
 
          ELSE IF (CARD(1:6) == 'PSHEAR'  )  THEN
             LPSHEAR = LPSHEAR + 1
-
+  
          ELSE IF (CARD(1:6) == 'PSHELL'  )  THEN
             LPSHEL = LPSHEL + 1
-
+  
          ELSE IF (CARD(1:6) == 'PSOLID'  )  THEN
             LPSOLID = LPSOLID + 1
-
+  
          ELSE IF (CARD(1:6) == 'PUSER1'  )  THEN
             LPUSER1 = LPUSER1 + 1
-
+  
          ELSE IF (CARD(1:7) == 'PUSERIN' )  THEN
             LPUSERIN = LPUSERIN + 1
-
+  
          ELSE IF (CARD(1:4) == 'RBAR'    ) THEN
             LRIGEL  = LRIGEL + 1
 
@@ -458,27 +469,30 @@
 
          ELSE IF (CARD(1:6) == 'RFORCE'  )  THEN
             LRFORCE = LRFORCE + 1
-
+ 
          ELSE IF (CARD(1:7) == 'RSPLINE' )  THEN
             CALL BD_RSPLINE0 ( CARD, LARGE_FLD_INP, IRSPLINE )
             LRIGEL = LRIGEL + 1
             IF (IRSPLINE > MRSPLINE) THEN
                MRSPLINE = IRSPLINE
             ENDIF
-
+ 
          ELSE IF (CARD(1:5) == 'SLOAD'   )  THEN
             CALL BD_SLOAD0 ( CARD, DELTA_SLOAD )
             LSLOAD = LSLOAD + DELTA_SLOAD
-
+ 
          ELSE IF (CARD(1:5) == 'SEQGP'   )  THEN
             LSEQ = LSEQ + 4                                ! Conservative estimate. There can only be 4 entries per card
 
          ELSE IF (CARD(1:5) == 'SNORM'   )  THEN
             LSNORM = LSNORM + 1
-
+ 
          ELSE IF((CARD(1:4) == 'SPC '    ) .OR. (CARD(1:4) == 'SPC*'    )) THEN
             LSPC = LSPC + 1
-
+ ! --- cbeam_add begin --- !
+         ELSE IF (CARD(1:4) == 'SPCD'    )  THEN
+            LSPC = LSPC + 1
+ ! --- cbeam_add end --- !
          ELSE IF (CARD(1:4) == 'SPC1'    )  THEN
             LSPC1 = LSPC1 + 1
 
@@ -497,22 +511,21 @@
 
          ELSE IF (CARD(1:6) == 'TEMPRB'  )  THEN
             LTDAT = LTDAT + MTDAT_TEMPRB
-
+ 
          ELSE IF (CARD(1:6) == 'TEMPP1'  )  THEN
             LTDAT = LTDAT + MTDAT_TEMPP1
 
          ELSE IF (CARD(1:7) == 'ENDDATA' )  THEN
-            EXIT
-
+            EXIT          
+ 
          ENDIF
-
+ 
       ENDDO
 
-! ! Reset FATAL_ERR to 0. Errors that incremented FATAL_ERR in LOADBO (and routines it calls) will be recorded and
+! ! Reset FATAL_ERR to 0. Errors that incremented FATAL_ERR in LOADBO (and routines it calls) will be recorded and 
 ! ! reported when LOADB runs.
-! !
-! !   FATAL_ERR = 0
-
+! ! 
+! !   FATAL_ERR = 0 
 
       RETURN
 
@@ -524,5 +537,6 @@
  1011 FORMAT(' *ERROR  1011: NO ',A10,' ENTRY FOUND BEFORE END OF FILE OR END OF RECORD IN INPUT FILE')
 
 ! **********************************************************************************************************************************
-
+ 
       END SUBROUTINE LOADB0
+

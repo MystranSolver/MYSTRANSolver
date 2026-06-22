@@ -1,28 +1,28 @@
 ! ##################################################################################################################################
-! Begin MIT license text.
+! Begin MIT license text.                                                                                    
 ! _______________________________________________________________________________________________________
-
-! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)
-
-! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+                                                                                                         
+! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)                                              
+                                                                                                         
+! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and      
 ! associated documentation files (the "Software"), to deal in the Software without restriction, including
 ! without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
-! the following conditions:
-
-! The above copyright notice and this permission notice shall be included in all copies or substantial
-! portions of the Software and documentation.
-
-! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-! THE SOFTWARE.
+! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to   
+! the following conditions:                                                                              
+                                                                                                         
+! The above copyright notice and this permission notice shall be included in all copies or substantial   
+! portions of the Software and documentation.                                                                              
+                                                                                                         
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS                                
+! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                            
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE                            
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                                 
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,                          
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN                              
+! THE SOFTWARE.                                                                                          
 ! _______________________________________________________________________________________________________
-
-! End MIT license text.
+                                                                                                        
+! End MIT license text.                                                                                      
 
       MODULE PARAMS
 
@@ -30,7 +30,7 @@
 
       USE PENTIUM_II_KIND, ONLY :  BYTE, LONG, DOUBLE
       USE CONSTANTS_1, ONLY     :  ONEPM5, ONEPM6, ONEPM8, ONEPM15, ONEPM14, ZERO, QUARTER, TENTH, ONE, TWO, THREEP6, FIVE, SIX,   &
-                                   ONEPP6, ONEPP7, ONE_THOUSAND
+                                   ONEPP6, ONEPP7, ONE_THOUSAND 
       USE SCONTR, ONLY          :  MEPSIL, TSET_CHR_LEN
 
       IMPLICIT NONE
@@ -44,9 +44,9 @@
 ! Parameters used ------------------------------------------------------------------------------------------------------------------
 ! >>>>>>>>>>>>>>>
 
-      REAL(DOUBLE)             :: ARP_TOL        =   1.0E-09 ! Input to ARPACK subr dsband to decide convergence in subr dsconv.
+      REAL(DOUBLE)             :: ARP_TOL        =   1.0E-9    ! Input to ARPACK subr dsband to decide convergence in subr dsconv.
 !                                                              NOTE: if a value of -1. is input on a PARAM ARP_TOL entry, then the
-!                                                                    Lanczos algorithm will use machine precision for ARP_TOL
+!                                                                    Lanczos algorithm will use machine precision for ARP_TOL !ONEPM6 
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  1*BYTE)      :: ART_KED        =    'N'    ! Indicates whether to add artificial differ stiff terms to KED
@@ -60,20 +60,24 @@
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  1*BYTE)      :: AUTOSPC        =    'Y'    ! 'Y'/'N' indicates whether to use automatic SPC for singular DOF's
-      REAL(DOUBLE)             :: AUTOSPC_RAT    =   ONEPM8
+      REAL(DOUBLE)             :: AUTOSPC_RAT    =   ONEPM8  
                                                              !*For each of the 2 3x3 (K33) stiffness matrices for a grid, the ratio
 !                                                              of each of the 3 eigenvalues of K33 to the max eigenvalue is calc'd.
 !                                                              For any ratio <= AUTOSPC_RAT, a component will be AUTOSPC'd. The
 !                                                              grid comp that is AUTOSPC'd is the one whose eigenvector value for
-!                                                              that eigenvalue is maximum.
+!                                                              that eigenvalue is maximum.  
       INTEGER(LONG)            :: AUTOSPC_NSET   =     1     !*If = 1, SPC KNN for null rows. If 2, SPC KNN for small diag terms
-!                                                              If = 3, do both
+!                                                              If = 3, do both                               
       CHARACTER(  1*BYTE)      :: AUTOSPC_INFO   =    'N'    ! If 'Y' print information on AUTOSPC's
       CHARACTER(  1*BYTE)      :: AUTOSPC_SPCF   =    'N'    ! If 'Y' write SPC forces on SA DOF's in subr OFP2
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: BAILOUT        =     0     ! If >= 0 quit if a singularity in decomposing a matrix is detected
 
+! ----------------------------------------------------------------------------------------------------------------------------------
+! --- banded_optimization begin --- !
+      CHARACTER(  1*BYTE)      :: BANDEDOPT      =    'N'    ! 'Y'/'N' enable experimental banded-order optimization path RCM
+! --- banded_optimization end --- !
 ! ----------------------------------------------------------------------------------------------------------------------------------
       REAL(DOUBLE)             :: CBMIN3         =  TWO      ! Trans shear factor for MIN3  triangle elems (TRIA3)
 
@@ -83,6 +87,57 @@
 ! ----------------------------------------------------------------------------------------------------------------------------------
       REAL(DOUBLE)             :: CBMIN4T        =  THREEP6  ! Trans shear factor for MIN4T quad    elems (QUAD4, QUAD4TYP='MIN4T ')
 
+! ----------------------------------------------------------------------------------------------------------------------------------
+! --- cbeam_add begin --- !
+      REAL(DOUBLE)             :: CBEAMSHR       =  ONE      ! Global multiplier on beam shear factors K1/K2 before CBAR/CBEAM
+!                                                              stiffness assembly. 0.0 gives Bernoulli/no-shear behavior.
+      INTEGER(LONG), PARAMETER :: MCBEAMSHR_PID  =   200     ! Max per-property beam shear overrides from PARAM,CBEAMSHR,value,PID
+      INTEGER(LONG)            :: NCBEAMSHR_PID  =     0     ! Number of active per-property beam shear overrides
+      INTEGER(LONG)            :: CBEAMSHR_PID(MCBEAMSHR_PID) = 0
+      REAL(DOUBLE)             :: CBEAMSHR_VAL(MCBEAMSHR_PID) = ONE
+      REAL(DOUBLE)             :: CBEAMAREA      =  ONE      ! Global multiplier on beam stiffness area before CBAR/CBEAM
+!                                                              stiffness assembly. Mass and self-weight continue to use geometric area.
+      INTEGER(LONG), PARAMETER :: MCBEAMAREA_PID =   200     ! Max per-property beam area overrides from PARAM,CBEAMAREA,value,PID
+      INTEGER(LONG)            :: NCBEAMAREA_PID =     0     ! Number of active per-property beam area overrides
+      INTEGER(LONG)            :: CBEAMAREA_PID(MCBEAMAREA_PID) = 0
+      REAL(DOUBLE)             :: CBEAMAREA_VAL(MCBEAMAREA_PID) = ONE
+
+      REAL(DOUBLE)             :: BEAMAMO       =  ONE      ! Global multiplier on beam axial stiffness EA before CBAR/CBEAM
+      INTEGER(LONG), PARAMETER :: MBEAMAMO_PID  =   200     ! Max per-property beam axial overrides from PARAM,BEAMAMO,value,PID
+      INTEGER(LONG)            :: NBEAMAMO_PID  =     0     ! Number of active per-property beam axial overrides
+      INTEGER(LONG)            :: BEAMAMO_PID(MBEAMAMO_PID) = 0
+      REAL(DOUBLE)             :: BEAMAMO_VAL(MBEAMAMO_PID) = ONE
+
+      REAL(DOUBLE)             :: BEAMV1MO       =  ONE      ! Global multiplier on beam plane-1 stiffness before CBAR/CBEAM
+      INTEGER(LONG), PARAMETER :: MBEAMV1MO_PID  =   200     ! Max per-property beam plane-1 overrides from PARAM,BEAMV1MO,value,PID
+      INTEGER(LONG)            :: NBEAMV1MO_PID  =     0     ! Number of active per-property beam plane-1 overrides
+      INTEGER(LONG)            :: BEAMV1MO_PID(MBEAMV1MO_PID) = 0
+      REAL(DOUBLE)             :: BEAMV1MO_VAL(MBEAMV1MO_PID) = ONE
+
+      REAL(DOUBLE)             :: BEAMV2MO       =  ONE      ! Global multiplier on beam plane-2 stiffness before CBAR/CBEAM
+      INTEGER(LONG), PARAMETER :: MBEAMV2MO_PID  =   200     ! Max per-property beam plane-2 overrides from PARAM,BEAMV2MO,value,PID
+      INTEGER(LONG)            :: NBEAMV2MO_PID  =     0     ! Number of active per-property beam plane-2 overrides
+      INTEGER(LONG)            :: BEAMV2MO_PID(MBEAMV2MO_PID) = 0
+      REAL(DOUBLE)             :: BEAMV2MO_VAL(MBEAMV2MO_PID) = ONE
+
+      REAL(DOUBLE)             :: BEAMM1MO       =  ONE      ! Global multiplier on beam major-axis bending stiffness EI1 before CBAR/CBEAM
+      INTEGER(LONG), PARAMETER :: MBEAMM1MO_PID  =   200     ! Max per-property beam major-bending overrides from PARAM,BEAMM1MO,value,PID
+      INTEGER(LONG)            :: NBEAMM1MO_PID  =     0     ! Number of active per-property beam major-bending overrides
+      INTEGER(LONG)            :: BEAMM1MO_PID(MBEAMM1MO_PID) = 0
+      REAL(DOUBLE)             :: BEAMM1MO_VAL(MBEAMM1MO_PID) = ONE
+
+      REAL(DOUBLE)             :: BEAMM2MO       =  ONE      ! Global multiplier on beam minor-axis bending stiffness EI2 before CBAR/CBEAM
+      INTEGER(LONG), PARAMETER :: MBEAMM2MO_PID  =   200     ! Max per-property beam minor-bending overrides from PARAM,BEAMM2MO,value,PID
+      INTEGER(LONG)            :: NBEAMM2MO_PID  =     0     ! Number of active per-property beam minor-bending overrides
+      INTEGER(LONG)            :: BEAMM2MO_PID(MBEAMM2MO_PID) = 0
+      REAL(DOUBLE)             :: BEAMM2MO_VAL(MBEAMM2MO_PID) = ONE
+
+      REAL(DOUBLE)             :: BEAMTMO       =  ONE      ! Global multiplier on beam torsional stiffness GJ before CBAR/CBEAM
+      INTEGER(LONG), PARAMETER :: MBEAMTMO_PID  =   200     ! Max per-property beam torsion overrides from PARAM,BEAMTMO,value,PID
+      INTEGER(LONG)            :: NBEAMTMO_PID  =     0     ! Number of active per-property beam torsion overrides
+      INTEGER(LONG)            :: BEAMTMO_PID(MBEAMTMO_PID) = 0
+      REAL(DOUBLE)             :: BEAMTMO_VAL(MBEAMTMO_PID) = ONE
+! --- cbeam_add end --- !
 ! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  1*BYTE)      :: CHKGRDS        =    'Y'    ! If 'Y' call GET_ELEM_AGRID_BGRID to check all grids on elems exist
 
@@ -103,7 +158,7 @@
 !                                                              (i.e 1346 would be written as 1 34 6)
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: DARPACK        =     2     ! Delta to add to EIG_N2 so that ARPACK will find a few more eigens
+      INTEGER(LONG)            :: DARPACK        =     2     ! Delta to add to EIG_N2 so that ARPACK will find a few more eigens 
 !                                                              than user requested (since higher ones seem to be a little bad)
 
       INTEGER(LONG)            :: DELBAN         =     1     ! Delete the Bandit files left over, 0 is not to. 1 is to delete them.
@@ -148,7 +203,7 @@
       CHARACTER(  1*BYTE)      :: PRTNEU         =    'N'    ! 'Y', 'N' flag to write all neu outputs regardless of other flags besides PRTALL
       CHARACTER(  1*BYTE)      :: PRTOP2         =    'N'    ! 'Y', 'N' flag to write all op2 outputs regardless of other flags besides PRTALL
 
-! case 1: PRTALL=Y, PRTOP2=N -> all op2 output will be created and all neu output
+! case 1: PRTALL=Y, PRTOP2=N -> all op2 output will be created and all neu output 
 ! case 2: PRTALL=N, PRTOP2=Y -> all op2 output will be created
 ! case 3: PRTALL=N, PRTOP2=N -> do whatever the case control says
 ! ----------------------------------------------------------------------------------------------------------------------------------
@@ -157,10 +212,13 @@
       INTEGER(LONG)            :: GRDPNT_IN      =    -1     ! Value of GRDPNT read in the Bulk Data File
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
+! --- banded_optimization begin --- !
       CHARACTER(  8*BYTE)      :: GRIDSEQ        = 'INPUT   '! Method for sequencing grids:
 !                                                              BANDIT for bandit auto grid swquencing
 !                                                              GRID for grid numerical order
 !                                                              INPUT for grid input order
+!                                                              RCM for reserved/add-on RCM path (currently mapped to INPUT flow)
+! --- banded_optimization end --- !
       CHARACTER(  1*BYTE)      :: SEQQUIT        =    'N'    !*'Y', 'N' indicator to stop processing if G.P. auto sequencing failed
 !                                                               (goes in field 4 of PARAM GRIDSEQ entry)
       CHARACTER(  1*BYTE)      :: SEQPRT         =    'N'    !*'Y', 'N' indicator to print SEQGP card images from bandit
@@ -171,7 +229,7 @@
 !                                                              'SPLITD', use angle that splits the 2 diags to define the elem x axis
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: IORQ1M         =     2     ! Integration order for membrane         strains for QUAD4,4K
+      INTEGER(LONG)            :: IORQ1M         =     2     ! Integration order for membrane         strains for QUAD4,4K    
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: IORQ1S         =     1     ! Integration order for in-plane shear   strains for QUAD4,4K
@@ -195,10 +253,17 @@
       CHARACTER(  1*BYTE)      :: KOORAT         =    'Y'    ! 'Y', 'N' to tell whether to calc ratio of max/min KOO diagonal terms
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
+! --- dense_subspace_feast_add  begin --- !
+      CHARACTER(  6*BYTE)      :: LANCMETH       = 'ARPACK'  ! Lanczos backend:
+!                                                              ARPACK (implemented)
+!                                                              FEAST / CHASE (accepted; currently fallback to ARPACK in LINK4)
+! --- dense_subspace_feast_add  end --- !
+
+! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  1*BYTE)      :: MATSPARS       =    'Y'    ! 'Y' for use of sparse SFF, SFS, SSS or 'N' for full matrix add/mult
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      REAL(DOUBLE)             :: MAXRATIO       =  ONEPP7   ! Max value of matrix diagonal to factor diagonal before messages are
+      REAL(DOUBLE)             :: MAXRATIO       =  ONEPP7   ! Max value of matrix diagonal to factor diagonal before messages are 
 !                                                              written and BAILOUT tested for aborting run
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
@@ -230,7 +295,7 @@
       INTEGER(LONG)            :: MXITERI        =    50     ! Max number of iterations in Inverse Power eigenvalue method
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: MXITERL        =    300     ! Max number of iterations in Lanczos eigenvalue method
+      INTEGER(LONG)            :: MXITERL        =    50     ! Max number of iterations in Lanczos eigenvalue method
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: OTMSKIP        =     0     ! Number of lines to skip between segments of OTM text file output
@@ -265,7 +330,7 @@
       INTEGER(LONG)            :: PRTBASIC       =     0     ! If = 1, print grids in the basic coordinate system
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: PRTCGLTM       =     0     ! If = 1, print CB matrix CG_LTM
+      INTEGER(LONG)            :: PRTCGLTM       =     0     ! If = 1, print CB matrix CG_LTM  
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: PRTCONN        =     0     ! If = 1, print table of elements connected to each grid
@@ -303,10 +368,10 @@
       INTEGER(LONG)            :: PRTHMN         =     0     ! If = 1, print HMN constraint matrix
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: PRTIFLTM       =     0     ! If = 1, print CB matrix IF_LTM
+      INTEGER(LONG)            :: PRTIFLTM       =     0     ! If = 1, print CB matrix IF_LTM  
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: PRTKXX         =     0     ! If = 1, print CB matrix KXX
+      INTEGER(LONG)            :: PRTKXX         =     0     ! If = 1, print CB matrix KXX  
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: PRTMASS(5)     =     (/0,0,0,0,0/)
@@ -324,17 +389,17 @@
 !                                                                   PRTMASSD(4) = 1 prints diag of MAA
 !                                                                   PRTMASSD(5) = 1 prints diag of MLL
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: PRTMXX         =     0     ! If = 1, print CB matrix MXX
+      INTEGER(LONG)            :: PRTMXX         =     0     ! If = 1, print CB matrix MXX  
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: PRTOU4         =     0     ! If > 0, print all OU4 matrices written to OPi files for a run
+      INTEGER(LONG)            :: PRTOU4         =     0     ! If > 0, print all OU4 matrices written to OPi files for a run 
       INTEGER(LONG)            :: PRTOU4_FMT     =     0     ! Format to write OU4 matrices
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: PRTPHIXA       =     0     ! If = 1, print CB matrix PHIXA
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      INTEGER(LONG)            :: PRTPHIZL       =     0     ! If = 1, print CB matrix PHIZL
+      INTEGER(LONG)            :: PRTPHIZL       =     0     ! If = 1, print CB matrix PHIZL  
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: PRTQSYS        =     0     ! Print QSYS matrix
@@ -391,7 +456,7 @@
 ! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  6*BYTE)      :: QUAD4TYP       =  'MIN4  ' ! Which element to use in MYSTRAN as the QUAD4 element
 !                                                              'MIN4T ': Use Tessler's MIN4T element made up of 4 MIN3 triangles
-!                                                              'MIN4  ': Use Tessler's MIN4 element
+!                                                              'MIN4  ': Use Tessler's MIN4 element 
 !                                                              'MITC4 ': Use Bathe's MITC4 (1983)
 !                                                              'MITC4+': Use Ko/Bathe's 2nd MITC4+ (Nov 2016)
 
@@ -406,7 +471,7 @@
 !                                                              If = 0 then estimate of LTERM is based on full elem KE
 !                                                                     matrices unconnected (i.e. connected DOF's recounted)
 !                                                              If = 1 then estimate of LTERM is based on matrix bandwidth
-!                                                                     from BANDIT times number of rows in stiff matrix.
+!                                                                     from BANDIT times number of rows in stiff matrix.  
 !                                                              If = 2 then estimate of LTERM is based on actual elem KE
 !                                                                     matrices unconnected.
 !                                                              If = 3 then the value in field 4 of the PARAM SETLKTK card is
@@ -420,7 +485,7 @@
 !                                                              If = 0 then estimate of LTERM_MGGE is based on full elem ME
 !                                                                     matrices unconnected (i.e. connected DOF's recounted)
 !                                                              If = 3 then estimate of LTERM_MGGE is based on actual elem ME
-!                                                                     matrices unconnected.
+!                                                                     matrices unconnected.  
       CHARACTER(  1*BYTE)      :: EMP0_PAUSE     =    'N'    !*Flag to indicate "PAUSE" LINK1 after subr EMP0
 !                                                             (goes in field 4 of PARAM SETLKTM entry)
 
@@ -440,7 +505,7 @@
       CHARACTER(  8*BYTE)      :: SOLLIB         = 'SPARSE  '! If 'BANDED  ', use LAPACK and ARPACK for eqn soln and eigens.
 !                                                              If 'SPARSE  ', use value determined by parameter SPARSE_FLAVOR
 !                                                              defined in field 4 of the PARAM, SOLLIB entry
-
+                                                             
       CHARACTER(  8*BYTE)      :: SPARSE_FLAVOR  = 'SUPERLU '! This denotes which SPARSE SOLLIB to use. Currently SuperLU is the
 !                                                              only option
 
@@ -469,14 +534,14 @@
       CHARACTER(  1*BYTE)      :: SUPWARN        =    'Y'    ! 'Y', 'N' indicator to supress warn msg's in the F06 file
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      REAL(DOUBLE)             :: THRESHK        =  TENTH    !*Actual value used for threshold in deciding whether to equilibrate
+      REAL(DOUBLE)             :: THRESHK        =  TENTH    !*Actual value used for threshold in deciding whether to equilibrate 
 !                                                              stiffness matrix in LAPACK subr DLAQSB in module LAPACK_BLAS_AUX_1
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       REAL(DOUBLE)             :: TINY           =  ZERO     ! Filter for small terms in matrix print
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      REAL(DOUBLE)             :: TSTM_DEF       =  FIVE/SIX ! Default value for TS/TM on PSHEL cards. Can be reset with PARAM card
+      REAL(DOUBLE)             :: TSTM_DEF       =  FIVE/SIX ! Default value for TS/TM on PSHEL cards. Can be reset with PARAM card 
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: USR_JCT        =     0     ! User supplied (PARAM B.D. card) value for JCT - used in sort subr's
@@ -510,5 +575,6 @@
 
       INTEGER(LONG)            :: SLU_NTHR        =    0     ! Number of threads for SuperLU_MT.
                                                              ! Using 0 will use as many threads as the system has.
-
       END MODULE PARAMS
+
+!---  cbeam add --- end!

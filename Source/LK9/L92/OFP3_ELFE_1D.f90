@@ -1,4 +1,4 @@
-! ##################################################################################################################################
+﻿! ##################################################################################################################################
 ! Begin MIT license text.
 ! _______________________________________________________________________________________________________
 
@@ -42,6 +42,12 @@
                                          PE_GA_GB, PEL, PLY_NUM, STRESS, TE, TE_GA_GB, TYPE, XEL
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, MAXREQ, OGEL
       USE OUTPUT4_MATRICES, ONLY      :  OTM_ELFE, TXT_ELFE
+!--- cbeam_add begin --- ! 
+      USE SCONTR, ONLY                :  NCBEAM
+      USE DEBUG_PARAMETERS, ONLY      :  DEBUG
+      USE MODEL_STUF, ONLY            :  AGRID, CBEAM_ACTIVE_NSTATIONS, CBEAM_ACTIVE_XL, PBEAM_NSTATIONS, PRESS
+      USE LINK9_STUFF, ONLY           :  CBEAM_XL_OUT,GID_OUT_ARRAY
+!--- cbeam_add end --- ! 
 
       USE OFP3_ELFE_1D_USE_IFs
 
@@ -64,14 +70,22 @@
 !xx   INTEGER(LONG)                   :: IROW_MAT          ! Row number in OTM's
 !xx   INTEGER(LONG)                   :: IROW_TXT          ! Row number in OTM text file
       INTEGER(LONG)                   :: NELREQ(METYPE)    ! Count of the no. of requests for ELFORCE(NODE or ENGR) or STRESS
+
       INTEGER(LONG)                   :: NDUM              ! An arg passed to CALC_ELEM_STRESSES
       INTEGER(LONG)                   :: NUM_ELEM          ! No. elems processed prior to writing results to F06 file
       INTEGER(LONG)                   :: NUM_FROWS         ! No. elems processed for FEMAP
       INTEGER(LONG)                   :: NUM_OGEL          ! No. rows written to array OGEL prior to writing results to F06 file
+! --- cbeam_add begin --- !
+      INTEGER(LONG)                   :: NREQ_ELEM         ! Actual number of engineering-force rows for current element
+      INTEGER(LONG)                   :: NSTA             ! Active number of CBEAM stations for the current element
+      INTEGER(LONG)                   :: ISTA             ! CBEAM station loop index
+      INTEGER(LONG)                   :: WRITE_NUM_PTS    ! NUM_PTS argument for WRITE_ELEM_ENGR_FORCE
+      INTEGER(LONG)                   :: OGEL_ENDA_ROW    ! OGEL row for the x/L = 0.0 CBEAM endpoint
+      INTEGER(LONG)                   :: OGEL_ENDB_ROW    ! OGEL row for the x/L = 1.0 CBEAM endpoint
 !                                                            (this can be > NUM_ELEM since more than 1 row is written to OGEL
 !                                                            for ELFORCE(NODE) - elem nodal forces)
                                                            ! Indicator for output of elem data to BUG file
-
+! --- cbeam_add end --- !
 
       REAL(DOUBLE)                    :: DUM0(6,12)        ! Intermediate matrix in a calc
       REAL(DOUBLE)                    :: DUM1(6)           ! Intermediate matrix in a calc
@@ -79,11 +93,27 @@
       REAL(DOUBLE)                    :: DUM22(3)          ! Intermediate matrix in a calc
       REAL(DOUBLE)                    :: DUM31(3)          ! Intermediate matrix in a calc
       REAL(DOUBLE)                    :: DUM32(3)          ! Intermediate matrix in a calc
-      REAL(DOUBLE)                    :: EEF(6)            ! Element engineering force for BUSH
+      REAL(DOUBLE)                    :: EEF(6) = ZERO     ! Element engineering force for BUSH/1D force work arrays
       REAL(DOUBLE)                    :: DX,DY,DZ          ! Offset dist1
       REAL(DOUBLE)                    :: FORCES(12)        ! Forces at the grid points
       REAL(DOUBLE)                    :: LENGTH
-
+! --- cbeam_add begin --- !
+      REAL(DOUBLE)                    :: DT
+      REAL(DOUBLE)                    :: GRAD
+      REAL(DOUBLE)                    :: M1_CORR
+      REAL(DOUBLE)                    :: M2_CORR
+      REAL(DOUBLE)                    :: P1_LOC
+      REAL(DOUBLE)                    :: P2_LOC
+      REAL(DOUBLE)                    :: T_CUT
+      REAL(DOUBLE)                    :: V1_CORR
+      REAL(DOUBLE)                    :: V2_CORR
+      REAL(DOUBLE)                    :: X1L
+      REAL(DOUBLE)                    :: X2L
+      REAL(DOUBLE)                    :: XI_REL
+      REAL(DOUBLE)                    :: XI_SPAN
+      REAL(DOUBLE)                    :: XI_STA
+      REAL(DOUBLE)                    :: XI_TOL
+! --- cbeam_add end --- !
       ! OP2 parameters
       INTEGER(LONG)                   :: ITABLE            ! the op2 subtable number
       CHARACTER(8*BYTE)               :: TABLE_NAME        ! the op2 table name
@@ -95,6 +125,7 @@
       INTRINSIC IAND
 
 ! **********************************************************************************************************************************
+! --- op2_upgraded begin --- !
 !     Initialize
       TABLE_NAME = "OEF ERR "
       ITABLE = 0
@@ -110,9 +141,10 @@
       OPT(2) = 'Y'                                         ! OPT(2) is for calc of PTE
       OPT(3) = 'Y'                                         ! OPT(3) is for calc of SEi, STEi
       OPT(4) = 'Y'                                         ! OPT(4) is for calc of KE-linear
-      OPT(5) = 'N'                                         ! OPT(5) is for calc of PPE
+      OPT(5) = 'Y'                                         ! OPT(5) is for calc of PPE 
+! --- cbeam_add begin --- ! >> change to 'Y' from 'N' PPE
       OPT(6) = 'N'                                         ! OPT(6) is for calc of KE-diff stiff
-
+! --- cbeam_add end --- !
       FORCE_ITEM(1) = 'M1a: Mom Plane1 EndA'
       FORCE_ITEM(2) = 'M1b: Mom Plane2 EndA'
       FORCE_ITEM(3) = 'M2a: Mom Plane1 EndB'
@@ -129,13 +161,23 @@
       ENDDO
 
       DO I=1,METYPE
-         DO J=1,NELE
-            IF ((ETYPE(J)(1:3) == 'BAR') .OR. (ETYPE(J)(1:4) == 'BUSH') .OR. (ETYPE(J)(1:4) == 'ELAS') .OR.                        &
-                (ETYPE(J)(1:3) == 'ROD'))THEN
+         DO J=1,NELE	
+! added CBEAM >> (ETYPE(J)(1:4) == 'BEAM') 
+
+            IF ((ETYPE(J)(1:3) == 'BAR') .OR. (ETYPE(J)(1:4) == 'BEAM') .OR. (ETYPE(J)(1:4) == 'BUSH') .OR.                       &
+                (ETYPE(J)(1:4) == 'ELAS') .OR. (ETYPE(J)(1:3) == 'ROD'))THEN
                IF (ETYPE(J) == ELMTYP(I)) THEN
                   ELOUT_ELFE = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_ELFE_BIT))
                   IF (ELOUT_ELFE > 0) THEN
-                     NELREQ(I) = NELREQ(I) + 1
+
+! --- cbeam_add begin --- !
+                     NREQ_ELEM = 1
+                     IF (ETYPE(J)(1:4) == 'BEAM') THEN
+                        NREQ_ELEM = PBEAM_NSTATIONS(EDAT(EPNT(J)+1))
+                        IF (NREQ_ELEM <= 0) NREQ_ELEM = 5
+                     ENDIF
+                     NELREQ(I) = NELREQ(I) + NREQ_ELEM 
+! --- cbeam_end begin --- ! 
                    ENDIF
                ENDIF
             ENDIF
@@ -144,6 +186,8 @@
 
       OGEL = ZERO
 
+
+
 !xx   IROW_MAT = 0
 !xx   IROW_TXT = 0
       OT4_DESCRIPTOR = 'Element engineering force, ELFO'
@@ -151,12 +195,15 @@ reqs2:DO I=1,METYPE
          IF (NELREQ(I) == 0) CYCLE reqs2
          NUM_ELEM  = 0
          NUM_OGEL = 0
-
+! --- cbeam_add begin --- !
+         WRITE_NUM_PTS = 1
+! --- cbeam_add end --- !
 elems_2: DO J = 1,NELE
             EID   = EDAT(EPNT(J))
             TYPE  = ETYPE(J)
-            IF ((ETYPE(J)(1:3) == 'BAR') .OR. (ETYPE(J)(1:4) == 'BUSH') .OR. (ETYPE(J)(1:4) == 'ELAS') .OR.                        &
-                (ETYPE(J)(1:3) == 'ROD'))THEN
+! added CBEAM 
+            IF ((ETYPE(J)(1:3) == 'BAR') .OR. (ETYPE(J)(1:4) == 'BEAM') .OR. (ETYPE(J)(1:4) == 'BUSH') .OR.                       &
+                (ETYPE(J)(1:4) == 'ELAS') .OR. (ETYPE(J)(1:3) == 'ROD'))THEN
 
                IF (ETYPE(J) == ELMTYP(I)) THEN
                   DO K=0,MBUG-1
@@ -164,7 +211,6 @@ elems_2: DO J = 1,NELE
                   ENDDO
                   ELOUT_ELFE = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_ELFE_BIT))
                   IF (ELOUT_ELFE > 0) THEN
-
                      PLY_NUM = 0                           ! 'N' in call to EMG means do not write to BUG file
                      CALL EMG ( J   , OPT, 'N', SUBR_NAME, 'N' )
                      IF (NUM_EMG_FATAL_ERRS > 0) THEN
@@ -174,17 +220,25 @@ elems_2: DO J = 1,NELE
                      CALL ELMDIS
 
                      CALL CALC_ELEM_NODE_FORCES            ! Use NODE to get engr forces (SE matrices don't have torque)
-
-                     NUM_OGEL = NUM_OGEL + 1
-                     IF (NUM_OGEL > MAXREQ) THEN
-                        WRITE(ERR,9200) SUBR_NAME, MAXREQ
-                        WRITE(F06,9200) SUBR_NAME, MAXREQ
-                        FATAL_ERR = FATAL_ERR + 1
-                        CALL OUTA_HERE ( 'Y' )             ! Coding error (dim of array OGEL too small), so quit
+! --- cbeam_add begin --- ! 
+                     NSTA = 1
+                     IF (ETYPE(J)(1:4) == 'BEAM') THEN
+                        NSTA = CBEAM_ACTIVE_NSTATIONS
+                        IF (NSTA <= 0) NSTA = 5
+                        IF (DEBUG(233) > 0) THEN
+                           WRITE(ERR,'("DBG_BEAM_PRE EID=",I8," NSTA=",I8," NUM_OGEL=",I8," NUM_ELEM=",I8)') EID, NSTA, NUM_OGEL, NUM_ELEM
+                        ENDIF
                      ENDIF
-
+! --- cbeam_add end --- !
 !                    ---------------------------------------------------------------------------------------------------------------
-                     IF (ETYPE(J)(1:4) == 'ELAS') THEN     ! Set engr forces based on the node force values
+                     IF (ETYPE(J)(1:4) == 'ELAS') THEN     ! Set engr forces based on the node force values	
+                        NUM_OGEL = NUM_OGEL + 1
+                        IF (NUM_OGEL > MAXREQ) THEN
+                           WRITE(ERR,9200) SUBR_NAME, MAXREQ
+                           WRITE(F06,9200) SUBR_NAME, MAXREQ
+                           FATAL_ERR = FATAL_ERR + 1
+                           CALL OUTA_HERE ( 'Y' )             ! Coding error (dim of array OGEL too small), so quit
+                        ENDIF
                         CALL ELEM_STRE_STRN_ARRAYS ( 1 )
                         NDUM = 0
                         CALL CALC_ELEM_STRESSES ( 1, NDUM, 0, 'N', 'N' )
@@ -196,6 +250,14 @@ elems_2: DO J = 1,NELE
                      ! end elas
 !                    ---------------------------------------------------------------------------------------------------------------
                      ELSE IF (ETYPE(J)(1:4) == 'BUSH') THEN
+! added OGEL for not crashing	
+                        NUM_OGEL = NUM_OGEL + 1
+                        IF (NUM_OGEL > MAXREQ) THEN
+                           WRITE(ERR,9200) SUBR_NAME, MAXREQ
+                           WRITE(F06,9200) SUBR_NAME, MAXREQ
+                           FATAL_ERR = FATAL_ERR + 1
+                           CALL OUTA_HERE ( 'Y' )
+                        ENDIF
                         DO K=1,3                           ! Calculate element forces in GA-GB axes (x along line from GA to GB)
                           DUM21(K) = ZERO
                           DUM22(K) = ZERO
@@ -273,11 +335,27 @@ elems_2: DO J = 1,NELE
                      ! end bush
 !                    ---------------------------------------------------------------------------------------------------------------
                      ELSE IF (ETYPE(J)(1:3) == 'ROD') THEN
+! added OGEL for not crashing	
+                        NUM_OGEL = NUM_OGEL + 1
+                        IF (NUM_OGEL > MAXREQ) THEN
+                           WRITE(ERR,9200) SUBR_NAME, MAXREQ
+                           WRITE(F06,9200) SUBR_NAME, MAXREQ
+                           FATAL_ERR = FATAL_ERR + 1
+                           CALL OUTA_HERE ( 'Y' )
+                        ENDIF
                         OGEL(NUM_OGEL,7) = -PEL(1)         ! Fx  (axial force for ROD)
                         OGEL(NUM_OGEL,8) = -PEL(4)         ! T   (torque for ROD)
                      !end rod
 !                    ---------------------------------------------------------------------------------------------------------------
                      ELSE IF (ETYPE(J)(1:3) == 'BAR') THEN
+! added OGEL for not crashing	
+                        NUM_OGEL = NUM_OGEL + 1
+                        IF (NUM_OGEL > MAXREQ) THEN
+                           WRITE(ERR,9200) SUBR_NAME, MAXREQ
+                           WRITE(F06,9200) SUBR_NAME, MAXREQ
+                           FATAL_ERR = FATAL_ERR + 1
+                           CALL OUTA_HERE ( 'Y' )
+                        ENDIF
                         LENGTH = ELEM_LEN_AB
                         OGEL(NUM_OGEL,1) = -PEL(6)                 ! M1a (bending moment, plane 1, end a for BAR)
                         OGEL(NUM_OGEL,2) =  PEL(5)                 ! M2a (bending moment, plane 2, end a for BAR)
@@ -287,6 +365,148 @@ elems_2: DO J = 1,NELE
                         OGEL(NUM_OGEL,6) = -PEL(3)                 ! V2  (plane 2 shear for BAR)
                         OGEL(NUM_OGEL,7) = -PEL(1)                 ! Fx  (axial force for BAR)
                         OGEL(NUM_OGEL,8) = -PEL(4)                 ! T   (torque for BAR)
+! --- cbeam_add begin --- !
+! --- cbeam_stations begin--- !
+                     ELSE IF (ETYPE(J)(1:4) == 'BEAM') THEN
+                        LENGTH = ELEM_LEN_AB
+                        DO ISTA=1,NSTA
+                           NUM_OGEL = NUM_OGEL + 1
+                           IF (NUM_OGEL > MAXREQ) THEN
+                              WRITE(ERR,9200) SUBR_NAME, MAXREQ
+                              WRITE(F06,9200) SUBR_NAME, MAXREQ
+                              FATAL_ERR = FATAL_ERR + 1
+                              CALL OUTA_HERE ( 'Y' )
+                           ENDIF
+                           XI_STA = CBEAM_ACTIVE_XL(ISTA)
+                           IF (NSTA == 1) XI_STA = ZERO
+                           M1_CORR = ZERO
+                           M2_CORR = ZERO
+                           V1_CORR = ZERO
+                           V2_CORR = ZERO
+
+                           P1_LOC = PRESS(1,INT_SC_NUM)
+                           P2_LOC = PRESS(2,INT_SC_NUM)
+                           X1L    = PRESS(3,INT_SC_NUM)
+                           X2L    = PRESS(4,INT_SC_NUM)
+                           IF (PRESS(25,INT_SC_NUM) > HALF) THEN
+                              P1_LOC = TE(2,2)*P1_LOC
+                              P2_LOC = TE(2,2)*P2_LOC
+                           ENDIF
+                           IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                              IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                                 V1_CORR = V1_CORR - P1_LOC
+                                 M1_CORR = M1_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                              ELSE
+                                 T_CUT = MIN(XI_STA, X2L)
+                                 IF (T_CUT > X1L) THEN
+                                    DT     = T_CUT - X1L
+                                    XI_REL = XI_STA - X1L
+                                    XI_SPAN= X2L - X1L
+                                    GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                                    V1_CORR = V1_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                                    M1_CORR = M1_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT)                        &
+                                              + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                                 ENDIF
+                              ENDIF
+                           ENDIF
+
+                           P1_LOC = PRESS(5,INT_SC_NUM)
+                           P2_LOC = PRESS(6,INT_SC_NUM)
+                           X1L    = PRESS(7,INT_SC_NUM)
+                           X2L    = PRESS(8,INT_SC_NUM)
+                           IF (PRESS(26,INT_SC_NUM) > HALF) THEN
+                              P1_LOC = TE(2,3)*P1_LOC
+                              P2_LOC = TE(2,3)*P2_LOC
+                           ENDIF
+                           IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                              IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                                 V1_CORR = V1_CORR - P1_LOC
+                                 M1_CORR = M1_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                              ELSE
+                                 T_CUT = MIN(XI_STA, X2L)
+                                 IF (T_CUT > X1L) THEN
+                                    DT     = T_CUT - X1L
+                                    XI_REL = XI_STA - X1L
+                                    XI_SPAN= X2L - X1L
+                                    GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                                    V1_CORR = V1_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                                    M1_CORR = M1_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT)                        &
+                                              + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                                 ENDIF
+                              ENDIF
+                           ENDIF
+
+                           P1_LOC = PRESS(5,INT_SC_NUM)
+                           P2_LOC = PRESS(6,INT_SC_NUM)
+                           X1L    = PRESS(7,INT_SC_NUM)
+                           X2L    = PRESS(8,INT_SC_NUM)
+                           IF (PRESS(26,INT_SC_NUM) > HALF) THEN
+                              P1_LOC = TE(3,3)*P1_LOC
+                              P2_LOC = TE(3,3)*P2_LOC
+                           ENDIF
+                           IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                              IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                                 V2_CORR = V2_CORR - P1_LOC
+                                 M2_CORR = M2_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                              ELSE
+                                 T_CUT = MIN(XI_STA, X2L)
+                                 IF (T_CUT > X1L) THEN
+                                    DT     = T_CUT - X1L
+                                    XI_REL = XI_STA - X1L
+                                    XI_SPAN= X2L - X1L
+                                    GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                                    V2_CORR = V2_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                                    M2_CORR = M2_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT)                        &
+                                              + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                                 ENDIF
+                              ENDIF
+                           ENDIF
+
+                           P1_LOC = PRESS(1,INT_SC_NUM)
+                           P2_LOC = PRESS(2,INT_SC_NUM)
+                           X1L    = PRESS(3,INT_SC_NUM)
+                           X2L    = PRESS(4,INT_SC_NUM)
+                           IF (PRESS(25,INT_SC_NUM) > HALF) THEN
+                              P1_LOC = TE(3,2)*P1_LOC
+                              P2_LOC = TE(3,2)*P2_LOC
+                           ENDIF
+                           IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                              IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                                 V2_CORR = V2_CORR - P1_LOC
+                                 M2_CORR = M2_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                              ELSE
+                                 T_CUT = MIN(XI_STA, X2L)
+                                 IF (T_CUT > X1L) THEN
+                                    DT     = T_CUT - X1L
+                                    XI_REL = XI_STA - X1L
+                                    XI_SPAN= X2L - X1L
+                                    GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                                    V2_CORR = V2_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                                    M2_CORR = M2_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT)                        &
+                                              + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                                 ENDIF
+                              ENDIF
+                           ENDIF
+
+                            OGEL(NUM_OGEL,1) = -PEL(6) + PEL(2)*LENGTH*XI_STA + M1_CORR
+                            OGEL(NUM_OGEL,2) =  PEL(5) + PEL(3)*LENGTH*XI_STA + M2_CORR
+                            OGEL(NUM_OGEL,3) = OGEL(NUM_OGEL,1)
+                            OGEL(NUM_OGEL,4) = OGEL(NUM_OGEL,2)
+                            OGEL(NUM_OGEL,5) = -PEL(2) + V1_CORR
+                            OGEL(NUM_OGEL,6) = -PEL(3) + V2_CORR
+                           OGEL(NUM_OGEL,7) = -PEL(1)
+                           OGEL(NUM_OGEL,8) = -PEL(4)
+                           CBEAM_XL_OUT(NUM_OGEL) = XI_STA
+                           EID_OUT_ARRAY(NUM_OGEL,1) = EID
+                           GID_OUT_ARRAY(NUM_OGEL,1) = 0
+                           GID_OUT_ARRAY(NUM_OGEL,2) = AGRID(1)
+                           GID_OUT_ARRAY(NUM_OGEL,3) = AGRID(2)
+                           IF ((DEBUG(233) > 0) .AND. ((EID == 14) .OR. (EID == 15))) THEN
+                              WRITE(F06,9233) EID, ISTA, XI_STA, PEL(2), PEL(3), M1_CORR, M2_CORR, V1_CORR, V2_CORR,                &
+                                               OGEL(NUM_OGEL,1), OGEL(NUM_OGEL,2), OGEL(NUM_OGEL,5), OGEL(NUM_OGEL,6)
+                           ENDIF
+                        ENDDO
+! --- cbeam_add end --- !
                      ENDIF !end bar
 
                      IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN
@@ -330,14 +550,17 @@ elems_2: DO J = 1,NELE
                               ENDIF
                            ENDDO
                         ENDIF
-
+! --- cbeam_add begin --- !
                         IF (ETYPE(J)(1:4) == 'BEAM') THEN
-                           FATAL_ERR = FATAL_ERR + 1
-                           WRITE(ERR,963) SUBR_NAME, ETYPE(J)
-                           WRITE(ERR,963) SUBR_NAME, ETYPE(J)
-
+                           DO K=1,8
+                              OT4_EROW = OT4_EROW + 1
+                              OTM_ELFE(OT4_EROW,JVEC) = OGEL(NUM_OGEL-NSTA+1,K)
+                              IF (JVEC == 1) THEN
+                                 WRITE(TXT_ELFE(OT4_EROW), 9192) OT4_EROW, OT4_DESCRIPTOR, TYPE, EID, FORCE_ITEM(K)
+                              ENDIF
+                           ENDDO
                         ENDIF
-
+! --- cbeam_add end --- !
                      ENDIF
 
                      IF ((SOL_NAME(1:12) == 'GEN CB MODEL') .AND. (JVEC == 1) .AND. (OT4_EROW >= 1)) THEN
@@ -346,18 +569,26 @@ elems_2: DO J = 1,NELE
                            WRITE(TXT_ELFE(OT4_EROW), 9199)
                         ENDDO
                      ENDIF
+! --- cbeam_add begin --- !
+                     IF (ETYPE(J)(1:4) == 'BEAM') THEN
+                        NUM_ELEM = NUM_ELEM + NSTA
+                        WRITE_NUM_PTS = NSTA
+                        IF (DEBUG(233) > 0) THEN
+                           WRITE(ERR,'("DBG_BEAM_POST EID=",I8," NSTA=",I8," NUM_OGEL=",I8," NUM_ELEM=",I8)') EID, NSTA, NUM_OGEL, NUM_ELEM
+                        ENDIF
+                     ELSE
+                        NUM_ELEM = NUM_ELEM + 1
+                        EID_OUT_ARRAY(NUM_ELEM,1) = EID
 
-                     NUM_ELEM = NUM_ELEM + 1
-                     EID_OUT_ARRAY(NUM_ELEM,1) = EID
-                     IF (NUM_ELEM == NELREQ(I)) THEN
+                       IF (NUM_ELEM == NELREQ(I)) THEN
                         CALL CHK_OGEL_ZEROS ( NUM_OGEL )
 
- 100                    FORMAT("*DEBUG:      ",A,"; ELEMENT_TYPE=",A,"; TABLE_NAME=",A,"; ITABLE=",I8)
                         WRITE(ERR,100) "F1",ETYPE(J),TABLE_NAME,ITABLE
                         CALL SET_OEF_TABLE_NAME(ETYPE(J), TABLE_NAME, ITABLE)
                         WRITE(ERR,100) "F2",ETYPE(J),TABLE_NAME,ITABLE
                         CALL WRITE_ELEM_ENGR_FORCE ( JVEC, NUM_ELEM, IHDR, 1, ITABLE )
                         EXIT
+                       ENDIF
                      ENDIF
 
                   ENDIF
@@ -367,15 +598,237 @@ elems_2: DO J = 1,NELE
             ENDIF
 
          ENDDO elems_2
+! added OGEL fix  
+         IF (NUM_ELEM > 0) THEN
+            CALL CHK_OGEL_ZEROS ( NUM_OGEL )
+
+ 100        FORMAT("*DEBUG:      ",A,"; ELEMENT_TYPE=",A,"; TABLE_NAME=",A,"; ITABLE=",I8)
+            TYPE = ELMTYP(I)
+            IF (DEBUG(200) > 0) THEN
+               WRITE(ERR,100) "F1",TYPE,TABLE_NAME,ITABLE
+            ENDIF
+            CALL SET_OEF_TABLE_NAME(TYPE, TABLE_NAME, ITABLE)
+            IF (DEBUG(200) > 0) THEN
+               WRITE(ERR,100) "F2",TYPE,TABLE_NAME,ITABLE
+            ENDIF
+            CALL WRITE_ELEM_ENGR_FORCE ( JVEC, NUM_ELEM, IHDR, WRITE_NUM_PTS, ITABLE )
+         ENDIF
 
       ENDDO reqs2
  10   FORMAT("*DEBUG:      OEF_END 1D:    TABLE_NAME",A)
-      WRITE(ERR,10) TABLE_NAME
+      IF (DEBUG(200) > 0) THEN
+         WRITE(ERR,10) TABLE_NAME
+      ENDIF
       IF ((TABLE_NAME .NE. "OEF ERR ") .AND. (ITABLE < 0)) THEN
         CALL END_OP2_TABLE(ITABLE)
       ENDIF
+! --- op2_upgraded end --- !
 
       IF (WRITE_NEU .AND. (ANY_ELFE_OUTPUT > 0)) THEN
+
+! beam
+! --- cbeam_add begin ---!  
+         NUM_FROWS= 0
+! --- neu_upgrade begin --- !
+         CALL ALLOCATE_FEMAP_DATA ( 'FEMAP ELEM ARRAYS', NCBEAM, 14, SUBR_NAME )
+         DO J=1,NELE
+            EID   = EDAT(EPNT(J))
+            TYPE  = ETYPE(J)
+            IF (ETYPE(J)(1:4) == 'BEAM') THEN
+               NUM_FROWS= NUM_FROWS+ 1
+               DO K=0,MBUG-1
+                  WRT_BUG(K) = 0
+               ENDDO
+               PLY_NUM = 0
+               CALL EMG ( J   , OPT, 'N', SUBR_NAME, 'N' )
+               FEMAP_EL_NUMS(NUM_FROWS,1) = EID
+               IF (NUM_EMG_FATAL_ERRS > 0) THEN
+                  IERROR = IERROR + 1
+                  CYCLE
+               ENDIF
+               CALL ELMDIS
+               CALL CALC_ELEM_NODE_FORCES
+               LENGTH = ELEM_LEN_AB
+               XI_STA = ZERO
+               M1_CORR = ZERO
+               M2_CORR = ZERO
+               V1_CORR = ZERO
+               V2_CORR = ZERO
+
+               P1_LOC = PRESS(1,INT_SC_NUM)
+               P2_LOC = PRESS(2,INT_SC_NUM)
+               X1L    = PRESS(3,INT_SC_NUM)
+               X2L    = PRESS(4,INT_SC_NUM)
+               IF (PRESS(25,INT_SC_NUM) > HALF) THEN
+                  P1_LOC = TE(2,2)*P1_LOC
+                  P2_LOC = TE(2,2)*P2_LOC
+               ENDIF
+
+               P1_LOC = PRESS(5,INT_SC_NUM)
+               P2_LOC = PRESS(6,INT_SC_NUM)
+               X1L    = PRESS(7,INT_SC_NUM)
+               X2L    = PRESS(8,INT_SC_NUM)
+               IF (PRESS(26,INT_SC_NUM) > HALF) THEN
+                  P1_LOC = TE(2,3)*P1_LOC
+                  P2_LOC = TE(2,3)*P2_LOC
+               ENDIF
+
+               XI_STA = 1.0D0
+               M1_CORR = ZERO
+               M2_CORR = ZERO
+               V1_CORR = ZERO
+               V2_CORR = ZERO
+
+               P1_LOC = PRESS(1,INT_SC_NUM)
+               P2_LOC = PRESS(2,INT_SC_NUM)
+               X1L    = PRESS(3,INT_SC_NUM)
+               X2L    = PRESS(4,INT_SC_NUM)
+               IF (PRESS(25,INT_SC_NUM) > HALF) THEN
+                  P1_LOC = TE(2,2)*P1_LOC
+                  P2_LOC = TE(2,2)*P2_LOC
+               ENDIF
+               IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                  IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                     V1_CORR = V1_CORR - P1_LOC
+                     M1_CORR = M1_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                  ELSE
+                     T_CUT = MIN(XI_STA, X2L)
+                     IF (T_CUT > X1L) THEN
+                        DT     = T_CUT - X1L
+                        XI_REL = XI_STA - X1L
+                        XI_SPAN= X2L - X1L
+                        GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                        V1_CORR = V1_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                        M1_CORR = M1_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT) + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                     ENDIF
+                  ENDIF
+               ENDIF
+
+               P1_LOC = PRESS(5,INT_SC_NUM)
+               P2_LOC = PRESS(6,INT_SC_NUM)
+               X1L    = PRESS(7,INT_SC_NUM)
+               X2L    = PRESS(8,INT_SC_NUM)
+               IF (PRESS(26,INT_SC_NUM) > HALF) THEN
+                  P1_LOC = TE(2,3)*P1_LOC
+                  P2_LOC = TE(2,3)*P2_LOC
+               ENDIF
+               IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                  IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                     V1_CORR = V1_CORR - P1_LOC
+                     M1_CORR = M1_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                  ELSE
+                     T_CUT = MIN(XI_STA, X2L)
+                     IF (T_CUT > X1L) THEN
+                        DT     = T_CUT - X1L
+                        XI_REL = XI_STA - X1L
+                        XI_SPAN= X2L - X1L
+                        GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                        V1_CORR = V1_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                        M1_CORR = M1_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT) + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                     ENDIF
+                  ENDIF
+               ENDIF
+
+               P1_LOC = PRESS(5,INT_SC_NUM)
+               P2_LOC = PRESS(6,INT_SC_NUM)
+               X1L    = PRESS(7,INT_SC_NUM)
+               X2L    = PRESS(8,INT_SC_NUM)
+               IF (PRESS(26,INT_SC_NUM) > HALF) THEN
+                  P1_LOC = TE(3,3)*P1_LOC
+                  P2_LOC = TE(3,3)*P2_LOC
+               ENDIF
+               IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                  IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                     V2_CORR = V2_CORR - P1_LOC
+                     M2_CORR = M2_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                  ELSE
+                     T_CUT = MIN(XI_STA, X2L)
+                     IF (T_CUT > X1L) THEN
+                        DT     = T_CUT - X1L
+                        XI_REL = XI_STA - X1L
+                        XI_SPAN= X2L - X1L
+                        GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                        V2_CORR = V2_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                        M2_CORR = M2_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT) + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                     ENDIF
+                  ENDIF
+               ENDIF
+
+               P1_LOC = PRESS(1,INT_SC_NUM)
+               P2_LOC = PRESS(2,INT_SC_NUM)
+               X1L    = PRESS(3,INT_SC_NUM)
+               X2L    = PRESS(4,INT_SC_NUM)
+               IF (PRESS(25,INT_SC_NUM) > HALF) THEN
+                  P1_LOC = TE(3,2)*P1_LOC
+                  P2_LOC = TE(3,2)*P2_LOC
+               ENDIF
+               IF ((X1L >= ZERO) .AND. (XI_STA > X1L)) THEN
+                  IF (DABS(X2L - X1L) <= 1.0D-12) THEN
+                     V2_CORR = V2_CORR - P1_LOC
+                     M2_CORR = M2_CORR + P1_LOC*LENGTH*(XI_STA - X1L)
+                  ELSE
+                     T_CUT = MIN(XI_STA, X2L)
+                     IF (T_CUT > X1L) THEN
+                        DT     = T_CUT - X1L
+                        XI_REL = XI_STA - X1L
+                        XI_SPAN= X2L - X1L
+                        GRAD   = (P2_LOC - P1_LOC)/XI_SPAN
+                        V2_CORR = V2_CORR - LENGTH*(P1_LOC*DT + 0.5D0*GRAD*DT*DT)
+                        M2_CORR = M2_CORR + LENGTH*LENGTH*(P1_LOC*(XI_REL*DT - 0.5D0*DT*DT) + GRAD*(0.5D0*XI_REL*DT*DT - DT*DT*DT/3.0D0))
+                     ENDIF
+                  ENDIF
+               ENDIF
+
+               FEMAP_EL_VECS(NUM_FROWS,1)  = -PEL(6)
+               FEMAP_EL_VECS(NUM_FROWS,2)  =  PEL(5)
+               FEMAP_EL_VECS(NUM_FROWS,3)  = -PEL(6) + PEL(2)*LENGTH + M1_CORR
+               FEMAP_EL_VECS(NUM_FROWS,4)  =  PEL(5) + PEL(3)*LENGTH + M2_CORR
+               FEMAP_EL_VECS(NUM_FROWS,5)  = -PEL(2)
+               FEMAP_EL_VECS(NUM_FROWS,6)  = -PEL(3)
+               FEMAP_EL_VECS(NUM_FROWS,7)  = -PEL(2) + V1_CORR
+               FEMAP_EL_VECS(NUM_FROWS,8)  = -PEL(3) + V2_CORR
+               FEMAP_EL_VECS(NUM_FROWS,9)  = -PEL(1)
+               FEMAP_EL_VECS(NUM_FROWS,10) = -PEL(1)
+               FEMAP_EL_VECS(NUM_FROWS,11) = -PEL(4)
+               FEMAP_EL_VECS(NUM_FROWS,12) = -PEL(4)
+               FEMAP_EL_VECS(NUM_FROWS,13) = ZERO
+               FEMAP_EL_VECS(NUM_FROWS,14) = ZERO
+
+! --- CBEAM_standard begin --- !
+               OGEL_ENDA_ROW = 0
+               OGEL_ENDB_ROW = 0
+               XI_TOL        = 1.0D-10
+               DO K=1,MIN(NUM_OGEL,MAXREQ)
+                  IF (EID_OUT_ARRAY(K,1) == EID) THEN
+                     IF (DABS(CBEAM_XL_OUT(K) - ZERO ) <= XI_TOL) OGEL_ENDA_ROW = K
+                     IF (DABS(CBEAM_XL_OUT(K) - 1.0D0) <= XI_TOL) OGEL_ENDB_ROW = K
+                  ENDIF
+               ENDDO
+               IF (OGEL_ENDA_ROW > 0) THEN
+                  FEMAP_EL_VECS(NUM_FROWS,1)  = OGEL(OGEL_ENDA_ROW,1)
+                  FEMAP_EL_VECS(NUM_FROWS,2)  = OGEL(OGEL_ENDA_ROW,2)
+                  FEMAP_EL_VECS(NUM_FROWS,5)  = OGEL(OGEL_ENDA_ROW,5)
+                  FEMAP_EL_VECS(NUM_FROWS,6)  = OGEL(OGEL_ENDA_ROW,6)
+                  FEMAP_EL_VECS(NUM_FROWS,9)  = OGEL(OGEL_ENDA_ROW,7)
+                  FEMAP_EL_VECS(NUM_FROWS,11) = OGEL(OGEL_ENDA_ROW,8)
+               ENDIF
+               IF (OGEL_ENDB_ROW > 0) THEN
+                  FEMAP_EL_VECS(NUM_FROWS,3)  = OGEL(OGEL_ENDB_ROW,1)
+                  FEMAP_EL_VECS(NUM_FROWS,4)  = OGEL(OGEL_ENDB_ROW,2)
+                  FEMAP_EL_VECS(NUM_FROWS,7)  = OGEL(OGEL_ENDB_ROW,5)
+                  FEMAP_EL_VECS(NUM_FROWS,8)  = OGEL(OGEL_ENDB_ROW,6)
+                  FEMAP_EL_VECS(NUM_FROWS,10) = OGEL(OGEL_ENDB_ROW,7)
+                  FEMAP_EL_VECS(NUM_FROWS,12) = OGEL(OGEL_ENDB_ROW,8)
+               ENDIF
+! --- CBEAM_standard end --- !
+            ENDIF
+         ENDDO
+         IF (NUM_FROWS > 0) THEN
+            CALL WRITE_FEMAP_ELFO_VECS ( 'BEAM    ', NUM_FROWS, FEMAP_SET_ID )
+         ENDIF
+         CALL DEALLOCATE_FEMAP_DATA
+! --- neu_upgrade end --- !
+! --- cbeam_add begin ---! 
 
 ! bar    ---------------------------------------------------------------------------------------------------------------------------
          NUM_FROWS= 0
@@ -716,6 +1169,12 @@ elems_2: DO J = 1,NELE
 
  9201 FORMAT(' *ERROR  9201: DUE TO ABOVE LISTED ERRORS, CANNOT CALCULATE ',A,' REQUESTS FOR ',A,' ELEMENT ID = ',I8)
 
+ 9233 FORMAT(' DEBUG233 CBEAM ELFO EID=',I8,' ISTA=',I4,' XI=',1ES14.6,' PEL23=',2(1X,1ES14.6),                                   &
+             ' CORR(M1,M2,V1,V2)=',4(1X,1ES14.6),' OUT(M1,M2,V1,V2)=',4(1X,1ES14.6))
+
 ! **********************************************************************************************************************************
 
       END SUBROUTINE OFP3_ELFE_1D
+
+
+

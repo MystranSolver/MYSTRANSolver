@@ -66,24 +66,61 @@
       REAL(DOUBLE)                    :: SAMAX,SAMIN        ! Max & min strains from points "C", "D", "E" and "F" at end-a of CBAR
       REAL(DOUBLE)                    :: SBMAX,SBMIN        ! Max & min strains from points "C", "D", "E" and "F" at end-b of CBAR
       LOGICAL                         :: WRITE_NEU
-
-      INTRINSIC DMAX1,DMIN1
-
+! --- cbeam_add begin --- !
+      LOGICAL                         :: HAVE_SECTION_POINTS
+      INTRINSIC DABS, DMAX1,DMIN1
+! --- cbeam_add end --- !
 
       WRITE_NEU = (PRTNEU == 'Y')
+! --- cbeam_add begin --- !
+      MS1  = ZERO
+      MS2  = ZERO
+      MS3  = ZERO
+      MSP1 = ' '
+      MSP2 = ' '
+      MSP3 = ' '
+! --- cbeam_add end --- !	
 ! **********************************************************************************************************************************
 ! Calc engineering strains from array STRAIN and put into array OGEL
 
-      IF      (TYPE == 'BAR     ') THEN                    ! BAR1 elements
+! --- cbeam_add begin --- !
+! Phase-1 transition: CBEAM is explicitly admitted here, but still uses the legacy end-A/end-B bar-shaped recovery body.
+! NX-style intermediate stations will be split into a dedicated BEAM writer path later without changing CBAR behavior.
+      IF      ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ')) THEN ! BAR1/CBEAM transition path
          ! TODO: not validated
-         C1 = ZS(1)
-         C2 = ZS(2)
-         D1 = ZS(3)
-         D2 = ZS(4)
-         E1 = ZS(5)
-         E2 = ZS(6)
-         F1 = ZS(7)
-         F2 = ZS(8)
+
+! If section y/z stress points are not defined yet, do not fail. Fall back to zero
+! fiber offsets so CBEAM can still output axial/torsional terms while station/F06
+! work is being developed.
+         HAVE_SECTION_POINTS = .FALSE.
+         DO ICOL=1,8
+            IF (DABS(ZS(ICOL)) > ZERO) THEN
+               HAVE_SECTION_POINTS = .TRUE.
+               EXIT
+            ENDIF
+         ENDDO
+         IF (HAVE_SECTION_POINTS) THEN
+! --- cbeam_add end --- !
+            C1 = ZS(1)
+            C2 = ZS(2)
+            D1 = ZS(3)
+            D2 = ZS(4)
+            E1 = ZS(5)
+            E2 = ZS(6)
+            F1 = ZS(7)
+            F2 = ZS(8)
+! --- cbeam_add begin --- !
+         ELSE
+            C1 = ZERO
+            C2 = ZERO
+            D1 = ZERO
+            D2 = ZERO
+            E1 = ZERO
+            E2 = ZERO
+            F1 = ZERO
+            F2 = ZERO
+         ENDIF
+! --- cbeam_add end --- !
          SA    =   STRAIN(1)
          SA1   = -(C1*STRAIN(2) + C2*STRAIN(3))
          SA2   = -(D1*STRAIN(2) + D2*STRAIN(3))

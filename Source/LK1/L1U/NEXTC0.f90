@@ -42,8 +42,10 @@
       CHARACTER(LEN=*), INTENT(INOUT) :: CARD              ! A MYSTRAN data card
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! 10 fields of characters of CARD
       CHARACTER(24*BYTE)              :: MESSAG            ! Message for output error purposes
+      CHARACTER(3*BYTE)               :: RAW_PARENT        ! 'YES' if parent card came in as raw free-field text
       CHARACTER(LEN(JCARD))           :: NEWTAG            ! Field 1  of cont   card
       CHARACTER(LEN(JCARD))           :: OLDTAG            ! Field 10 of parent card
+      CHARACTER(LEN=LEN(CARD))        :: CARD_IN           ! Raw continuation line before FFIELD alters it
       CHARACTER(LEN=LEN(CARD))        :: TCARD             ! Temporary version of CARD
 
       INTEGER(LONG), INTENT(OUT)      :: ICONT             ! =1 if next card is current card's continuation or =0 if not
@@ -61,6 +63,8 @@
       ! Initialize error indicator and ICONT
       IERR  = 0
       ICONT = 0
+      RAW_PARENT = 'NO '
+      IF ((INDEX(CARD,',') > 0) .OR. (INDEX(CARD,ACHAR(9)) > 0)) RAW_PARENT = 'YES'
 
       ! Make units for writing errors the error file and output file
       OUNT(1) = ERR
@@ -74,6 +78,7 @@
       OLDTAG = JCARD(10)
       MESSAG = 'BULK DATA CARD          '
       CALL READ_BDF_LINE(IN1, IOCHK, TCARD)
+      CARD_IN = TCARD
 !      IF (IOCHK /= 0) THEN
 !         REC_NO = -99
 !         CALL READERR ( IOCHK, INFILE, MESSAG, REC_NO, OUNT, 'Y' )
@@ -113,7 +118,9 @@
          CALL FFIELD ( TCARD, IERR )
          CALL MKJCARD ( SUBR_NAME, TCARD, JCARD )
          NEWTAG = JCARD(1)
-         IF (NEWTAG == OLDTAG) THEN
+         IF ((RAW_PARENT == 'YES') .AND. (CARD_IN(1:1) == '+')) THEN
+            ICONT = 1
+         ELSE IF (NEWTAG == OLDTAG) THEN
             ICONT = 1
          ELSE IF ((OLDTAG(1:1) == '+') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
             ICONT = 1
@@ -123,7 +130,11 @@
             BACKSPACE(IN1)
             RETURN
          ENDIF
-         CARD = TCARD
+         IF (RAW_PARENT == 'YES') THEN
+            CARD = CARD_IN
+         ELSE
+            CARD = TCARD
+         ENDIF
       ELSE
          BACKSPACE(IN1)
          REC_NO = -99

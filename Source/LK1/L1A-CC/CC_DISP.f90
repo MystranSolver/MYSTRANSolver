@@ -66,7 +66,7 @@
       FOUND_CSV   = 'N'
       DO I=1,NCCCD
          IF (CC_CMD_DESCRIBERS(I)(1:5) == 'PRINT') FOUND_PRINT = 'Y'
-         IF (CC_CMD_DESCRIBERS(I)(1:4) == 'PLOT')  FOUND_PLOT  = 'Y'
+         IF ((CC_CMD_DESCRIBERS(I)(1:4) == 'PLOT') .OR. (CC_CMD_DESCRIBERS(I)(1:4) == 'POST')) FOUND_PLOT  = 'Y'
          IF (CC_CMD_DESCRIBERS(I)(1:5) == 'PUNCH') FOUND_PUNCH = 'Y'
          IF (CC_CMD_DESCRIBERS(I)(1:3) == 'NEU')   FOUND_NEU   = 'Y'
          IF (CC_CMD_DESCRIBERS(I)(1:3) == 'CSV')   FOUND_CSV   = 'Y'
@@ -74,10 +74,14 @@
       ! concatenate the strings
       DISP_OUT = TRIM(FOUND_PRINT) // TRIM(FOUND_PLOT) // TRIM(FOUND_PUNCH) // TRIM(FOUND_NEU) // TRIM(FOUND_CSV)
 
-      ! default to print
+! --- cbeam_stations begin --- !
+      ! For bare "DISP = ALL" requests, default to PRINT+PLOT so classic
+      ! OP2 displacement (OUGV1) is emitted without requiring explicit
+      ! "(PLOT)" qualifiers on the Case Control entry.
       IF (DISP_OUT(1:5) == 'NNNNN') THEN
-        DISP_OUT = 'YNNNN'
+        DISP_OUT = 'YYNNN'
       ENDIF
+! --- cbeam_stations end --- !
 
 
       ! Set CASE CONTROL output request variable to SETID

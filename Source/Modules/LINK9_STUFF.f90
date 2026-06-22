@@ -49,6 +49,9 @@
 
 
       REAL(DOUBLE)      , ALLOCATABLE :: OGEL(:,:)             ! Master array for holding outputs in LINK9 until they are printed
+! --- cbeam_stations begin --- !
+      REAL(DOUBLE)      , ALLOCATABLE :: CBEAM_XL_OUT(:)       ! x/L station metadata for beam-style output rows in LINK9
+! --- cbeam_stations end --- !
 
       REAL(DOUBLE)      , ALLOCATABLE :: POLY_FIT_ERR(:)       ! Array of polynom fit errors for elems that extrapolate stress or
 !                                                                strain values from one set of output points to another

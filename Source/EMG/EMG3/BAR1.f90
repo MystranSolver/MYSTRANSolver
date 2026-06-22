@@ -1,38 +1,39 @@
+
 ! ##################################################################################################################################
-! Begin MIT license text.
+! Begin MIT license text.                                                                                    
 ! _______________________________________________________________________________________________________
-
-! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)
-
-! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+                                                                                                         
+! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)                                              
+                                                                                                         
+! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and      
 ! associated documentation files (the "Software"), to deal in the Software without restriction, including
 ! without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
-! the following conditions:
-
-! The above copyright notice and this permission notice shall be included in all copies or substantial
-! portions of the Software and documentation.
-
-! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-! THE SOFTWARE.
+! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to   
+! the following conditions:                                                                              
+                                                                                                         
+! The above copyright notice and this permission notice shall be included in all copies or substantial   
+! portions of the Software and documentation.                                                                              
+                                                                                                         
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS                                
+! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                            
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE                            
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                                 
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,                          
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN                              
+! THE SOFTWARE.                                                                                          
 ! _______________________________________________________________________________________________________
-
-! End MIT license text.
-
+                                                                                                        
+! End MIT license text.                                                                                      
+ 
       SUBROUTINE BAR1 ( OPT, L, AREA, I1, I2, JTOR, SCOEFF, K1, K2, I12, E, G, ALPHA, TREF )
-
+ 
 ! Calculates, for 1-D BAR element
 
 !  1) PTE       = element thermal load vectors         , if OPT(2) = 'Y'
 !  2) SEi, STEi = element stress data recovery matrices, if OPT(3) = 'Y'
 !  3) KE        = element linear stiffness matrix      , if OPT(6) = 'N' (i.e. always calc KE linear unless OPT(6) = 'Y')
 !  4) KED       = element differen stiff matrix        , if OPT(6) = 'Y'
-
+  
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
@@ -45,11 +46,14 @@
       USE MODEL_STUF, ONLY            :  ELDOF, DOFPIN, DT, EID, NUM_EMG_FATAL_ERRS, KE, KED, PEL, PTE, SE1, SE2, STE1, STE2, TYPE,&
                                          UEL
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
-
+! --- pload1_add begin --- !
+      USE SCONTR, ONLY                :  NSUB
+      USE MODEL_STUF, ONLY            :  PPE, PRESS, TE
+! --- pload1_add end --- ! 
       USE BAR1_USE_IFs
 
-      IMPLICIT NONE
-
+      IMPLICIT NONE 
+ 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'BAR1'
       CHARACTER(1*BYTE), INTENT(IN)   :: OPT(6)            ! 'Y'/'N' flags for whether to calc certain elem matrices
 
@@ -57,7 +61,7 @@
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
       INTEGER(LONG)                   :: NUM_PFLAG_DOFS    ! The number of pin flagged DOF's for this element
 
-
+  
       REAL(DOUBLE) , INTENT(IN)       :: ALPHA             ! Coefficient of thermal expansion
       REAL(DOUBLE) , INTENT(IN)       :: AREA              ! Cross-sectional area
       REAL(DOUBLE) , INTENT(IN)       :: E                 ! Youngs modulus
@@ -115,7 +119,27 @@
       REAL(DOUBLE)                    :: S12(3,6)          ! Intermediate matrix used in calculating SE1 stress matrix
       REAL(DOUBLE)                    :: S21(3,6)          ! Intermediate matrix used in calculating SE2 stress matrix
       REAL(DOUBLE)                    :: S22(3,6)          ! Intermediate matrix used in calculating SE2 stress matrix
-      REAL(DOUBLE)                    :: TBAR              ! Average elem temperature
+      REAL(DOUBLE)                    :: TBAR              ! Average elem temperature 
+! --- pload1_add begin --- ! 
+      REAL(DOUBLE)                    :: N1
+      REAL(DOUBLE)                    :: N2
+      REAL(DOUBLE)                    :: N3
+      REAL(DOUBLE)                    :: N4
+      REAL(DOUBLE)                    :: P1
+      REAL(DOUBLE)                    :: P2
+      REAL(DOUBLE)                    :: PC
+      REAL(DOUBLE)                    :: P1_LOC
+      REAL(DOUBLE)                    :: P2_LOC
+      REAL(DOUBLE)                    :: QT
+      REAL(DOUBLE)                    :: WGT
+      REAL(DOUBLE)                    :: X1L
+      REAL(DOUBLE)                    :: X2L
+      REAL(DOUBLE)                    :: XI
+      REAL(DOUBLE)                    :: XI_GAUSS(3)
+      REAL(DOUBLE)                    :: XI_SCALE
+      REAL(DOUBLE)                    :: XI_WGT(3)
+      REAL(DOUBLE)                    :: PROJ_FAC
+! --- pload1_add end --- ! 
 
 ! The following are used for the differential stiffness matrix calc. See NASTRAN Prog's Manual (COSMIC 1972) page 4.87.30
 
@@ -128,12 +152,11 @@
       REAL(DOUBLE)                    :: Fx                ! Axial force (also Fx, in NASTRAN Prog Man differ stiff)
 
       INTRINSIC DABS
-
+ 
        REAL(DOUBLE)                    :: TPRIME(5,NTSUB)   ! Matrix where each col has the 5 temperature/gradients for the BAR elem
 
-
-
 ! **********************************************************************************************************************************
+
       EPS1 = EPSIL(1)
 
 ! Calculate element stiffness matrix KE(12,12), regardless of OPT(4) since the calculation of PTE and/or SEi, STEi
@@ -144,7 +167,7 @@
             KE(I,J) = ZERO
          ENDDO
       ENDDO
-
+ 
       G1   = K1*AREA*G
       G2   = K2*AREA*G
       R0   = TWELVE*E/(L*L*L)
@@ -156,7 +179,7 @@
 
 ! If I12 > 0 then R1, R2 remain as is. If I12 = 0 then R1, R2 depend on G1 and G2. Quit if R1D or R2D = 0.
 ! If DEBUG(12) = 1, then use R1 and R2 from below even when I12 = 0
-
+  
       IERROR = 0
       IF ((DABS(I12) <= EPS1) .OR. (DEBUG(12) == 1)) THEN
          IF (DABS(G1) >= EPS1) THEN
@@ -188,7 +211,7 @@
 ! Return if IERROR > 0
 
       IF (IERROR > 0) RETURN
-
+  
 ! Calc intermediate variables
 
       DELTA1 = I2/DEN
@@ -208,10 +231,10 @@
       C02    = L*L/THREE
       C03    = C02/TWO
       IF (DEBUG(203) > 0) CALL DEBUG_BAR1 ( 2 )
+  
+! Generate KE 
 
-! Generate KE
-
-      KE( 1, 1) = RA                                       ! A-A partition of KE
+      KE( 1, 1) = RA                                       ! A-A partition of KE 
       KE( 2, 2) = R1
       KE( 2, 3) = BETA
       KE( 2, 5) =-C01*BETA
@@ -243,7 +266,7 @@
       KE( 6,11) =-C03*BETA
       KE( 6,12) = K3T
 
-      KE( 7, 7) = RA                                       ! B-B partition of KE
+      KE( 7, 7) = RA                                       ! B-B partition of KE 
       KE( 8, 8) = R1
       KE( 8, 9) = BETA
       KE( 8,11) = C01*BETA
@@ -255,7 +278,7 @@
       KE(11,11) = K2T
       KE(11,12) =-C02*BETA
       KE(12,12) = K1T
-
+ 
       DO I=2,12                                            ! Set lower triangular partition of KE using symmetry
          DO J=1,I-1
             KE(I,J) = KE(J,I)
@@ -264,39 +287,39 @@
 
 ! Process Pin Flags. NUM_PFLAG_DOFS is a count of the total number of DOF pin flagged. DOFPIN(i) generated in ELMDAT is an
 ! integer array of the DOF numbers of the pin flagged DOF.
-
+  
       NUM_PFLAG_DOFS = 0
       DO I=1,12
          IF (DOFPIN(I) > 0) THEN
             NUM_PFLAG_DOFS = NUM_PFLAG_DOFS + 1
          ENDIF
-      ENDDO
+      ENDDO 
       IF (NUM_PFLAG_DOFS /= 0) THEN
          CALL PINFLG ( NUM_PFLAG_DOFS )
       ENDIF
-
+ 
       DO I=1,6                                             ! Upper left partition of KE is KAA. Need this for calc'ing PTE, SEi
          DO J=1,6
             KAA(I,J) = KE(I,J)
-         ENDDO
-      ENDDO
+         ENDDO 
+      ENDDO 
 
       DO I=1,6                                             ! Upper right partition of KE is KAB. Need this for calculating SEi
          DO J=7,12
             KAB(I,J-6) = KE(I,J)
-         ENDDO
-      ENDDO
+         ENDDO 
+      ENDDO 
 
       DO I=7,12                                            ! Lower left partition of KE is KBA. Need this for calculating PTE
          DO J=1,6
             KBA(I-6,J) = KE(I,J)
-         ENDDO
-      ENDDO
+         ENDDO 
+      ENDDO 
 
 ! The following matrices are needed if either OPT(2) or OPT(3) or OPT(6) is called for
 
       IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(6) == 'Y')) THEN
-         IF (NTSUB > 0) THEN
+         IF (NTSUB > 0) THEN                          
 
             DO J=1,NTSUB
                TBAR        = (DT(1,J) + DT(2,J))/TWO
@@ -312,8 +335,8 @@
       ENDIF
 
 ! **********************************************************************************************************************************
-! Determine element thermal loads.
-
+! Determine element thermal loads. 
+ 
 !     IF ((OPT(2) == 'Y') .OR. (OPT(6) == 'Y')) THEN
 
          IF (NTSUB > 0) THEN
@@ -321,8 +344,8 @@
             DO I=1,6
                DO J=1,5
                   ABAR(I,J) = ZERO
-               ENDDO
-            ENDDO
+               ENDDO 
+            ENDDO 
 
             ABAR(1,1) =  ONE
             ABAR(2,2) =  DELTA1*I1*L/SIX
@@ -346,7 +369,7 @@
                DO J=1,5
                   ABAR(I,J) = -ALPHA*L*ABAR(I,J)
                ENDDO
-            ENDDO
+            ENDDO 
 
             CALL MATMULT_FFF ( KAA, ABAR, 6, 6, 5, BTA )
             CALL MATMULT_FFF ( KBA, ABAR, 6, 6, 5, BTB )
@@ -363,10 +386,320 @@
          ENDIF
 
 !     ENDIF
+! --- pload1_add begin --- ! 
+! **********************************************************************************************************************************
+! Determine element load vector PPE from beam-axis PLOAD1 data:
+! each component uses [P1,P2,X1,X2], where X values are fractional [0,1].
+! X1 = X2 is treated as concentrated-in-element.
 
+      IF (OPT(5) == 'Y') THEN
+         XI_GAUSS(1) = -0.774596669241483D0
+         XI_GAUSS(2) =  ZERO
+         XI_GAUSS(3) =  0.774596669241483D0
+         XI_WGT(1)   =  0.555555555555556D0
+         XI_WGT(2)   =  0.888888888888889D0
+         XI_WGT(3)   =  0.555555555555556D0
+
+         DO J=1,NSUB
+!*** ADDED bt CODEX -- 2026-04-20 -- FOR BEAM DSB ***
+ ! Local y component. Legacy FY/Y means global Y and needs projection into
+ ! the element-local transverse pair; FYE is already local.
+            P1  = PRESS(1,J)
+            P2  = PRESS(2,J)
+            X1L = PRESS(3,J)
+            X2L = PRESS(4,J)
+            CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+            IF (X1L >= ZERO) THEN
+               P1_LOC = P1
+               P2_LOC = P2
+               IF (PRESS(25,J) > 0.5D0) THEN
+                  P1_LOC = TE(2,2)*P1
+                  P2_LOC = TE(2,2)*P2
+                  IF (PRESS(25,J) > 1.5D0) THEN
+                     PROJ_FAC = DSQRT(MAX(ZERO, ONE - TE(1,2)*TE(1,2)))
+                     P1_LOC = PROJ_FAC*P1_LOC
+                     P2_LOC = PROJ_FAC*P2_LOC
+                  ENDIF
+               ENDIF
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1_LOC
+                  N1 = ONE - THREE*X1L*X1L + TWO*X1L*X1L*X1L
+                  N2 = L*(X1L - TWO*X1L*X1L + X1L*X1L*X1L)
+                  N3 = THREE*X1L*X1L - TWO*X1L*X1L*X1L
+                  N4 = L*(-X1L*X1L + X1L*X1L*X1L)
+                  PPE( 2,J) = PPE( 2,J) + PC*N1
+                  PPE( 6,J) = PPE( 6,J) + PC*N2
+                  PPE( 8,J) = PPE( 8,J) + PC*N3
+                  PPE(12,J) = PPE(12,J) + PC*N4
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1_LOC + (P2_LOC-P1_LOC)*(XI-X1L)/(X2L-X1L)
+                     N1 = ONE - THREE*XI*XI + TWO*XI*XI*XI
+                     N2 = L*(XI - TWO*XI*XI + XI*XI*XI)
+                     N3 = THREE*XI*XI - TWO*XI*XI*XI
+                     N4 = L*(-XI*XI + XI*XI*XI)
+                     PPE( 2,J) = PPE( 2,J) + QT*L*WGT*XI_SCALE*N1
+                     PPE( 6,J) = PPE( 6,J) + QT*L*WGT*XI_SCALE*N2
+                     PPE( 8,J) = PPE( 8,J) + QT*L*WGT*XI_SCALE*N3
+                     PPE(12,J) = PPE(12,J) + QT*L*WGT*XI_SCALE*N4
+                  ENDDO
+               ENDIF
+            ENDIF
+
+            IF ((PRESS(26,J) > 0.5D0) .AND. ((PRESS(7,J) >= ZERO) .OR. (PRESS(7,J) <= -1.5D0))) THEN
+               P1_LOC = TE(2,3)*PRESS(5,J)
+               P2_LOC = TE(2,3)*PRESS(6,J)
+               X1L    = PRESS(7,J)
+               X2L    = PRESS(8,J)
+               CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+               IF (PRESS(26,J) > 1.5D0) THEN
+                  PROJ_FAC = DSQRT(MAX(ZERO, ONE - TE(1,3)*TE(1,3)))
+                  P1_LOC = PROJ_FAC*P1_LOC
+                  P2_LOC = PROJ_FAC*P2_LOC
+               ENDIF
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1_LOC
+                  N1 = ONE - THREE*X1L*X1L + TWO*X1L*X1L*X1L
+                  N2 = L*(X1L - TWO*X1L*X1L + X1L*X1L*X1L)
+                  N3 = THREE*X1L*X1L - TWO*X1L*X1L*X1L
+                  N4 = L*(-X1L*X1L + X1L*X1L*X1L)
+                  PPE( 2,J) = PPE( 2,J) + PC*N1
+                  PPE( 6,J) = PPE( 6,J) + PC*N2
+                  PPE( 8,J) = PPE( 8,J) + PC*N3
+                  PPE(12,J) = PPE(12,J) + PC*N4
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1_LOC + (P2_LOC-P1_LOC)*(XI-X1L)/(X2L-X1L)
+                     N1 = ONE - THREE*XI*XI + TWO*XI*XI*XI
+                     N2 = L*(XI - TWO*XI*XI + XI*XI*XI)
+                     N3 = THREE*XI*XI - TWO*XI*XI*XI
+                     N4 = L*(-XI*XI + XI*XI*XI)
+                     PPE( 2,J) = PPE( 2,J) + QT*L*WGT*XI_SCALE*N1
+                     PPE( 6,J) = PPE( 6,J) + QT*L*WGT*XI_SCALE*N2
+                     PPE( 8,J) = PPE( 8,J) + QT*L*WGT*XI_SCALE*N3
+                     PPE(12,J) = PPE(12,J) + QT*L*WGT*XI_SCALE*N4
+                  ENDDO
+               ENDIF
+            ENDIF
+
+ ! Local z component. Legacy FZ/Z means global Z and needs projection into
+ ! the element-local transverse pair; FZE is already local.
+            P1  = PRESS(5,J)
+            P2  = PRESS(6,J)
+            X1L = PRESS(7,J)
+            X2L = PRESS(8,J)
+            CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+            IF (X1L >= ZERO) THEN
+               P1_LOC = P1
+               P2_LOC = P2
+               IF (PRESS(26,J) > 0.5D0) THEN
+                  P1_LOC = TE(3,3)*P1
+                  P2_LOC = TE(3,3)*P2
+                  IF (PRESS(26,J) > 1.5D0) THEN
+                     PROJ_FAC = DSQRT(MAX(ZERO, ONE - TE(1,3)*TE(1,3)))
+                     P1_LOC = PROJ_FAC*P1_LOC
+                     P2_LOC = PROJ_FAC*P2_LOC
+                  ENDIF
+               ENDIF
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1_LOC
+                  N1 = ONE - THREE*X1L*X1L + TWO*X1L*X1L*X1L
+                  N2 = L*(X1L - TWO*X1L*X1L + X1L*X1L*X1L)
+                  N3 = THREE*X1L*X1L - TWO*X1L*X1L*X1L
+                  N4 = L*(-X1L*X1L + X1L*X1L*X1L)
+                  PPE( 3,J) = PPE( 3,J) + PC*N1
+                  PPE( 5,J) = PPE( 5,J) - PC*N2
+                  PPE( 9,J) = PPE( 9,J) + PC*N3
+                  PPE(11,J) = PPE(11,J) - PC*N4
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1_LOC + (P2_LOC-P1_LOC)*(XI-X1L)/(X2L-X1L)
+                     N1 = ONE - THREE*XI*XI + TWO*XI*XI*XI
+                     N2 = L*(XI - TWO*XI*XI + XI*XI*XI)
+                     N3 = THREE*XI*XI - TWO*XI*XI*XI
+                     N4 = L*(-XI*XI + XI*XI*XI)
+                     PPE( 3,J) = PPE( 3,J) + QT*L*WGT*XI_SCALE*N1
+                     PPE( 5,J) = PPE( 5,J) - QT*L*WGT*XI_SCALE*N2
+                     PPE( 9,J) = PPE( 9,J) + QT*L*WGT*XI_SCALE*N3
+                     PPE(11,J) = PPE(11,J) - QT*L*WGT*XI_SCALE*N4
+                  ENDDO
+               ENDIF
+            ENDIF
+
+            IF ((PRESS(25,J) > 0.5D0) .AND. ((PRESS(3,J) >= ZERO) .OR. (PRESS(3,J) <= -1.5D0))) THEN
+               P1_LOC = TE(3,2)*PRESS(1,J)
+               P2_LOC = TE(3,2)*PRESS(2,J)
+               X1L    = PRESS(3,J)
+               X2L    = PRESS(4,J)
+               CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+               IF (PRESS(25,J) > 1.5D0) THEN
+                  PROJ_FAC = DSQRT(MAX(ZERO, ONE - TE(1,2)*TE(1,2)))
+                  P1_LOC = PROJ_FAC*P1_LOC
+                  P2_LOC = PROJ_FAC*P2_LOC
+               ENDIF
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1_LOC
+                  N1 = ONE - THREE*X1L*X1L + TWO*X1L*X1L*X1L
+                  N2 = L*(X1L - TWO*X1L*X1L + X1L*X1L*X1L)
+                  N3 = THREE*X1L*X1L - TWO*X1L*X1L*X1L
+                  N4 = L*(-X1L*X1L + X1L*X1L*X1L)
+                  PPE( 3,J) = PPE( 3,J) + PC*N1
+                  PPE( 5,J) = PPE( 5,J) - PC*N2
+                  PPE( 9,J) = PPE( 9,J) + PC*N3
+                  PPE(11,J) = PPE(11,J) - PC*N4
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1_LOC + (P2_LOC-P1_LOC)*(XI-X1L)/(X2L-X1L)
+                     N1 = ONE - THREE*XI*XI + TWO*XI*XI*XI
+                     N2 = L*(XI - TWO*XI*XI + XI*XI*XI)
+                     N3 = THREE*XI*XI - TWO*XI*XI*XI
+                     N4 = L*(-XI*XI + XI*XI*XI)
+                     PPE( 3,J) = PPE( 3,J) + QT*L*WGT*XI_SCALE*N1
+                     PPE( 5,J) = PPE( 5,J) - QT*L*WGT*XI_SCALE*N2
+                     PPE( 9,J) = PPE( 9,J) + QT*L*WGT*XI_SCALE*N3
+                     PPE(11,J) = PPE(11,J) - QT*L*WGT*XI_SCALE*N4
+                  ENDDO
+               ENDIF
+            ENDIF
+
+            IF ((PRESS(25,J) > 0.5D0) .AND. ((PRESS(3,J) >= ZERO) .OR. (PRESS(3,J) <= -1.5D0))) THEN
+               P1_LOC = TE(1,2)*PRESS(1,J)
+               P2_LOC = TE(1,2)*PRESS(2,J)
+               X1L    = PRESS(3,J)
+               X2L    = PRESS(4,J)
+               CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+               IF (PRESS(25,J) > 1.5D0) THEN
+                  PROJ_FAC = DSQRT(MAX(ZERO, ONE - TE(1,2)*TE(1,2)))
+                  P1_LOC = PROJ_FAC*P1_LOC
+                  P2_LOC = PROJ_FAC*P2_LOC
+               ENDIF
+               CALL ADD_AXIAL_PLOAD1 ( P1_LOC, P2_LOC, X1L, X2L )
+            ENDIF
+
+            IF ((PRESS(26,J) > 0.5D0) .AND. ((PRESS(7,J) >= ZERO) .OR. (PRESS(7,J) <= -1.5D0))) THEN
+               P1_LOC = TE(1,3)*PRESS(5,J)
+               P2_LOC = TE(1,3)*PRESS(6,J)
+               X1L    = PRESS(7,J)
+               X2L    = PRESS(8,J)
+               CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+               IF (PRESS(26,J) > 1.5D0) THEN
+                  PROJ_FAC = DSQRT(MAX(ZERO, ONE - TE(1,3)*TE(1,3)))
+                  P1_LOC = PROJ_FAC*P1_LOC
+                  P2_LOC = PROJ_FAC*P2_LOC
+               ENDIF
+               CALL ADD_AXIAL_PLOAD1 ( P1_LOC, P2_LOC, X1L, X2L )
+            ENDIF
+
+ ! Local x-force component
+            P1  = PRESS(9 ,J)
+            P2  = PRESS(10,J)
+            X1L = PRESS(11,J)
+            X2L = PRESS(12,J)
+            CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+            IF (X1L >= ZERO) THEN
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1
+                  PPE( 1,J) = PPE( 1,J) + PC*(ONE - X1L)
+                  PPE( 7,J) = PPE( 7,J) + PC*X1L
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1 + (P2-P1)*(XI-X1L)/(X2L-X1L)
+                     PPE( 1,J) = PPE( 1,J) + QT*L*WGT*XI_SCALE*(ONE - XI)
+                     PPE( 7,J) = PPE( 7,J) + QT*L*WGT*XI_SCALE*XI
+                  ENDDO
+               ENDIF
+            ENDIF
+
+ ! Local x-moment component
+            P1  = PRESS(13,J)
+            P2  = PRESS(14,J)
+            X1L = PRESS(15,J)
+            X2L = PRESS(16,J)
+            CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+            IF (X1L >= ZERO) THEN
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1
+                  PPE( 4,J) = PPE( 4,J) + PC*(ONE - X1L)
+                  PPE(10,J) = PPE(10,J) + PC*X1L
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1 + (P2-P1)*(XI-X1L)/(X2L-X1L)
+                     PPE( 4,J) = PPE( 4,J) + QT*L*WGT*XI_SCALE*(ONE - XI)
+                     PPE(10,J) = PPE(10,J) + QT*L*WGT*XI_SCALE*XI
+                  ENDDO
+               ENDIF
+            ENDIF
+
+ ! Local y-moment component
+            P1  = PRESS(17,J)
+            P2  = PRESS(18,J)
+            X1L = PRESS(19,J)
+            X2L = PRESS(20,J)
+            CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+            IF (X1L >= ZERO) THEN
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1
+                  PPE( 5,J) = PPE( 5,J) + PC*(ONE - X1L)
+                  PPE(11,J) = PPE(11,J) + PC*X1L
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1 + (P2-P1)*(XI-X1L)/(X2L-X1L)
+                     PPE( 5,J) = PPE( 5,J) + QT*L*WGT*XI_SCALE*(ONE - XI)
+                     PPE(11,J) = PPE(11,J) + QT*L*WGT*XI_SCALE*XI
+                  ENDDO
+               ENDIF
+            ENDIF
+
+ ! Local z-moment component
+            P1  = PRESS(21,J)
+            P2  = PRESS(22,J)
+            X1L = PRESS(23,J)
+            X2L = PRESS(24,J)
+            CALL DECODE_PLOAD1_SPAN ( X1L, X2L, L )
+            IF (X1L >= ZERO) THEN
+               IF (DABS(X2L - X1L) <= EPS1) THEN
+                  PC = P1
+                  PPE( 6,J) = PPE( 6,J) + PC*(ONE - X1L)
+                  PPE(12,J) = PPE(12,J) + PC*X1L
+               ELSE
+                  XI_SCALE = (X2L - X1L)/TWO
+                  DO I=1,3
+                     XI  = XI_SCALE*XI_GAUSS(I) + (X2L + X1L)/TWO
+                     WGT = XI_WGT(I)
+                     QT  = P1 + (P2-P1)*(XI-X1L)/(X2L-X1L)
+                     PPE( 6,J) = PPE( 6,J) + QT*L*WGT*XI_SCALE*(ONE - XI)
+                     PPE(12,J) = PPE(12,J) + QT*L*WGT*XI_SCALE*XI
+                  ENDDO
+               ENDIF
+            ENDIF
+         ENDDO
+
+      ENDIF
+! --- pload1_add end --- ! 
 ! **********************************************************************************************************************************
 ! Calculate SE matrices for stress data recovery.
-
+ 
 !     IF ((OPT(3) == 'Y') .OR. (OPT(6) == 'Y')) THEN
 
          DO I=1,3
@@ -447,7 +780,7 @@
       IF ((OPT(6) == 'Y') .AND. (LOAD_ISTEP > 1)) THEN
 
          CALL ELMDIS
-
+   
                                                            ! Calc BAR forces
          CALL CALC_ELEM_NODE_FORCES
          M1a = -PEL(6)                                     ! M1a (bending moment, plane 1, end a for BAR) - NASTRAN Maz
@@ -575,9 +908,9 @@
 
 
 ! ##################################################################################################################################
-
+ 
       CONTAINS
-
+ 
 ! ##################################################################################################################################
 
       SUBROUTINE DEBUG_BAR1 (WHAT)
@@ -653,5 +986,47 @@
 ! **********************************************************************************************************************************
 
       END SUBROUTINE DEBUG_BAR1
+!---  pload1_add begin --- !
+      SUBROUTINE DECODE_PLOAD1_SPAN ( X1_IO, X2_IO, ELEN )
 
+      REAL(DOUBLE), INTENT(INOUT)     :: X1_IO
+      REAL(DOUBLE), INTENT(INOUT)     :: X2_IO
+      REAL(DOUBLE), INTENT(IN)        :: ELEN
+
+      IF ((X1_IO <= -1.5D0) .AND. (ELEN > EPS1)) THEN
+         X1_IO = (-X1_IO - TWO)/ELEN
+      ENDIF
+      IF ((X2_IO <= -1.5D0) .AND. (ELEN > EPS1)) THEN
+         X2_IO = (-X2_IO - TWO)/ELEN
+      ENDIF
+
+      END SUBROUTINE DECODE_PLOAD1_SPAN
+
+      SUBROUTINE ADD_AXIAL_PLOAD1 ( P1_IN, P2_IN, X1_IN, X2_IN )
+
+      REAL(DOUBLE), INTENT(IN)        :: P1_IN
+      REAL(DOUBLE), INTENT(IN)        :: P2_IN
+      REAL(DOUBLE), INTENT(IN)        :: X1_IN
+      REAL(DOUBLE), INTENT(IN)        :: X2_IN
+
+      IF (X1_IN < ZERO) RETURN
+
+      IF (DABS(X2_IN - X1_IN) <= EPS1) THEN
+         PPE( 1,J) = PPE( 1,J) + P1_IN*(ONE - X1_IN)
+         PPE( 7,J) = PPE( 7,J) + P1_IN*X1_IN
+      ELSE
+         XI_SCALE = (X2_IN - X1_IN)/TWO
+         DO I=1,3
+            XI  = XI_SCALE*XI_GAUSS(I) + (X2_IN + X1_IN)/TWO
+            WGT = XI_WGT(I)
+            QT  = P1_IN + (P2_IN-P1_IN)*(XI-X1_IN)/(X2_IN-X1_IN)
+            PPE( 1,J) = PPE( 1,J) + QT*L*WGT*XI_SCALE*(ONE - XI)
+            PPE( 7,J) = PPE( 7,J) + QT*L*WGT*XI_SCALE*XI
+         ENDDO
+      ENDIF
+
+      END SUBROUTINE ADD_AXIAL_PLOAD1
+!---  pload1 add end ---!
       END SUBROUTINE BAR1
+
+

@@ -1,31 +1,31 @@
 ! ##################################################################################################################################
-! Begin MIT license text.
+! Begin MIT license text.                                                                                    
 ! _______________________________________________________________________________________________________
-
-! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)
-
-! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+                                                                                                         
+! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)                                              
+                                                                                                         
+! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and      
 ! associated documentation files (the "Software"), to deal in the Software without restriction, including
 ! without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
-! the following conditions:
-
-! The above copyright notice and this permission notice shall be included in all copies or substantial
-! portions of the Software and documentation.
-
-! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-! THE SOFTWARE.
+! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to   
+! the following conditions:                                                                              
+                                                                                                         
+! The above copyright notice and this permission notice shall be included in all copies or substantial   
+! portions of the Software and documentation.                                                                              
+                                                                                                         
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS                                
+! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                            
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE                            
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                                 
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,                          
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN                              
+! THE SOFTWARE.                                                                                          
 ! _______________________________________________________________________________________________________
-
-! End MIT license text.
-
+                                                                                                        
+! End MIT license text.                                                                                      
+ 
       SUBROUTINE WRITE_FEMAP_STRE_VECS ( ELEM_TYP, IS_PCOMP, NUM_FEMAP_ROWS, FEMAP_SET_ID )
-
+ 
 ! Writes elem stress to FEMAP neutral file for ELAS, ROD, BAR, TRIA3, QUAD4, SHEAR, HEXA, PENTA, TETRA4
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
@@ -35,11 +35,11 @@
       USE TIMDAT, ONLY                :  TSEC
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRE_OPT
       USE FEMAP_ARRAYS, ONLY          :  FEMAP_EL_NUMS, FEMAP_EL_VECS
-
+ 
       USE WRITE_FEMAP_STRE_VECS_USE_IFs
 
       IMPLICIT NONE
-
+ 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'WRITE_FEMAP_STRE_VECS'
       CHARACTER(LEN=*), INTENT(IN)    :: ELEM_TYP               ! Element type
       CHARACTER(LEN=*), INTENT(IN)    :: IS_PCOMP               ! 'Y'/'N' for whether elements are PCOMP
@@ -57,7 +57,7 @@
       INTEGER(LONG)                   :: ELEM_MIN               ! Elem ID where vector is min
 
                                                                 ! Col from FEMAP_EL_NUMS (elem ID's)
-      INTEGER(LONG)                   :: ELEM_NUMS(NUM_FEMAP_ROWS)
+      INTEGER(LONG), ALLOCATABLE      :: ELEM_NUMS(:)
 
       INTEGER(LONG)                   :: ELEM_NAME_LEN          ! Length of ELEM_TYP without trailing blanks
       INTEGER(LONG)                   :: I,J                    ! DO loop indices
@@ -65,15 +65,13 @@
       INTEGER(LONG)                   :: VEC_ID_OFFSET          ! Offset in determining output vector ID
       INTEGER(LONG)                   :: VEC_ID                 ! Vector ID for FEMAP output
 
-
                                                                 ! One column from FEMAP_EL_VECS
-      REAL(DOUBLE)                    :: ELEM_VEC(NUM_FEMAP_ROWS)
+      REAL(DOUBLE), ALLOCATABLE       :: ELEM_VEC(:)
 
       REAL(DOUBLE)                    :: VEC_ABS                ! Abs value in vector
       REAL(DOUBLE)                    :: VEC_MAX                ! Max value in vector
       REAL(DOUBLE)                    :: VEC_MIN                ! Min value in vector
-
-
+ 
 
 ! **********************************************************************************************************************************
       ELEM_NAME_LEN = LEN(ELEM_TYP)
@@ -86,6 +84,9 @@
             EXIT
          ENDIF
       ENDDO
+
+      ALLOCATE ( ELEM_NUMS(NUM_FEMAP_ROWS) )
+      ALLOCATE ( ELEM_VEC(NUM_FEMAP_ROWS) )
 
       IF     (ELEM_TYP(1:4) == 'ELAS') THEN
          VEC_ID_OFFSET = 60100
@@ -115,6 +116,10 @@
          VEC_ID_OFFSET = 61300
       ELSE IF (ELEM_TYP == 'SHEAR   ') THEN
          VEC_ID_OFFSET = 61400
+!--- cbeam add --- begin!
+      ELSE IF (ELEM_TYP == 'BEAM    ') THEN
+         VEC_ID_OFFSET = 61500
+!--- cbeam add --- end!
       ELSE
          WARN_ERR = WARN_ERR + 1
          WRITE(ERR,943) TRIM(ELEM_TYP), 'STRESS', TRIM(SUBR_NAME)
@@ -124,8 +129,46 @@
       ENDIF
 
 ! Process elements
+!--- cbeam add --- begin!	
+      IF (ELEM_TYP == 'BEAM    ') THEN
 
-      IF (ELEM_TYP(1:4) == 'ELAS')  THEN
+         TITLE_E( 1) = 'EndA Pt1 Comb Stress';   CALC_WARN( 1) = '0';   COMP_DIR( 1) = '3';   CENT_TOTAL( 1) = '1'
+         TITLE_E( 2) = 'EndB Pt1 Comb Stress';   CALC_WARN( 2) = '0';   COMP_DIR( 2) = '3';   CENT_TOTAL( 2) = '1'
+         TITLE_E( 3) = 'EndA Pt2 Comb Stress';   CALC_WARN( 3) = '0';   COMP_DIR( 3) = '3';   CENT_TOTAL( 3) = '1'
+         TITLE_E( 4) = 'EndB Pt2 Comb Stress';   CALC_WARN( 4) = '0';   COMP_DIR( 4) = '3';   CENT_TOTAL( 4) = '1'
+         TITLE_E( 5) = 'EndA Pt3 Comb Stress';   CALC_WARN( 5) = '0';   COMP_DIR( 5) = '3';   CENT_TOTAL( 5) = '1'
+         TITLE_E( 6) = 'EndB Pt3 Comb Stress';   CALC_WARN( 6) = '0';   COMP_DIR( 6) = '3';   CENT_TOTAL( 6) = '1'
+         TITLE_E( 7) = 'EndA Pt4 Comb Stress';   CALC_WARN( 7) = '0';   COMP_DIR( 7) = '3';   CENT_TOTAL( 7) = '1'
+         TITLE_E( 8) = 'EndB Pt4 Comb Stress';   CALC_WARN( 8) = '0';   COMP_DIR( 8) = '3';   CENT_TOTAL( 8) = '1'
+         TITLE_E( 9) = 'EndA Max Stress'     ;   CALC_WARN( 9) = '1';   COMP_DIR( 9) = '3';   CENT_TOTAL( 9) = '1'
+         TITLE_E(10) = 'EndB Max Stress'     ;   CALC_WARN(10) = '1';   COMP_DIR(10) = '3';   CENT_TOTAL(10) = '1'
+         TITLE_E(11) = 'EndA Min Stress'     ;   CALC_WARN(11) = '1';   COMP_DIR(11) = '3';   CENT_TOTAL(11) = '1'
+         TITLE_E(12) = 'EndB Min Stress'     ;   CALC_WARN(12) = '1';   COMP_DIR(12) = '3';   CENT_TOTAL(12) = '1'
+
+         DO J=1,12
+            VEC_ID = VEC_ID_OFFSET + J
+            WRITE(NEU,1001) FEMAP_SET_ID, VEC_ID
+            WRITE(NEU,1002) ELEM_NAME(1:ELEM_NAME_LEN), TITLE_E(J)
+            DO I=1,NUM_FEMAP_ROWS
+               ELEM_VEC(I)  = FEMAP_EL_VECS(I,J)
+               ELEM_NUMS(I) = FEMAP_EL_NUMS(I,1)
+            ENDDO
+            CALL GET_VEC_MIN_MAX_ABS ( NUM_FEMAP_ROWS, ELEM_NUMS, ELEM_VEC, VEC_MIN, VEC_MAX, VEC_ABS, ELEM_MIN, ELEM_MAX )
+            WRITE(NEU,1003) VEC_MIN, VEC_MAX, VEC_ABS
+            DO I=1,20
+               ID(I) = 0
+            ENDDO
+            WRITE(NEU,1004) (ID(I),I= 1,10)
+            WRITE(NEU,1004) (ID(I),I=11,20)
+            WRITE(NEU,1005) ELEM_MIN, ELEM_MAX, OUT_TYPE, ENT_TYPE
+            WRITE(NEU,1006) CALC_WARN(J), COMP_DIR(J), CENT_TOTAL(J)
+            DO I=1,NUM_FEMAP_ROWS
+               WRITE(NEU,1007) FEMAP_EL_NUMS(I,1), ELEM_VEC(I)
+            ENDDO
+            WRITE(NEU,1008)
+         ENDDO
+!--- cbeam add --- end!
+      ELSE IF (ELEM_TYP(1:4) == 'ELAS')  THEN
 
          TITLE_E(1) = 'EndA Stress';   CALC_WARN(1) = '0';   COMP_DIR(1) = '0';   CENT_TOTAL(1) = '1'
          TITLE_E(2) = 'EndB Stress';   CALC_WARN(2) = '0';   COMP_DIR(2) = '0';   CENT_TOTAL(2) = '1'
@@ -248,7 +291,7 @@
          TITLE_E( 6) = 'EndB Pt3 Comb Stress';   CALC_WARN( 6) = '0';   COMP_DIR( 6) = '3';   CENT_TOTAL( 6) = '1'
          TITLE_E( 7) = 'EndA Pt4 Comb Stress';   CALC_WARN( 7) = '0';   COMP_DIR( 7) = '3';   CENT_TOTAL( 7) = '1'
          TITLE_E( 8) = 'EndB Pt4 Comb Stress';   CALC_WARN( 8) = '0';   COMP_DIR( 8) = '3';   CENT_TOTAL( 8) = '1'
-         TITLE_E( 9) = 'EndA Max Stress'     ;   CALC_WARN( 9) = '1';   COMP_DIR( 9) = '3';   CENT_TOTAL( 9) = '1'
+         TITLE_E( 9) = 'EndA Max Stress'     ;   CALC_WARN( 9) = '1';   COMP_DIR( 9) = '3';   CENT_TOTAL( 9) = '1' 
          TITLE_E(10) = 'EndB Max Stress'     ;   CALC_WARN(10) = '1';   COMP_DIR(10) = '3';   CENT_TOTAL(10) = '1'
          TITLE_E(11) = 'EndA Min Stress'     ;   CALC_WARN(11) = '1';   COMP_DIR(11) = '3';   CENT_TOTAL(11) = '1'
          TITLE_E(12) = 'EndB Min Stress'     ;   CALC_WARN(12) = '1';   COMP_DIR(12) = '3';   CENT_TOTAL(12) = '1'
@@ -360,7 +403,7 @@
             WRITE(F06,*) ' *WARNING    : CODE NOT WRITTEN FOR FEMAP PROCESSING OF STRESSES FOR PCOMP TYPE ELEMWMTS'
 
          ENDIF
-
+  
       ELSE IF (ELEM_TYP(1:5) == 'SHEAR') THEN
 
          IF (IS_PCOMP == 'N') THEN
@@ -455,9 +498,15 @@
          ENDDO
 
       ENDIF
+       
 
 
-
+      IF (ALLOCATED(ELEM_NUMS)) THEN
+         DEALLOCATE ( ELEM_NUMS )
+      ENDIF
+      IF (ALLOCATED(ELEM_VEC)) THEN
+         DEALLOCATE ( ELEM_VEC )
+      ENDIF
 
       RETURN
 
@@ -481,5 +530,5 @@
  1008 FORMAT('      -1,     0.          ,')
 
 ! **********************************************************************************************************************************
-
+ 
       END SUBROUTINE WRITE_FEMAP_STRE_VECS
