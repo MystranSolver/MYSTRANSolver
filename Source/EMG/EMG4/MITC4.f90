@@ -40,7 +40,8 @@
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  NUM_EMG_FATAL_ERRS, PCOMP_PROPS, ELGP, ES, KE, EM, EB, ET, BE1, BE2, BE3, PHI_SQ,         &
                                          FCONV, EPROP, PTE, ALPVEC, TREF, DT, PPE, PRESS, MASS_PER_UNIT_AREA,                      &
-                                         NUM_PLIES, PCOMP_LAM, PLY_NUM, TPLY, STRESS, KED
+                                         NUM_PLIES, PCOMP_LAM, PLY_NUM, TPLY, STRESS, KED,                                         &
+                                         SHELL_A, SHELL_B, SHELL_D, SHELL_T, SHELL_AALP, SHELL_BALP, SHELL_DALP, SHELL_TALP
       USE CONSTANTS_1, ONLY           :  ZERO, ONE, TWO, FOUR
 
       USE MITC_INITIALIZE_Interface
@@ -50,6 +51,7 @@
       USE MATMULT_FFF_T_Interface
       USE MITC_DETJ_Interface
       USE MITC4_B_Interface
+      USE MITC4_BMBS_Interface
       USE MITC4_CARTESIAN_LOCAL_BASIS_Interface
       USE MITC_TRANSFORM_B_Interface
       USE PLANE_COORD_TRANS_21_Interface
@@ -81,8 +83,6 @@
       REAL(DOUBLE)                    :: SS_K(MAX_ORDER_GAUSS)  ! Gauss abscissa's for integration in thickness direction
       REAL(DOUBLE)                    :: R, S, T                ! Isoparametric coordinates of a point
       REAL(DOUBLE)                    :: BI(6,6*ELGP)      ! Strain-displ matrix for this element for one Gauss point
-      REAL(DOUBLE)                    :: BI1(6,6*ELGP)     ! Strain-displ matrix for this element for one Gauss point bottom
-      REAL(DOUBLE)                    :: BI2(6,6*ELGP)     ! Strain-displ matrix for this element for one Gauss point top
       REAL(DOUBLE)                    :: DUM1(6,6*ELGP)    ! Intermediate matrix
       REAL(DOUBLE)                    :: DUM2(6*ELGP,6*ELGP)    ! Intermediate matrix
       REAL(DOUBLE)                    :: DUM3(6*ELGP,6)    ! Intermediate matrix
@@ -113,6 +113,11 @@
       REAL(DOUBLE)                    :: BMI(6,6*ELGP)     ! Strain-displ matrix for membrane for one Gauss point
       REAL(DOUBLE)                    :: BBI(6,6*ELGP)     ! Strain-displ matrix for bending for one Gauss point
       REAL(DOUBLE)                    :: BSI(6,6*ELGP)     ! Strain-displ matrix for shear for one Gauss point
+      REAL(DOUBLE)                    :: BMI3(3,6*ELGP)    ! Mid-surface membrane strain-disp operator (MITC4_BMBS)
+      REAL(DOUBLE)                    :: BBI3(3,6*ELGP)    ! Mid-surface curvature strain-disp operator (MITC4_BMBS)
+      REAL(DOUBLE)                    :: BSI2(2,6*ELGP)    ! Mid-surface trans shear strain-disp operator (MITC4_BMBS)
+      REAL(DOUBLE)                    :: DUM1_3(3,6*ELGP)  ! Intermediate matrix for 3-row (membrane/bending) matmults
+      REAL(DOUBLE)                    :: DUM1_2(2,6*ELGP)  ! Intermediate matrix for 2-row (transverse shear) matmults
       REAL(DOUBLE)                    :: M_1DOF(ELGP,ELGP) ! Consistent mass matrix with 1 DOF per node.
       REAL(DOUBLE)                    :: DENSITY
       REAL(DOUBLE)                    :: FORCEx(IORD_STRESS_Q4*IORD_STRESS_Q4) ! Engineering force in the elem x direction at Gauss points
@@ -191,14 +196,6 @@
       PHI_SQ  = ONE                                        ! Not used for this element
       CALL MITC_INITIALIZE ()
 
-      IF (PCOMP_PROPS == 'Y') THEN
-        WRITE(ERR,*) ' *ERROR: Code not written for composite material with MITC4'
-        WRITE(F06,*) ' *ERROR: Code not written for composite material with MITC4'
-        NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
-        FATAL_ERR = FATAL_ERR + 1
-        CALL OUTA_HERE ( 'Y' )
-      ENDIF
-
 
 
 ! **********************************************************************************************************************************
@@ -251,58 +248,40 @@
 
       IF (OPT(2) == 'Y') THEN
 
-         E2 = MITC_ELASTICITY()
+! Thermal load, assembled using the ply-summed thermal force/moment resultants SHELL_AALP
+! (membrane) and SHELL_BALP (membrane-bending coupling, nonzero for unsymmetric composite
+! layups) from SHELL_ABD_MATRICES, instead of a homogeneous-material (R,S,T) volume Gauss
+! integration -- same conversion, and same rationale, as the OPT(4) stiffness assembly above.
+!
+! Only a spatially-uniform temperature change (TBAR, averaged over the 4 corner grid points) is
+! supported here, matching what this routine supported before this conversion; SHELL_DALP (the
+! weight-z^2 thermal resultant that would respond to a through-thickness temperature *gradient*)
+! is not used, since there is no gradient input to pair it with.
+!
+!    PTE = ( [Bm]' [A_alpha] + [Bb]' [B_alpha] ) * (TBAR - TREF)   integrated over mid-surface area
 
          UNIT_PTE(:) = ZERO
 
          CALL ORDER_GAUSS ( IORD_IJ, SS_IJ, HH_IJ )
-         CALL ORDER_GAUSS ( IORD_K, SS_K, HH_K )
-
-         ! Force = ∫ B' E ε_thermal dv
 
          DO I=1,IORD_IJ
             DO J=1,IORD_IJ
-               DO K=1,IORD_K
-                  R = SS_IJ(I)
-                  S = SS_IJ(J)
-                  T = SS_K(K)
+               R = SS_IJ(I)
+               S = SS_IJ(J)
 
-                                                           ! Find the angle of the cartesian local coordinate
-                                                           ! system's x axis projected onto the element coordinate system's
-                                                           ! xy plane. Since the basis vectors are already expressed in
-                                                           ! element coordinates, projection is simply ignoring the z component.
-                  CLB = MITC4_CARTESIAN_LOCAL_BASIS( R, S, T )
-                  MATL_AXES_ROTATE = -ATAN2(CLB(2,1), CLB(1,1))
-                                                           ! Rotate the material elasticity matrix from element coordinates
-                                                           ! to projected cartesian local coordinates. When the elasticity
-                                                           ! matrix is used, it will be assumed to be in the non-projected
-                                                           ! cartesian local coordinate system but pretend they're the same
-                                                           ! so that material properties follow the curved surface of warped
-                                                           ! elements.
-                  CALL PLANE_COORD_TRANS_21 ( MATL_AXES_ROTATE, TRANSFORM, SUBR_NAME )
-                  CALL MATL_TRANSFORM_MATRIX ( TRANSFORM, T66 )
-                  T66 = TRANSPOSE(T66)
-                  CALL MATMULT_FFF   ( E2  , T66   , 6, 6, 6, DUM66 )
-                  CALL MATMULT_FFF_T ( T66 , DUM66 , 6, 6, 6, E3    )
+               CALL MITC4_BMBS( R, S, BMI3, BBI3, BSI2 )
 
-                                                           ! Transform membrane thermal expansion coefficient vector
-                                                           ! the same way as the elasticity matrix.
-                  CTE(:) = ALPVEC(:,1)
-                  CTE(4:6) = CTE(4:6) / TWO                ! Remove shear factor of 2 to transform.
-                  CTE = MATMUL(TRANSPOSE(T66), CTE)
-                  CTE(4:6) = CTE(4:6) * TWO                ! Reinstate shear factor of 2 after transform.
+                                                           ! Mid-surface area Jacobian (same construction used
+                                                           ! for OPT(4) and the pressure load below).
+               CALL MITC_COVARIANT_BASIS( R, S, ZERO, G )
+               CALL CROSS( G(:,1), G(:,2), DUM4 )
+               DETJ = SQRT(DOT_PRODUCT(DUM4, DUM4))
+               INTFAC = DETJ*HH_IJ(I)*HH_IJ(J)
 
-                  DETJ = MITC_DETJ ( R, S, T )
-                  INTFAC = DETJ*HH_IJ(I)*HH_IJ(J)*HH_K(K)  ! det(J) * Gauss point weight
-                  CALL MITC4_B( R, S, T, .TRUE., .TRUE., .TRUE., BI)
+               UNIT_PTE(1:6*ELGP) = UNIT_PTE(1:6*ELGP)                                                                             &
+                                   + MATMUL( TRANSPOSE(BMI3), SHELL_AALP ) * INTFAC                                                &
+                                   + MATMUL( TRANSPOSE(BBI3), SHELL_BALP ) * INTFAC
 
-                                                           ! DUM3 = BI^T * E3
-                  CALL MATMULT_FFF_T ( BI, E3, 6, 6*ELGP, 6, DUM3 )
-
-                                                           ! PTE += DUM3 * unit_ε_thermal * det(J) * GaussWeight
-                  UNIT_PTE = UNIT_PTE + MATMUL ( DUM3, CTE ) * INTFAC
-
-               ENDDO
             ENDDO
          ENDDO
 
@@ -340,42 +319,11 @@
                   CASE (5); R=SS_IJ(1); S=SS_IJ(1)         ! Gauss point 4
                END SELECT
 
-                                                           ! Get the strain-displacement matrix at top and bottom
-                                                           ! and transform strain terms to the element coordinate system.
-                                                           !
-                                                           ! This might not be quite right because the element
-                                                           ! coordinate system is flat even when the element is warped
-                                                           ! so the cartesian local coordinate system's normal (z) is
-                                                           ! different to the element coordinate system's z.
-               CALL MITC4_B( R, S, -ONE, .TRUE., .TRUE., .TRUE., BI1)
-               TRANSFORM = MITC4_CARTESIAN_LOCAL_BASIS( R, S, -ONE )
-               BI1(4:6,:) = BI1(4:6,:) / 2
-               CALL MITC_TRANSFORM_B( TRANSFORM, BI1 )
-               BI1(4:6,:) = BI1(4:6,:) * 2
-
-               CALL MITC4_B( R, S, +ONE, .TRUE., .TRUE., .TRUE., BI2)
-               TRANSFORM = MITC4_CARTESIAN_LOCAL_BASIS( R, S, +ONE )
-               BI2(4:6,:) = BI2(4:6,:) / 2
-               CALL MITC_TRANSFORM_B( TRANSFORM, BI2 )
-               BI2(4:6,:) = BI2(4:6,:) * 2
-
-                                                           ! Membrane strain is the average of the strains at the two t points.
-               BE1(1,1:6*ELGP,STR_PT_NUM) = (BI2(1,:) + BI1(1,:)) / TWO           ! xx
-               BE1(2,1:6*ELGP,STR_PT_NUM) = (BI2(2,:) + BI1(2,:)) / TWO           ! yy
-               BE1(3,1:6*ELGP,STR_PT_NUM) = (BI2(4,:) + BI1(4,:)) / TWO           ! xy
-
-                                                           ! Curvature is (strain_top - strain_bottom) / thickness
-                                                           ! To allow grid point thicknesses, this should be the thickness
-                                                           ! interpolated at the Gauss point.
-!victor todo EPROP(1) might be supposed to be the magnitude of [(DIR_THICKESS * DIRECTOR) interpolated at the Gauss point]
-! similar to how MITC_COVARIANT_BASIS does it. Maybe even use the covariant basis 3rd vector times 2?
-               BE2(1,1:6*ELGP,STR_PT_NUM) = (BI2(1,:) - BI1(1,:)) / EPROP(1)      ! xx
-               BE2(2,1:6*ELGP,STR_PT_NUM) = (BI2(2,:) - BI1(2,:)) / EPROP(1)      ! yy
-               BE2(3,1:6*ELGP,STR_PT_NUM) = (BI2(4,:) - BI1(4,:)) / EPROP(1)      ! xy
-
-                                                           ! Transverse shear strain. Note reversed order of rows.
-               BE3(1,1:6*ELGP,STR_PT_NUM) = (BI2(6,:) + BI1(6,:)) / TWO           ! zx
-               BE3(2,1:6*ELGP,STR_PT_NUM) = (BI2(5,:) + BI1(5,:)) / TWO           ! yz
+                                                           ! Get the mid-surface membrane, curvature, and transverse shear
+                                                           ! strain-displacement operators at this (R,S), via the shared
+                                                           ! top/bottom extraction in MITC4_BMBS (see that routine for the
+                                                           ! rationale and the caveat about warped-element local bases).
+               CALL MITC4_BMBS( R, S, BE1(1:3,1:6*ELGP,STR_PT_NUM), BE2(1:3,1:6*ELGP,STR_PT_NUM), BE3(1:2,1:6*ELGP,STR_PT_NUM) )
 
          ENDDO
 
@@ -387,186 +335,77 @@
 
       IF(OPT(4) == 'Y') THEN
 
-! Based on
-! MITC4 paper "A continuum mechanics based four-node shell element for general nonlinear analysis"
-!   by Dvorkin and Bathe
-
-
-         ! K = int( [B]^T [E3] [B] dV )
-         !    dV = |det(J)|dr ds dt
-         ! K = int( [B]^T [E3] [B] |det(J)| dr ds dt )
-         !
-         ! [E3] is material elasticity matrix in cartesian local coordinates
-         ! stress = [E3] * strain
-         ! strain = [B] * displacement
-         ! K is in the basic coordinate system
-
-
-         E2 = MITC_ELASTICITY()                            ! Not used. Delete this.
-
-                                                           ! Membrane
-         EM2(:,:) = ZERO
-         EM2(1,1) = EM(1,1)
-         EM2(1,2) = EM(1,2)
-         EM2(1,4) = EM(1,3)
-         EM2(2,2) = EM(2,2)
-         EM2(2,4) = EM(2,3)
-         EM2(4,4) = EM(3,3)
-
-                                                           ! Bending and transverse shear
-         EB2(:,:) = ZERO
-         EB2(1,1) = EB(1,1)
-         EB2(1,2) = EB(1,2)
-         EB2(1,4) = EB(1,3)
-         EB2(2,2) = EB(2,2)
-         EB2(2,4) = EB(2,3)
-         EB2(4,4) = EB(3,3)
-         EB2(5,5) = ET(2,2) * EPROP(3)
-         EB2(5,6) = ET(2,1) * EPROP(3)
-         EB2(6,6) = ET(1,1) * EPROP(3)
-
-         DO I=2,6                                          ! Copy UT to LT because it's symmetric.
-            DO J=1,I-1
-               EM2(I,J) = EM2(J,I)
-               EB2(I,J) = EB2(J,I)
-            ENDDO
-         ENDDO
-
+! Element stiffness matrix, assembled using the A/B/D/T (classical-lamination-theory idealized)
+! approach shared with the rest of MYSTRAN's shell elements (MIN4T's QDEL1/QPLT3 for QUAD4,
+! TREL1/TPLT2 for TRIA3), instead of MITC4's original full (R,S,T) volume-integrated,
+! single-homogeneous-material formulation.
+!
+! SHELL_A, SHELL_B, SHELL_D, SHELL_T are already populated for this element by
+! SHELL_ABD_MATRICES (called once from EMG.f90 before this routine is reached), summed over
+! PCOMP plies via classical lamination theory where applicable. Using them here (rather than
+! re-deriving a homogeneous elasticity tensor and volume-integrating through T) is what removes
+! the PCOMP restriction on MITC4/MITC4+: see the MITC4/MITC4+ ABD conversion plan.
+!
+!    KE = int over mid-surface area of:
+!       [Bm]' [A] [Bm]  +  [Bm]' [B] [Bb] + [Bb]' [B]' [Bm]  +  [Bb]' [D] [Bb]  +  [Bs]' [T] [Bs]  dA
+!
+! Bm, Bb, Bs (membrane, curvature, and transverse-shear strain-displacement operators,
+! evaluated at the mid-surface) come from MITC4_BMBS, which extracts them from the full 3-D
+! MITC4_B by evaluating at the top/bottom surfaces (T = +-1) and combining -- exact, because
+! MITC4_B's in-plane strain rows are linear in T and its shear rows are already independent of
+! T. This preserves the MITC tying-point interpolation (the mechanism that avoids shear
+! locking); only the through-thickness material integration changes, from numerical (a T Gauss
+! loop applied to one homogeneous material) to analytic (SHELL_ABD_MATRICES, already correct
+! for a ply stack).
 
          KE(1:6*ELGP,1:6*ELGP) = ZERO
 
          CALL ORDER_GAUSS ( IORD_IJ, SS_IJ, HH_IJ )
-         CALL ORDER_GAUSS ( IORD_K, SS_K, HH_K )
 
          DO I=1,IORD_IJ
             DO J=1,IORD_IJ
-               DO K=1,IORD_K
-                  R = SS_IJ(I)
-                  S = SS_IJ(J)
-                  T = SS_K(K)
+               R = SS_IJ(I)
+               S = SS_IJ(J)
 
-                                                           ! Find the angle of the cartesian local coordinate
-                                                           ! system's x axis projected onto the element coordinate system's
-                                                           ! xy plane. Projection is simply ignoring the z component.
-                  CLB = MITC4_CARTESIAN_LOCAL_BASIS( R, S, T )
-                  MATL_AXES_ROTATE = -ATAN2(CLB(2,1), CLB(1,1))
-                                                           ! Rotate the material elasticity matrix so it's expressed in projected
-                                                           ! cartesian local coordinates. When the elasticity matrix is used
-                                                           ! it will be assumed to be in the non-projected cartesial local
-                                                           ! coordinate system but pretend they're the same so that material
-                                                           ! properties follow the curved surface of warped elements.
-                  CALL PLANE_COORD_TRANS_21 ( MATL_AXES_ROTATE, TRANSFORM, SUBR_NAME )
-                  CALL MATL_TRANSFORM_MATRIX ( TRANSFORM, T66 )
-                  T66 = TRANSPOSE(T66)
+               CALL MITC4_BMBS( R, S, BMI3, BBI3, BSI2 )
 
-
-                  DETJ = MITC_DETJ ( R, S, T )
-                  INTFAC = DETJ*HH_IJ(I)*HH_IJ(J)*HH_K(K)
-
-                  IF(.FALSE.) THEN
-                                                           ! Single material for membrane and bending
-                                                           ! Not used. Delete this.
-                     CALL MATMULT_FFF   ( E2  , T66   , 6, 6, 6, DUM66 )
-                     CALL MATMULT_FFF_T ( T66 , DUM66 , 6, 6, 6, E3    )
-
-                     CALL MITC4_B( R, S, T, .TRUE., .TRUE., .TRUE., BI)
-                     CALL MATMULT_FFF ( E3, BI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-
-                  ELSEIF(.TRUE.) THEN
-
-                     CALL MATMULT_FFF   ( EM2 , T66   , 6, 6, 6, DUM66 )
-                     CALL MATMULT_FFF_T ( T66 , DUM66 , 6, 6, 6, EM3   )
-
-                     CALL MATMULT_FFF   ( EB2 , T66   , 6, 6, 6, DUM66 )
-                     CALL MATMULT_FFF_T ( T66 , DUM66 , 6, 6, 6, EB3   )
+                                                           ! Mid-surface area Jacobian, same construction as used
+                                                           ! for the pressure load below: dA = |g_r x g_s| dR dS.
+               CALL MITC_COVARIANT_BASIS( R, S, ZERO, G )
+               CALL CROSS( G(:,1), G(:,2), DUM4 )
+               DETJ = SQRT(DOT_PRODUCT(DUM4, DUM4))
+               INTFAC = DETJ*HH_IJ(I)*HH_IJ(J)
 
                                                            ! Membrane
-                                                           ! ∫ B_m' E_m B_m dv
-                     CALL MITC4_B( R, S, T, .TRUE., .FALSE., .FALSE., BMI)
-                     CALL MATMULT_FFF ( EM3, BMI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BMI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-
-                                                           ! Bending and transverse shear
-                                                           ! including bending-shear coupling
-                                                           ! ∫ B_b' (E_b + E_t) B_b dv
-                     CALL MITC4_B( R, S, T, .FALSE., .TRUE., .TRUE., BBI)
-                     CALL MATMULT_FFF ( EB3, BBI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BBI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-
-                                                           ! Geometric bending-membrane coupling
-                                                           ! This is coupling due to the geometry of the element (warped or
-                                                           ! with SNORM), not unsymmetric composites or MID4 on PSHELL.
-                                                           ! ∫ B_m' E_m B_b dv + ∫ B_b' E_m' B_m dv
-                     CALL MATMULT_FFF ( EM3, BBI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BMI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-                     CALL MATMULT_FFF_T ( EM3, BMI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BBI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-
-                  ELSE
-                                                           ! All the phenomena fully separated.
-                                                           ! Not used. Delete this.
-                     CALL MATMULT_FFF   ( EM2 , T66   , 6, 6, 6, DUM66 )
-                     CALL MATMULT_FFF_T ( T66 , DUM66 , 6, 6, 6, EM3   )
-
-                     CALL MATMULT_FFF   ( EB2 , T66   , 6, 6, 6, DUM66 )
-                     CALL MATMULT_FFF_T ( T66 , DUM66 , 6, 6, 6, EB3   )
-
-                                                           ! Membrane
-                     CALL MITC4_B( R, S, T, .TRUE., .FALSE., .FALSE., BMI)
-                     CALL MATMULT_FFF ( EM3, BMI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BMI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
+                                                           ! ∫ Bm' A Bm dA
+               CALL MATMULT_FFF   ( SHELL_A, BMI3, 3, 3, 6*ELGP, DUM1_3 )
+               CALL MATMULT_FFF_T ( BMI3, DUM1_3, 3, 6*ELGP, 6*ELGP, DUM2 )
+               KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
 
                                                            ! Bending
-                     CALL MITC4_B( R, S, T, .FALSE., .TRUE., .FALSE., BBI)
-                     CALL MATMULT_FFF ( EB3, BBI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BBI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
+                                                           ! ∫ Bb' D Bb dA
+               CALL MATMULT_FFF   ( SHELL_D, BBI3, 3, 3, 6*ELGP, DUM1_3 )
+               CALL MATMULT_FFF_T ( BBI3, DUM1_3, 3, 6*ELGP, 6*ELGP, DUM2 )
+               KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
 
                                                            ! Transverse shear
-                                                           ! Use bending+transverse shear elasticity
-                                                           ! because MID3 requires MID2 but not MID1.
-                     CALL MITC4_B( R, S, T, .FALSE., .FALSE., .TRUE., BSI)
-                     CALL MATMULT_FFF ( EB3, BSI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BSI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
+                                                           ! ∫ Bs' T Bs dA
+               CALL MATMULT_FFF   ( SHELL_T, BSI2, 2, 2, 6*ELGP, DUM1_2 )
+               CALL MATMULT_FFF_T ( BSI2, DUM1_2, 2, 6*ELGP, 6*ELGP, DUM2 )
+               KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
 
-                                                           ! Bending-membrane coupling
-                     CALL MATMULT_FFF ( EM3, BBI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BMI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-                     CALL MATMULT_FFF ( TRANSPOSE(EM3), BMI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BBI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
+                                                           ! Membrane-bending coupling
+                                                           ! Zero for a symmetric PSHELL/PCOMP layup with no offset;
+                                                           ! nonzero for offset shells, unsymmetric composite layups,
+                                                           ! or (if enabled) PSHELL MID4 coupling.
+                                                           ! ∫ Bm' B Bb dA + ∫ Bb' B' Bm dA
+               CALL MATMULT_FFF   ( SHELL_B, BBI3, 3, 3, 6*ELGP, DUM1_3 )
+               CALL MATMULT_FFF_T ( BMI3, DUM1_3, 3, 6*ELGP, 6*ELGP, DUM2 )
+               KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
+               CALL MATMULT_FFF_T ( SHELL_B, BMI3, 3, 3, 6*ELGP, DUM1_3 )
+               CALL MATMULT_FFF_T ( BBI3, DUM1_3, 3, 6*ELGP, 6*ELGP, DUM2 )
+               KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
 
-                                                           ! Membrane-shear coupling
-                     CALL MATMULT_FFF ( EM3, BSI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BMI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-                     CALL MATMULT_FFF ( TRANSPOSE(EM3), BMI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BSI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-
-                                                           ! Bending-shear coupling
-                     CALL MATMULT_FFF ( EB3, BSI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BBI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-                     CALL MATMULT_FFF ( TRANSPOSE(EB3), BBI, 6, 6, 6*ELGP, DUM1 )
-                     CALL MATMULT_FFF_T ( BSI, DUM1, 6, 6*ELGP, 6*ELGP, DUM2 )
-                     KE(1:6*ELGP,1:6*ELGP) = KE(1:6*ELGP,1:6*ELGP) + DUM2(:,:)*INTFAC
-
-
-                  ENDIF
-
-
-
-               ENDDO
             ENDDO
          ENDDO
 
