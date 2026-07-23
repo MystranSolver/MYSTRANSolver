@@ -38,7 +38,7 @@
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  TWO
+      USE CONSTANTS_1, ONLY           :  ZERO, TWO
       USE PARAMS, ONLY                :  EPSIL
       USE DEBUG_PARAMETERS
       USE MODEL_STUF, ONLY            :  EID, ELEM_LEN_AB, EMAT, NUM_EMG_FATAL_ERRS, EPROP, FCONV, ME, ULT_STRE, ULT_STRN, &
@@ -51,6 +51,8 @@
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'BREL1'
       CHARACTER(1*BYTE), INTENT(IN)   :: OPT(6)            ! 'Y'/'N' flags for whether to calc certain elem matrices
       CHARACTER(LEN=*), INTENT(IN)    :: WRITE_WARN        ! If 'Y" write warning messages, otherwise do not
+
+      INTEGER(LONG)                   :: I                 ! DO loop index
 
 
 
@@ -107,7 +109,53 @@
          ZS(9)    = EPROP(17)                              ! Torsional stress recovery coefficient
          FCONV(1) = AREA
 
-      ELSE IF (TYPE == 'BEAM    ') THEN
+      ELSE IF (TYPE == 'BEAM    ') THEN                    ! Prismatic BEAM: remap PBEAM (end A) props to the BAR set of props
+
+         DO I=1,6                                          ! Check that the BEAM is prismatic (end B props = end A props)
+            IF (DABS(EPROP(15+I) - EPROP(I)) > EPS1*DABS(EPROP(I))) THEN
+               NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1964) EID
+               WRITE(F06,1964) EID
+               RETURN
+            ENDIF
+         ENDDO
+
+         IF ((DABS(EPROP(36)) > EPS1) .OR. (DABS(EPROP(37)) > EPS1)) THEN
+            NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1    ! Warping (CW) not supported
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,1965) EID
+            WRITE(F06,1965) EID
+            RETURN
+         ENDIF
+
+         IF ((DABS(EPROP(42)) > EPS1) .OR. (DABS(EPROP(43)) > EPS1) .OR.                                                           &
+             (DABS(EPROP(44)) > EPS1) .OR. (DABS(EPROP(45)) > EPS1)) THEN
+            NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1    ! Neutral axis offset (N1, N2) not supported
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,1966) EID
+            WRITE(F06,1966) EID
+            RETURN
+         ENDIF
+
+         AREA     = EPROP( 1)                              ! Cross-sectional area at end A
+         I1       = EPROP( 2)                              ! Plane 1 moment of inertia at end A
+         I2       = EPROP( 3)                              ! Plane 2 moment of inertia at end A
+         I12      = EPROP( 4)                              ! Product of inertia at end A
+         JTOR     = EPROP( 5)                              ! Torsional constant at end A
+         NSM      = EPROP( 6)                              ! Non-structural mass at end A
+         ZS(1)    = EPROP( 7)                              ! C1: y coord of 1st point for stress recovery at end A
+         ZS(2)    = EPROP( 8)                              ! C2: z coord of 1st point for stress recovery at end A
+         ZS(3)    = EPROP( 9)                              ! D1: y coord of 2nd point for stress recovery at end A
+         ZS(4)    = EPROP(10)                              ! D2: z coord of 2nd point for stress recovery at end A
+         ZS(5)    = EPROP(11)                              ! E1: y coord of 3rd point for stress recovery at end A
+         ZS(6)    = EPROP(12)                              ! E2: z coord of 3rd point for stress recovery at end A
+         ZS(7)    = EPROP(13)                              ! F1: y coord of 4th point for stress recovery at end A
+         ZS(8)    = EPROP(14)                              ! F2: z coord of 4th point for stress recovery at end A
+         K1       = EPROP(30)                              ! Plane 1 shear factor
+         K2       = EPROP(31)                              ! Plane 2 shear factor
+         ZS(9)    = ZERO                                   ! Torsional stress recovery coefficient (none on PBEAM)
+         FCONV(1) = AREA
 
       ENDIF
 
@@ -162,9 +210,9 @@
 
             ENDIF
 
-         ELSE IF (TYPE == 'BEAM    ') THEN                 ! General beam
+         ELSE IF (TYPE == 'BEAM    ') THEN                 ! Prismatic beam: use the BAR (Bernoulli-Euler w/ shear flex) formulation
 
-            CALL BEAM
+            CALL BAR1 ( OPT, ELEM_LEN_AB, AREA, I1, I2, JTOR, ZS(9), K1, K2, I12, E, G, ALPHA, TREF )
 
          ENDIF
 
@@ -172,6 +220,15 @@
 
 ! **********************************************************************************************************************************
  1963 FORMAT(' *ERROR  1962: TIMOSHENKO BAR ELEMENT ',A,' CANNOT HAVE NONZERO I12. IT WILL BE SET TO I12 = 0.')
+
+ 1964 FORMAT(' *ERROR  1964: BEAM ELEMENT ',I8,' HAS A TAPERED (NON PRISMATIC) PBEAM PROPERTY. ONLY PRISMATIC (CONSTANT SECTION)', &
+                           ' BEAM ELEMENTS ARE SUPPORTED')
+
+ 1965 FORMAT(' *ERROR  1965: BEAM ELEMENT ',I8,' HAS NONZERO WARPING COEFFICIENT (CW) ON ITS PBEAM ENTRY. WARPING IS NOT',         &
+                           ' SUPPORTED FOR THE BEAM ELEMENT')
+
+ 1966 FORMAT(' *ERROR  1966: BEAM ELEMENT ',I8,' HAS NONZERO NEUTRAL AXIS OFFSET (N1, N2) ON ITS PBEAM ENTRY. NEUTRAL AXIS',       &
+                           ' OFFSET IS NOT SUPPORTED FOR THE BEAM ELEMENT')
 
 
 
