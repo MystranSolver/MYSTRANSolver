@@ -198,6 +198,13 @@
 
 ! Call subr to check sensibility of I1, I2, I12 combinations
 
+      AREA = AREA_A                                        ! Init properties at "any location along beam" to the end A values.
+      I1   = I1_A                                          ! These are used as the defaults for end B if its fields are blank.
+      I2   = I2_A
+      I12  = I12_A
+      JTOR = JTOR_A
+      NSM  = NSM_A
+
       CALL CHECK_BAR_MOIs ( 'PBEAM', ID, I1, I2, I12, IERR )
       RPBEAM(NPBEAM,2) = I1
       RPBEAM(NPBEAM,3) = I2
