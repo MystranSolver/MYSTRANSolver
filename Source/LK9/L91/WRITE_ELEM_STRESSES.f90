@@ -301,7 +301,7 @@
             ENDIF
 
             ! -- F06 header lines describing stress columns
-            IF      (TYPE == 'BAR     ') THEN
+            IF      ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ')) THEN
                IF (BARTOR == 'Y') THEN
                   WRITE(F06,1101) FILL(1:1), FILL(1:1)
                ELSE
@@ -349,7 +349,7 @@
       ENDIF
 
       ! Write the element stress output
-      IF      (TYPE == 'BAR     ') THEN
+      IF      ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ')) THEN
          CALL WRITE_BAR(NUM, FILL(1:1), ISUBCASE, ITABLE, TITLEI, STITLEI, LABELI, &
                         FIELD5_INT_MODE, FIELD6_EIGENVALUE, WRITE_F06)
 

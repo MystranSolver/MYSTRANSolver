@@ -99,8 +99,8 @@
 ! **********************************************************************************************************************************
 ! Calc stresses for 1D elements
 
-      IF ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BUSH') .OR. (TYPE(1:4) == 'ELAS') .OR. (TYPE(1:3) == 'ROD') .OR.                &
-          (TYPE(1:5) == 'USER1')) THEN
+      IF ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BEAM') .OR. (TYPE(1:4) == 'BUSH') .OR. (TYPE(1:4) == 'ELAS') .OR.               &
+          (TYPE(1:3) == 'ROD') .OR. (TYPE(1:5) == 'USER1')) THEN
 
          DO I=1,3
             STRESS(I) = ZERO
@@ -114,7 +114,7 @@
             ENDIF
          ENDDO
 
-         IF ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BUSH')) THEN
+         IF ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BEAM') .OR. (TYPE(1:4) == 'BUSH')) THEN
             K = 0
             DO I=4,6
                STRESS(I) = ZERO

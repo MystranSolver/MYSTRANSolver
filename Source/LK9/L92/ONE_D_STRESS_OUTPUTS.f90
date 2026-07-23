@@ -75,7 +75,8 @@
 ! **********************************************************************************************************************************
 ! Calc engineering stresses from array STRESS and put into array OGEL
 
-      IF      (TYPE == 'BAR     ') THEN                    ! BAR1 elements
+      IF      ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ')) THEN
+                                                           ! BAR1 elements (also prismatic BEAM, which uses the BAR formulation)
          C1 = ZS(1)
          C2 = ZS(2)
          D1 = ZS(3)

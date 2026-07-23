@@ -251,8 +251,8 @@
             CALL GET_ELEM_NUM_PLIES ( INT_ELEM_ID )
          ENDIF
 
-         IF       (TYPE(1:3) == 'BAR  ') THEN
-               NUMBER_ROWS(K) = 2                          !    BAR stresses require 2 rows of output/elem
+         IF      ((TYPE(1:3) == 'BAR') .OR. (TYPE(1:4) == 'BEAM')) THEN
+               NUMBER_ROWS(K) = 2                          !    BAR and BEAM stresses require 2 rows of output/elem
          ELSE IF ((TYPE(1:5) == 'TRIA3' ) .OR. (TYPE(1:5) == 'QUAD4')) THEN
             IF (PCOMP_PROPS == 'Y') THEN
                NUMBER_ROWS(K) = NUM_PLIES                  !    PCOMP requires NUM_PLIES rows of output/elem

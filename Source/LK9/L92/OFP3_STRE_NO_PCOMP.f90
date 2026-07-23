@@ -232,7 +232,8 @@ do_stress_pts:    DO M=1,NUM_PTS(I)
 
                         CALL GET_STRESS_ITEM_DATA
 
-                        IF ((TYPE == 'BAR     ') .OR. (TYPE == 'TRIA3   ') .OR. (TYPE == 'QUAD4   ') .OR. (TYPE == 'SHEAR   ')) THEN
+                        IF ((TYPE == 'BAR     ') .OR. (TYPE == 'BEAM    ') .OR. (TYPE == 'TRIA3   ') .OR.                           &
+                            (TYPE == 'QUAD4   ') .OR. (TYPE == 'SHEAR   ')) THEN
                            DO L=1,2
                               DO K=1,NUM_OTM_ENTRIES
                                  OT4_EROW = OT4_EROW + 1
@@ -928,7 +929,7 @@ do_stress_pts:    DO M=1,NUM_PTS(I)
          STRESS_ITEM( 3) = 'Torsional Stress    '
          STRESS_ITEM( 4) = 'MS - Torsion        '
 
-      ELSE IF  (TYPE(1:3) == 'BAR'  ) THEN
+      ELSE IF ((TYPE(1:3) == 'BAR'  ) .OR. (TYPE(1:4) == 'BEAM')) THEN
          NUM_OTM_ENTRIES = 9
          STRESS_ITEM( 1) = 'SA1: Stress Pt1 EndA'  ;  STRESS_ITEM(10) = 'SB1: Stress Pt1 EndB'
          STRESS_ITEM( 2) = 'SA2: Stress Pt2 EndA'  ;  STRESS_ITEM(11) = 'SB2: Stress Pt2 EndB'
