@@ -32,7 +32,7 @@
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
       USE PARAMS, ONLY                :  EPSIL
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, BEAMTOR, FATAL_ERR, IERRFL, JCARD_LEN, JF, LPBEAM, NPBEAM
-      USE CONSTANTS_1, ONLY           :  ZERO
+      USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE TIMDAT, ONLY                :  TSEC
       USE MODEL_STUF, ONLY            :  PBEAM, RPBEAM
       USE PARAMS, ONLY                :  SUPINFO
@@ -366,6 +366,9 @@
          ENDDO
          CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,9 )  ! Make sure that there are no imbedded blanks in fields 2-9
          CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
+      ELSE                                                 ! No 5th card: K1, K2 default to 1.0 (as in MSC Nastran)
+         RPBEAM(NPBEAM,30) = ONE
+         RPBEAM(NPBEAM,31) = ONE
       ENDIF
 
 ! Read and check data on optional 6th card:
