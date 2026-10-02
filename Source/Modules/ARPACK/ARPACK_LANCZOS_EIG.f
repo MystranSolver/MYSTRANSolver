@@ -10,11 +10,13 @@
       USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
       USE PARAMS, ONLY                :  SOLLIB
       USE ARPACK_UTIL
+      USE SUPERLU_ADAPTERS, ONLY       :  FBS_SUPRLU,                                  &
+     &                                   SYM_MAT_DECOMP_SUPRLU
 
-      USE OURTIM_Interface
-      USE MATMULT_SFF_Interface
-      USE ARPACK_INFO_MSG_Interface
-      USE LINK_MESSAGE_Interface
+      USE DATE_TIME_UTILS, ONLY     : OURTIM
+      USE SPARSE_FULL_MULTIPLICATION, ONLY: MATMULT_SFF
+      USE ARPACK_DIAGNOSTICS, ONLY : ARPACK_INFO_MSG
+      USE DIAGNOSTICS_MEMORY_REPORTING, ONLY: LINK_MESSAGE
 
       character(1*byte), parameter   :: cr13_a = char(13)
       CHARACTER(44*BYTE)             :: MODNAM1            ! Name to write to screen to describe module being run.

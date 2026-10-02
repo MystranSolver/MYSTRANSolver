@@ -24,6 +24,16 @@
 
 ! End MIT license text.
 
+   MODULE UNIX_TIME_MOD
+
+   IMPLICIT NONE
+
+   PRIVATE
+
+   PUBLIC :: UNIX_TIME
+
+   CONTAINS
+
 ! Computes the current UNIX timestamp via C's time().
 
 SUBROUTINE UNIX_TIME(T)
@@ -46,3 +56,5 @@ SUBROUTINE UNIX_TIME(T)
    T = INT(C_TIME(C_NULL_PTR), LONG)
 
 END SUBROUTINE UNIX_TIME
+
+   END MODULE UNIX_TIME_MOD

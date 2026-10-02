@@ -7,6 +7,7 @@
       USE TIMDAT, ONLY                   :  HOUR, MINUTE, SEC,
      &                                      SFRAC, TSEC
       USE PARAMS, ONLY                   :  DELBAN
+      USE BANDIT_FILE_SUPPORT, ONLY      :  BANDIT_FILES
 
 ! Notes:
 ! ------

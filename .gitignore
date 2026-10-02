@@ -39,7 +39,7 @@ CMakeDoxy*
 fort.*
 
 # generated subroutines
-Source/INCLUDE/*.F90.inc
+Source/INCLUDE/*.F03.inc
 
 # CPack stuff (for in-source LAPACK builds)
 CPack*.cmake
