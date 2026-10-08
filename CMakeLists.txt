@@ -223,9 +223,9 @@ if(TPL_ENABLE_METISLIB)
   message(STATUS "SuperLU patched.")
 endif()
 
-set(enable_examples OFF FORCE)
-set(enable_tests OFF FORCE)
-set(enable_doc OFF FORCE)
+set(enable_examples OFF CACHE BOOL "" FORCE)
+set(enable_tests OFF CACHE BOOL "" FORCE)
+set(enable_doc OFF CACHE BOOL "" FORCE)
 
 # -----------------------------------------------------------------------
 # BLAS / LAPACK provider resolution
