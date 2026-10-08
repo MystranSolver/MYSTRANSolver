@@ -733,6 +733,7 @@ stfpnt0:          DO                                       ! so, run this loop u
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  AGRID, ELDT, ELDOF, ELGP, GRID_ID, NUM_EMG_FATAL_ERRS, PLY_NUM, OELDT, KE, KED, TYPE
       USE STF_ARRAYS, ONLY            :  STFKEY, STF3
+      USE DERIVED_DATA_TYPES, ONLY    :  INT2_REAL1
       USE STF_TEMPLATE_ARRAYS, ONLY   :  CROW, TEMPLATE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
 
@@ -746,6 +747,8 @@ stfpnt0:          DO                                       ! so, run this loop u
       USE PROGRESS_COUNTERS, ONLY     :  COUNTER_INIT, COUNTER_PROGRESS
 
       IMPLICIT NONE
+
+      TYPE(INT2_REAL1), ALLOCATABLE   :: STF3_KEEP(:)      ! In-memory copy of STF3(1:NTERM) while STF3 is reallocated
 
       CHARACTER, PARAMETER            :: CR13 = CHAR(13)   ! This causes a carriage return simulating the "+" action in a FORMAT
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'ESP'
@@ -1166,37 +1169,23 @@ stfpnt0:          DO                                       ! so, run this loop u
          CALL DEALLOCATE_TEMPLATE
       ENDIF
 
-! Open a scratch file that will be used to write array STF3 so that we can deallocate them and then reallocate them with the exact
-! amount of memory they need (so we do have wasted memory going into subr SPARSE_KGG)
+! Reallocate STF3 with the NTERM terms it holds, so that SPARSE_KGG does not carry the estimated size. The terms go through an
+! in-memory copy. (They used to go through a scratch file, one record per term, which took seconds on large models; and LTERM was
+! reset only after the reallocation, so STF3 came back at the estimated size.) Peak memory during the copy is LTERM + NTERM terms.
 
-      SCRFIL(1:)  = ' '
-      SCRFIL(1:9) = 'SCRATCH-991'
-      OPEN (SCR(1),STATUS='SCRATCH',POSITION='REWIND',FORM='UNFORMATTED',ACTION='READWRITE',IOSTAT=IOCHK)
-      IF (IOCHK /= 0) THEN
-         CALL OPNERR ( IOCHK, SCRFIL, OUNT )
-         CALL FILE_CLOSE ( SCR(1), SCRFIL, 'DELETE' )
-         CALL OUTA_HERE ( 'Y' )
-      ENDIF
-      REWIND (SCR(1))
-
-      DO I=1,NTERM
-         WRITE(SCR(1)) STF3(I)
-      ENDDO
+      ALLOCATE ( STF3_KEEP(NTERM) )
+      STF3_KEEP(1:NTERM) = STF3(1:NTERM)
       CALL DEALLOCATE_STF_ARRAYS ( 'STF3' )
 
+      IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
+         LTERM_KGGD = MAX(NTERM,1)                         ! Set LTERM before reallocating, so STF3 is reallocated with NTERM terms
+      ELSE
+         LTERM_KGG  = MAX(NTERM,1)
+      ENDIF
       CALL ALLOCATE_STF_ARRAYS ( 'STF3', SUBR_NAME )
 
-      REWIND (SCR(1))
-      DO I=1,NTERM
-         READ(SCR(1),IOSTAT=IOCHK) STF3(I)
-         IF (IOCHK /= 0) THEN
-            REC_NO = J
-            CALL READERR ( IOCHK, SCRFIL, 'SCR FILE WITH STF3', REC_NO, OUNT )
-            CALL FILE_CLOSE ( SCR(1), SCRFIL, 'DELETE' )
-            CALL OUTA_HERE ( 'Y' )                         ! Error reading scratch file, so quit
-         ENDIF
-      ENDDO
-      CALL FILE_CLOSE (SCR(1), SCRFIL, 'DELETE' )
+      STF3(1:NTERM) = STF3_KEEP(1:NTERM)
+      DEALLOCATE ( STF3_KEEP )
 
 ! Reset LTERM and NTERM to appropriate values
 
