@@ -1057,29 +1057,17 @@ do_1: DO K=1,NELE
       DATA_SET_NAME = 'TSET'
       WRITE(L1C) DATA_SET_NAME
       WRITE(L1C) NGRID
-      DO I = 1,NGRID
-         DO J = 1,6
-           WRITE(L1C) TSET(I,J)
-         ENDDO
-      ENDDO
+      WRITE(L1C) ((TSET(I,J),J=1,6),I=1,NGRID)            ! One record per table (one per entry took about 2 s for 200k DOF)
       DATA_SET_NAME = 'TDOFI'
       WRITE(L1C) DATA_SET_NAME
       WRITE(L1C) NDOFG
       WRITE(L1C) MTDOF
-      DO I = 1,NDOFG
-         DO J = 1,MTDOF
-            WRITE(L1C) TDOFI(I,J)
-         ENDDO
-      ENDDO
+      WRITE(L1C) ((TDOFI(I,J),J=1,MTDOF),I=1,NDOFG)
       DATA_SET_NAME = 'TDOF'
       WRITE(L1C) DATA_SET_NAME
       WRITE(L1C) NDOFG
       WRITE(L1C) MTDOF
-      DO I = 1,NDOFG
-         DO J = 1,MTDOF
-            WRITE(L1C) TDOF(I,J)
-         ENDDO
-      ENDDO
+      WRITE(L1C) ((TDOF(I,J),J=1,MTDOF),I=1,NDOFG)
 
 
 

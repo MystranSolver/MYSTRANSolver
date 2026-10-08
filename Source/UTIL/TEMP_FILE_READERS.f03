@@ -976,12 +976,8 @@
       CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
       IF (INT2 /= NGRID) CALL DATA_SET_SIZE_ERROR ( LINK1C, NAME_Is, 'NGRID', NGRID, INT2 )
 
-      DO I=1,NGRID
-         DO J=1,6
-            READ(L1C,IOSTAT=IOCHK) TSET(I,J)                                   ; REC_NO = REC_NO + 1
-            CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
-         ENDDO
-      ENDDO
+      READ(L1C,IOSTAT=IOCHK) ((TSET(I,J),J=1,6),I=1,NGRID)                              ; REC_NO = REC_NO + 1
+      CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
 
 ! Read TDOFI array
 
@@ -1000,12 +996,8 @@
       CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
       IF (INT2 /= MTDOF  ) CALL DATA_SET_SIZE_ERROR ( LINK1C, NAME_Is, 'MTDOF', MTDOF, INT2 )
 
-      DO I=1,NDOFG
-         DO J=1,MTDOF
-            READ(L1C,IOSTAT=IOCHK) TDOFI(I,J)                                  ; REC_NO = REC_NO + 1
-            CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
-         ENDDO
-      ENDDO
+      READ(L1C,IOSTAT=IOCHK) ((TDOFI(I,J),J=1,MTDOF),I=1,NDOFG)                         ; REC_NO = REC_NO + 1
+      CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
 
 ! Read TDOF array
 
@@ -1024,12 +1016,8 @@
       CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
       IF (INT2 /= MTDOF  ) CALL DATA_SET_SIZE_ERROR ( LINK1C, NAME_Is, 'MTDOF', MTDOF, INT2 )
 
-      DO I=1,NDOFG
-         DO J=1,MTDOF
-            READ(L1C,IOSTAT=IOCHK) TDOF(I,J)                                   ; REC_NO = REC_NO + 1
-            CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
-         ENDDO
-      ENDDO
+      READ(L1C,IOSTAT=IOCHK) ((TDOF(I,J),J=1,MTDOF),I=1,NDOFG)                          ; REC_NO = REC_NO + 1
+      CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
 
       CALL FILE_CLOSE ( L1C, LINK1C, 'KEEP' )
 
