@@ -2481,7 +2481,7 @@ inner:         DO
       ENDIF
 
       ! If SOL is modes or CB or buckilng, then a METH card should have been found in Case Control
-      IF ((SOL_NAME(1:5) == 'MODES') .OR. (SOL_NAME(1:12) == 'GEN_CB_MODEL') .OR. (SOL_NAME(1:8) == 'BUCKLING')) THEN
+      IF ((SOL_NAME(1:5) == 'MODES') .OR. (SOL_NAME(1:12) == 'GEN CB MODEL') .OR. (SOL_NAME(1:8) == 'BUCKLING')) THEN
          IF (CC_EIGR_SID == 0) THEN
              WRITE(ERR,1004)
              WRITE(F06,1004)
