@@ -2889,7 +2889,9 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
 
       SUBROUTINE SOLVE_GMN_SOLVER
 
-! Solves RMM x GMN = -RMN for matrix GMN using unsymmetric decomp from LAPACK
+! Solves RMM x GMN = -RMN for matrix GMN using unsymmetric decomp from LAPACK (SOLLIB BANDED), or (SOLLIB SPARSE) block by block:
+! RMM falls apart into independent blocks (each rigid element or MPC couples only its own dependent DOFs), which module
+! BLOCK_DIAGONAL_SOLVE factors separately, so that each column of RMN is solved only in the blocks it touches.
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
@@ -2901,6 +2903,7 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
       USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
       USE FULL_MATRICES, ONLY         :  RMM_FULL
       USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO, SLU_SYMMETRIC
+      USE BLOCK_DIAGONAL_SOLVE, ONLY  :  BDS_FACTOR, BDS_FREE, BDS_SOLVE
 
 ! Interface module not needed for subr's DGETRF and DGETRS. These are "CONTAIN'ed" in module LAPACK_LIN_EQN_DPB, which
 ! is "USE'd" above
@@ -2938,6 +2941,11 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
       REAL(DOUBLE) , ALLOCATABLE      :: RMN_CCS(:)        ! RMN by cols (CCS), so that getting a col of RMN is not a search of
       INTEGER(LONG), ALLOCATABLE      :: J_RMN_CCS(:)      !   all of RMN (NDOFN cols times NTERM_RMN terms)
       INTEGER(LONG), ALLOCATABLE      :: I_RMN_CCS(:)
+      INTEGER(LONG), ALLOCATABLE      :: X_ROW(:)          ! Rows of a column of GMN from BDS_SOLVE
+      REAL(DOUBLE) , ALLOCATABLE      :: X_VAL(:)          ! and its values
+      INTEGER(LONG)                   :: NB, NX            ! Terms in a column of RMN, and in the solution
+      INTEGER(LONG)                   :: NUM_BLOCKS        ! Number of independent blocks of RMM
+      INTEGER(LONG)                   :: LARGEST           ! Size of the largest block
 
       INTRINSIC                       :: DABS
 
@@ -2990,12 +2998,21 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
 
          IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
-            SLU_INFO = 0
-            CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NDOFM, NTERM_RMM, SUBR_NAME )
-            CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
-            SLU_SYMMETRIC = 'N'                            ! RMM is not symmetric
-            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
-            SLU_SYMMETRIC = 'Y'
+            CALL BDS_FACTOR ( NDOFM, NTERM_RMM, I_RMM, J_RMM, RMM, INFO, NUM_BLOCKS, LARGEST )
+            IF (INFO > 0) THEN                             ! Zero pivot: RMM is singular
+               CALL GET_GRID_AND_COMP ( 'M ', INFO, GRIDV, COMPV  )
+               CALLED_SUBR = 'DGETRF'
+               WRITE(ERR,2501) CALLED_SUBR, SUBR_NAME, INFO
+               WRITE(F06,2501) CALLED_SUBR, SUBR_NAME, INFO
+               FATAL_ERR = FATAL_ERR + 1
+               IF ((GRIDV > 0) .AND. (COMPV > 0)) THEN
+                  WRITE(ERR,25012) GRIDV, COMPV
+                  WRITE(F06,25012) GRIDV, COMPV
+               ENDIF
+               CALL OUTA_HERE ( 'Y' )
+            ENDIF
+            WRITE(F06,2502) NUM_BLOCKS, LARGEST
+            ALLOCATE ( X_ROW(MAX(NDOFM,1)), X_VAL(MAX(NDOFM,1)) )
 
          ELSE
 
@@ -3042,6 +3059,22 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
       NTERM_GMN = 0
       CALL COUNTER_INIT('      Solve for GMN col ', NDOFN)
       DO J = 1,NDOFN
+
+         IF (SOLLIB == 'SPARSE  ') THEN                    ! Block by block: only the blocks that col J of RMN touches
+            NB = J_RMN_CCS(J+1) - J_RMN_CCS(J)
+            IF (NB > 0) THEN
+               CALL BDS_SOLVE ( NB, I_RMN_CCS(J_RMN_CCS(J):J_RMN_CCS(J+1)-1), -RMN_CCS(J_RMN_CCS(J):J_RMN_CCS(J+1)-1), NX,     &
+                                X_ROW, X_VAL )
+               DO K=1,NX                                   ! Count NTERM_GMN and write nonzero GMN to scratch file (rows ascending)
+                  IF (DABS(X_VAL(K)) > EPS1) THEN
+                     NTERM_GMN = NTERM_GMN + 1
+                     WRITE(SCR(1)) X_ROW(K),J,X_VAL(K)
+                  ENDIF
+               ENDDO
+            ENDIF
+            CALL COUNTER_PROGRESS(J)
+            CYCLE
+         ENDIF
 
          !CALL OURTIM
          !MODNAM1 = '      Solve for GMN col '
@@ -3127,25 +3160,10 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
       CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
       CALL DEALLOCATE_FULL_MAT ( 'RMM_FULL' )
 
-FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside SuperLU
-
-         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-            DO J=1,NDOFM                                         ! Need a null col of loads when SuperLU is called to factor KLL
-               DUM_COL(J) = ZERO                                  ! (only because it appears in the calling list)
-            ENDDO
-
-            CALL C_FORTRAN_DGSSV( 3, NDOFM, NTERM_RMM, 1, RMM, I_RMM, J_RMM, DUM_COL, NDOFM, SLU_FACTORS, SLU_INFO )
-
-            IF (SLU_INFO .EQ. 0) THEN
-               WRITE (*,*) 'SUPERLU STORAGE FREED'
-            ELSE
-               WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
-            ENDIF
-
-         ENDIF
-
-      ENDIF FreeS
+      IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the factors of the blocks of RMM
+         CALL BDS_FREE
+         DEALLOCATE ( X_ROW, X_VAL )
+      ENDIF
 
 ! The GMN data in SCRATCH-991 is written 1 col at a time. We need it to be written for 1 row at a time with rows in numerical order
 
@@ -3190,6 +3208,8 @@ FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the stor
       RETURN
 
 ! **********************************************************************************************************************************
+ 2502 FORMAT(' *INFORMATION: RMM HAS ',I8,' INDEPENDENT BLOCKS (THE LARGEST HAS ',I8,' DOFS), SOLVED BLOCK BY BLOCK FOR GMN')
+
  2501 FORMAT(' *ERROR  2501: LAPACK SUBROUTINE, ',A8,' CALLED BY SUBROUTINE ',A                                                    &
                     ,/,14X,' HAS DETECTED A ZERO ON THE DIAG IN ROW ',I12,' OF THE TRIANG FACTOR IN THE DECOMP OF MATRIX RMM.')
 
