@@ -2935,6 +2935,9 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
       REAL(DOUBLE)                    :: GMN_COL(NDOFM)    ! A column of GMN solved for herein
       REAL(DOUBLE)                    :: RMN_COL(NDOFM)    ! A column of RMN. The solution for GMN_COL is from RMM*GMN_COL = RMN_COL
+      REAL(DOUBLE) , ALLOCATABLE      :: RMN_CCS(:)        ! RMN by cols (CCS), so that getting a col of RMN is not a search of
+      INTEGER(LONG), ALLOCATABLE      :: J_RMN_CCS(:)      !   all of RMN (NDOFN cols times NTERM_RMN terms)
+      INTEGER(LONG), ALLOCATABLE      :: I_RMN_CCS(:)
 
       INTRINSIC                       :: DABS
 
@@ -3032,6 +3035,10 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
 
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages
 
+      ALLOCATE ( J_RMN_CCS(NDOFN+1), I_RMN_CCS(MAX(NTERM_RMN,1)), RMN_CCS(MAX(NTERM_RMN,1)) )
+      CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFN, NTERM_RMN, 'RMN', I_RMN, J_RMN, RMN, 'RMN_CCS', J_RMN_CCS, I_RMN_CCS, RMN_CCS,  &
+                                   'N' )
+
       NTERM_GMN = 0
       CALL COUNTER_INIT('      Solve for GMN col ', NDOFN)
       DO J = 1,NDOFN
@@ -3045,13 +3052,17 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
 ! Keep track of whether this col is null, so we can avoid FBS if it is.
 
          NULL_COL = 'Y'
-         DO I=1,NDOFM
-            RMN_COL(I) = ZERO
-            gmn_col(i) = zero
-         ENDDO
-
          BETA = -ONE
-         CALL GET_SPARSE_CRS_COL ( 'RMN       ',J, NTERM_RMN, NDOFM, NDOFN, I_RMN, J_RMN, RMN, BETA, RMN_COL, NULL_COL )
+         IF (J_RMN_CCS(J+1) > J_RMN_CCS(J)) THEN           ! Col J of RMN has terms (same col as GET_SPARSE_CRS_COL would get)
+            NULL_COL = 'N'
+            DO I=1,NDOFM
+               RMN_COL(I) = ZERO
+               GMN_COL(I) = ZERO
+            ENDDO
+            DO K=J_RMN_CCS(J),J_RMN_CCS(J+1)-1
+               RMN_COL(I_RMN_CCS(K)) = BETA*RMN_CCS(K)
+            ENDDO
+         ENDIF
 
 ! Calculate GMN_COL via forward/backward substitution. Remember that rhs is -RMN.
 
@@ -3111,6 +3122,7 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
       ENDDO
 
       WRITE(SC1,*) CR13
+      DEALLOCATE ( J_RMN_CCS, I_RMN_CCS, RMN_CCS )
 
       CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
       CALL DEALLOCATE_FULL_MAT ( 'RMM_FULL' )
