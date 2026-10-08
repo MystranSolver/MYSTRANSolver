@@ -768,6 +768,7 @@
       REAL(DOUBLE)                   :: A_RD(NUM_RIGID_DOF,5)
       REAL(DOUBLE)                   :: RANK_CHECK_A(NUM_RIGID_DOF,NUM_RIGID_DOF)
       REAL(DOUBLE)                   :: RANK_CHECK_B(NUM_RIGID_DOF,1)
+      REAL(DOUBLE), PARAMETER        :: RANK_RCOND = 1.0E-10_DOUBLE ! Relative rank tolerance for the retained REFC system
       REAL(DOUBLE)                   :: RESIDUAL_SCALE
       REAL(DOUBLE)                   :: RHS(5,NUM_RIGID_DOF+NUM_RIGID_DOF*MRBE3)
       REAL(DOUBLE)                   :: RHS_ORIGINAL(5,NUM_RIGID_DOF+NUM_RIGID_DOF*MRBE3)
@@ -803,7 +804,7 @@
 
          A_DD_ORIGINAL = A_DD
          RHS_ORIGINAL = RHS
-         CALL SOLVE_MINIMUM_NORM ( A_DD, RHS, NUM_DISCARDED, NUM_RIGHT_HAND_SIDES, RANK, INFO )
+         CALL SOLVE_MINIMUM_NORM ( A_DD, RHS, NUM_DISCARDED, NUM_RIGHT_HAND_SIDES, EPS1, RANK, INFO )
          IF (INFO /= 0) THEN
             WRITE(ERR,1955) REID, INFO
             WRITE(F06,1955) REID, INFO
@@ -839,7 +840,12 @@
       RANK_CHECK_A = ZERO
       RANK_CHECK_B = ZERO
       RANK_CHECK_A(1:NUM_RETAINED,1:NUM_RETAINED) = A_REDUCED(1:NUM_RETAINED,1:NUM_RETAINED)
-      CALL SOLVE_MINIMUM_NORM ( RANK_CHECK_A, RANK_CHECK_B, NUM_RETAINED, 1_LONG, RANK, INFO )
+! The rank is judged with a relative tolerance of RANK_RCOND, not machine precision: a reduced system that is singular in exact
+! arithmetic (e.g. two independent grids with only 123 whose line misses the reference grid: rotation about that line is free)
+! comes out with sigma_min/sigma_max of 1.0E-16 to 1.0E-12 from round-off alone, so a machine-precision test accepted or
+! rejected identical elements depending on their orientation.
+
+      CALL SOLVE_MINIMUM_NORM ( RANK_CHECK_A, RANK_CHECK_B, NUM_RETAINED, 1_LONG, RANK_RCOND, RANK, INFO )
       IF ((INFO /= 0) .OR. (RANK < NUM_RETAINED)) THEN
          WRITE(ERR,1957) REID, NUM_RETAINED, RANK
          WRITE(F06,1957) REID, NUM_RETAINED, RANK
@@ -856,12 +862,13 @@
 
 ! ##################################################################################################################################
 
-      SUBROUTINE SOLVE_MINIMUM_NORM ( MATRIX, RHS, N, NRHS, RANK, INFO )
+      SUBROUTINE SOLVE_MINIMUM_NORM ( MATRIX, RHS, N, NRHS, RCOND, RANK, INFO )
 
       REAL(DOUBLE), INTENT(INOUT)    :: MATRIX(:,:)
       REAL(DOUBLE), INTENT(INOUT)    :: RHS(:,:)
       INTEGER(LONG), INTENT(IN)      :: N
       INTEGER(LONG), INTENT(IN)      :: NRHS
+      REAL(DOUBLE), INTENT(IN)       :: RCOND             ! Relative tolerance for the rank (DGELSY RCOND)
       INTEGER(LONG), INTENT(OUT)     :: RANK
       INTEGER(LONG), INTENT(OUT)     :: INFO
 
@@ -871,14 +878,14 @@
       REAL(DOUBLE)                   :: WORK_QUERY(1)
 
       JPVT = 0
-      CALL DGELSY ( N, N, NRHS, MATRIX, SIZE(MATRIX,1,KIND=LONG), RHS, SIZE(RHS,1,KIND=LONG), JPVT, EPS1, RANK, &
+      CALL DGELSY ( N, N, NRHS, MATRIX, SIZE(MATRIX,1,KIND=LONG), RHS, SIZE(RHS,1,KIND=LONG), JPVT, RCOND, RANK, &
                     WORK_QUERY, -1_LONG, INFO )
       IF (INFO /= 0) RETURN
 
       LWORK = MAX(1_LONG, INT(WORK_QUERY(1),KIND=LONG))
       ALLOCATE(WORK(LWORK))
       JPVT = 0
-      CALL DGELSY ( N, N, NRHS, MATRIX, SIZE(MATRIX,1,KIND=LONG), RHS, SIZE(RHS,1,KIND=LONG), JPVT, EPS1, RANK, WORK, LWORK, INFO )
+      CALL DGELSY ( N, N, NRHS, MATRIX, SIZE(MATRIX,1,KIND=LONG), RHS, SIZE(RHS,1,KIND=LONG), JPVT, RCOND, RANK, WORK, LWORK, INFO )
       DEALLOCATE(WORK)
 
       END SUBROUTINE SOLVE_MINIMUM_NORM
