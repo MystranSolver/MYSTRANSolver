@@ -1852,7 +1852,7 @@ deb_17:        IF (DEBUG(17) > 0) THEN
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NDOFG, NGRID, NIND_GRDS_MPCS,                                    &
                                          NTERM_KGG, NUM_PCHD_SPC1, SOL_NAME, WARN_ERR
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO
+      USE CONSTANTS_1, ONLY           :  ZERO, MATRIX_FILE_BULK
       USE PARAMS, ONLY                :  AUTOSPC, AUTOSPC_RAT, EPSIL, PRTTSET, PRTSTIFF, SPC1QUIT, SUPINFO, SUPWARN
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  GRID, GRID_ID, GRID_SEQ, MPC_IND_GRIDS, INV_GRID_SEQ
@@ -1892,6 +1892,7 @@ deb_17:        IF (DEBUG(17) > 0) THEN
       INTEGER(LONG)                   :: KGG_ROW_NUM        ! The row num in G-set stiff matrix where stiff for DOF I begins
       INTEGER(LONG)                   :: KGG_II_COL_NUM     ! Col number in the 6x6 stiff matrix for 1 grid
       INTEGER(LONG)                   :: KGG_NUM_ASPC       ! Sum of NUM_ASPC_BY_COMP(6) (this is also NDOFSA but we need to test
+      INTEGER(LONG), ALLOCATABLE      :: IROW_KGG(:)        ! Row number of each KGG term, for the LINK1L write
       INTEGER(LONG)                   :: KTERM_KGG          ! Count of terms written to KGG file LINK1L to compare with NTERM_KGG
       INTEGER(LONG)                   :: NUM_NONZERO_IN_ROW ! Count of the actual number of nonzero terms in a row of KGG
       INTEGER(LONG)                   :: NUM_ASPC_BY_COMP(6)! The number of SPC1's for each displ component
@@ -2061,7 +2062,6 @@ n_do:       DO N=1,NUM_NONZERO_IN_ROW                      ! Formulate the K-th 
 
 j_do3:      DO J=1,NUM_NONZERO_IN_ROW
                KTERM_KGG = KTERM_KGG + 1                    ! KTERM_KGG is a count on the no. records written
-               WRITE(L1L) KGG_ROW_NUM, RJ(J), RSTF(J)
                J_KGG(KTERM_KGG) = RJ(J)
                  KGG(KTERM_KGG) = RSTF(J)
             ENDDO j_do3
@@ -2151,6 +2151,17 @@ j_do4:   DO J=1,NIND_GRDS_MPCS                           ! on MPC's since they m
          CALL OUTA_HERE ( 'Y' )                             ! Coding error, so quit
       ENDIF
 
+      ALLOCATE ( IROW_KGG(NTERM_KGG) )                    ! KGG to LINK1L as three records after a MATRIX_FILE_BULK record
+      DO I=1,NDOFG
+         DO J=I_KGG(I),I_KGG(I+1)-1
+            IROW_KGG(J) = I
+         ENDDO
+      ENDDO
+      WRITE(L1L) MATRIX_FILE_BULK
+      WRITE(L1L) IROW_KGG(1:NTERM_KGG)
+      WRITE(L1L) J_KGG(1:NTERM_KGG)
+      WRITE(L1L) KGG(1:NTERM_KGG)
+      DEALLOCATE ( IROW_KGG )
       CALL FILE_CLOSE ( L1L, LINK1L, 'KEEP' )
       WRITE(ERR,101) NUM_MAX
       IF (SUPINFO == 'N') THEN
