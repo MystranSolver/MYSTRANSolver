@@ -434,6 +434,11 @@
 
       ENDIF
 
+      IF ((DEBUG(84) /= 2) .AND. (DEBUG(84) /= 3)) THEN    ! Row-by-row product unless this subr's debug output is requested
+         CALL MATMULT_SSS_BY_ROWS
+         RETURN
+      ENDIF
+
 ! Do the multiply, using values put into AROW and J_AROW for each row of A. This is done to facilitate the SYM option for matrix A
 
       DELTA_KTERM_C = 0                                    ! Initialize variables used in the matrix multiplication in the DO I loop
@@ -533,6 +538,78 @@ l_do:          DO L=B_COL_BEG,B_COL_END
 ! ##################################################################################################################################
 
       CONTAINS
+
+! ##################################################################################################################################
+
+      SUBROUTINE MATMULT_SSS_BY_ROWS
+
+! C = CONS*A*B row by row (Gustavson). B (CCS) is put into rows once; each row of C is accumulated from the rows of B selected by
+! the terms of the row of A, in the order of those terms. Every term of C is the same sum, added in the same order, as in the
+! column-by-column loop of this subr, which visits every column of B for every row of A (NROW_A*NCOL_B steps).
+
+      INTEGER(LONG)                   :: NROW_B, NCOL_AT, P, JJ, M, NC
+      INTEGER(LONG), ALLOCATABLE      :: BR_PTR(:), BR_COL(:), MARK(:), LIST(:), AT_PTR(:), AT_ROW(:)
+      REAL(DOUBLE) , ALLOCATABLE      :: BR_VAL(:), ACC(:), AT_VAL(:)
+
+      NCOL_AT = 0                                          ! With SYM_A, the terms of A by columns (A is CRS: its rows are the
+      IF (SYM_A == 'Y') CALL SPARSE_CCS_TO_ROWS ( NROW_A, NTERM_A, I_A, J_A, NCOL_AT, AT_PTR, AT_ROW, A, AT_VAL ) ! "cols" here)
+
+      CALL SPARSE_CCS_TO_ROWS ( NCOL_B, NTERM_B, J_B, I_B, NROW_B, BR_PTR, BR_COL, B, BR_VAL )
+      ALLOCATE ( MARK(MAX(NCOL_B,1)), ACC(MAX(NCOL_B,1)), LIST(MAX(NCOL_B,1)) )
+      MARK      = 0
+      KTERM_C   = 0
+      A_ROW_BEG = 1
+      I_C(1)    = 1
+      DO I=1,NROW_A
+         I_C(I+1) = I_C(I)
+         A_NTERM_ROW_I = I_A(I+1) - I_A(I)
+         IF (A_NTERM_ROW_I == 0) CYCLE
+         A_ROW_END  = A_ROW_BEG + A_NTERM_ROW_I - 1
+         NTERM_AROW = 0
+         IF (SYM_A == 'Y') THEN                            ! Terms of this row that are stored above the diagonal in other rows
+            IF (I <= NCOL_AT) THEN                         ! (rows of A before row I, in the order they are stored in A)
+               DO P=AT_PTR(I),AT_PTR(I+1)-1
+                  IF (AT_ROW(P) >= I) EXIT
+                  NTERM_AROW = NTERM_AROW + 1
+                  AROW(NTERM_AROW)   = AT_VAL(P)
+                  J_AROW(NTERM_AROW) = AT_ROW(P)
+               ENDDO
+            ENDIF
+         ENDIF
+         DO K=A_ROW_BEG,A_ROW_END
+            NTERM_AROW = NTERM_AROW + 1
+            AROW(NTERM_AROW)   = A(K)
+            J_AROW(NTERM_AROW) = J_A(K)
+         ENDDO
+         NC = 0
+         DO K=1,NTERM_AROW
+            A_COL_NUM = J_AROW(K)
+            IF ((A_COL_NUM < 1) .OR. (A_COL_NUM > NROW_B)) CYCLE
+            DO P=BR_PTR(A_COL_NUM),BR_PTR(A_COL_NUM+1)-1
+               JJ = BR_COL(P)
+               IF (MARK(JJ) /= I) THEN
+                  MARK(JJ) = I
+                  ACC(JJ)  = ZERO
+                  NC       = NC + 1
+                  LIST(NC) = JJ
+               ENDIF
+               ACC(JJ) = ACC(JJ) + CONS*AROW(K)*BR_VAL(P)
+            ENDDO
+         ENDDO
+         CALL SORT_INT_ASCENDING ( NC, LIST )
+         DO M=1,NC
+            KTERM_C = KTERM_C + 1
+            IF (KTERM_C > NTERM_C) CALL ARRAY_SIZE_ERROR_1( SUBR_NAME, NTERM_C, MAT_C_NAME )
+            J_C(KTERM_C) = LIST(M)
+              C(KTERM_C) = ACC(LIST(M))
+         ENDDO
+         I_C(I+1)  = I_C(I) + NC
+         A_ROW_BEG = A_ROW_END + 1
+      ENDDO
+      DEALLOCATE ( BR_PTR, BR_COL, BR_VAL, MARK, ACC, LIST )
+      IF (SYM_A == 'Y') DEALLOCATE ( AT_PTR, AT_ROW, AT_VAL )
+
+      END SUBROUTINE MATMULT_SSS_BY_ROWS
 
 ! ##################################################################################################################################
 
@@ -849,6 +926,12 @@ l_do:          DO L=B_COL_BEG,B_COL_END
 
       ENDIF
 
+      IF ((DEBUG(84) /= 1) .AND. (DEBUG(84) /= 3) .AND. (DEBUG(83) /= 1) .AND. (DEBUG(83) /= 3)) THEN
+         CALL MATMULT_SSS_NTERM_BY_ROWS                    ! Row-by-row count unless this subr's debug output is requested
+         CALL DEALLOCATE_SPARSE_ALG ( 'J_AROW' )
+         RETURN
+      ENDIF
+
 ! Now count the terms that go into C, using values put into AROW and J_AROW for each row of A. This is done to facilitate the
 ! SYM option for matrix A.
 
@@ -942,6 +1025,60 @@ l_do:          DO L=B_COL_BEG,B_COL_END
 ! ##################################################################################################################################
 
       CONTAINS
+
+! ##################################################################################################################################
+
+      SUBROUTINE MATMULT_SSS_NTERM_BY_ROWS
+
+! Number of terms of C = A*B counted row by row (see MATMULT_SSS_BY_ROWS): the same pattern as the column-by-column count.
+
+      INTEGER(LONG)                   :: NROW_B, NCOL_AT, P, JJ, NC
+      INTEGER(LONG), ALLOCATABLE      :: BR_PTR(:), BR_COL(:), MARK(:), AT_PTR(:), AT_ROW(:)
+
+      NCOL_AT = 0                                          ! With SYM_A, the pattern of A by columns
+      IF (SYM_A == 'Y') CALL SPARSE_CCS_TO_ROWS ( NROW_A, NTERM_A, I_A, J_A, NCOL_AT, AT_PTR, AT_ROW )
+
+      CALL SPARSE_CCS_TO_ROWS ( NCOL_B, NTERM_B, J_B, I_B, NROW_B, BR_PTR, BR_COL )
+      ALLOCATE ( MARK(MAX(NCOL_B,1)) )
+      MARK      = 0
+      NTERM_C   = 0
+      A_ROW_BEG = 1
+      DO I=1,NROW_A
+         A_NTERM_ROW_I = I_A(I+1) - I_A(I)
+         IF (A_NTERM_ROW_I == 0) CYCLE
+         A_ROW_END  = A_ROW_BEG + A_NTERM_ROW_I - 1
+         NTERM_AROW = 0
+         IF (SYM_A == 'Y') THEN                            ! Terms of this row that are stored above the diagonal in other rows
+            IF (I <= NCOL_AT) THEN                         ! (rows of A before row I, in the order they are stored in A)
+               DO P=AT_PTR(I),AT_PTR(I+1)-1
+                  IF (AT_ROW(P) >= I) EXIT
+                  NTERM_AROW = NTERM_AROW + 1
+                  J_AROW(NTERM_AROW) = AT_ROW(P)
+               ENDDO
+            ENDIF
+         ENDIF
+         DO K=A_ROW_BEG,A_ROW_END
+            NTERM_AROW = NTERM_AROW + 1
+            J_AROW(NTERM_AROW) = J_A(K)
+         ENDDO
+         NC = 0
+         DO K=1,NTERM_AROW
+            IF ((J_AROW(K) < 1) .OR. (J_AROW(K) > NROW_B)) CYCLE
+            DO P=BR_PTR(J_AROW(K)),BR_PTR(J_AROW(K)+1)-1
+               JJ = BR_COL(P)
+               IF (MARK(JJ) /= I) THEN
+                  MARK(JJ) = I
+                  NC       = NC + 1
+               ENDIF
+            ENDDO
+         ENDDO
+         NTERM_C   = NTERM_C + NC
+         A_ROW_BEG = A_ROW_END + 1
+      ENDDO
+      DEALLOCATE ( BR_PTR, BR_COL, MARK )
+      IF (SYM_A == 'Y') DEALLOCATE ( AT_PTR, AT_ROW )
+
+      END SUBROUTINE MATMULT_SSS_NTERM_BY_ROWS
 
 ! ##################################################################################################################################
 
@@ -1314,5 +1451,102 @@ l_do:          DO L=B_COL_BEG,B_COL_END
       END SUBROUTINE MATTRNSP_SS_DEB
 
       END SUBROUTINE MATTRNSP_SS
+
+
+! ##################################################################################################################################
+
+      SUBROUTINE SPARSE_CCS_TO_ROWS ( NCOL_B, NTERM_B, J_B, I_B, NROW_B, BR_PTR, BR_COL, B, BR_VAL )
+
+! The rows of a matrix B stored by columns (CCS: J_B, I_B, B): BR_PTR(NROW_B+1), BR_COL, BR_VAL, with the columns of each row in
+! increasing order. NROW_B is the largest row number in I_B. B and BR_VAL are optional (pattern only without them).
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG, DOUBLE
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(IN)                         :: NCOL_B, NTERM_B
+      INTEGER(LONG), INTENT(IN)                         :: J_B(NCOL_B+1), I_B(NTERM_B)
+      INTEGER(LONG), INTENT(OUT)                        :: NROW_B
+      INTEGER(LONG), ALLOCATABLE, INTENT(OUT)           :: BR_PTR(:), BR_COL(:)
+      REAL(DOUBLE) , INTENT(IN), OPTIONAL               :: B(NTERM_B)
+      REAL(DOUBLE) , ALLOCATABLE, INTENT(OUT), OPTIONAL :: BR_VAL(:)
+      INTEGER(LONG), ALLOCATABLE                        :: NEXT(:)
+      INTEGER(LONG)                                     :: J, L, LB, M, P
+
+      NROW_B = 0
+      DO L=1,NTERM_B
+         NROW_B = MAX(NROW_B, I_B(L))
+      ENDDO
+      ALLOCATE ( BR_PTR(NROW_B+1), BR_COL(MAX(NTERM_B,1)), NEXT(MAX(NROW_B,1)) )
+      IF (PRESENT(BR_VAL)) ALLOCATE ( BR_VAL(MAX(NTERM_B,1)) )
+      BR_PTR = 0
+      DO L=1,NTERM_B
+         IF (I_B(L) >= 1) BR_PTR(I_B(L)+1) = BR_PTR(I_B(L)+1) + 1
+      ENDDO
+      BR_PTR(1) = 1
+      DO P=1,NROW_B
+         BR_PTR(P+1) = BR_PTR(P) + BR_PTR(P+1)
+      ENDDO
+      IF (NROW_B > 0) NEXT(1:NROW_B) = BR_PTR(1:NROW_B)
+      LB = 1                                               ! Index of the first term of column J of B (as in MATMULT_SSS)
+      DO J=1,NCOL_B
+         DO L=LB,LB+(J_B(J+1)-J_B(J))-1
+            P = I_B(L)
+            IF (P < 1) CYCLE
+            M = NEXT(P)
+            NEXT(P) = M + 1
+            BR_COL(M) = J
+            IF (PRESENT(BR_VAL)) BR_VAL(M) = B(L)
+         ENDDO
+         LB = LB + (J_B(J+1)-J_B(J))
+      ENDDO
+      DEALLOCATE ( NEXT )
+
+      END SUBROUTINE SPARSE_CCS_TO_ROWS
+
+! ##################################################################################################################################
+
+      SUBROUTINE SORT_INT_ASCENDING ( N, IA )
+
+! Heap sort of IA(1:N) into increasing order
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(IN)       :: N
+      INTEGER(LONG), INTENT(INOUT)    :: IA(*)
+      INTEGER(LONG)                   :: I, J, K, L, T
+
+      IF (N < 2) RETURN
+      DO L=N/2,1,-1                                        ! Build a max-heap
+         T = IA(L)
+         I = L
+         DO
+            J = 2*I
+            IF (J > N) EXIT
+            IF ((J < N) .AND. (IA(J+1) > IA(J))) J = J + 1
+            IF (T >= IA(J)) EXIT
+            IA(I) = IA(J)
+            I = J
+         ENDDO
+         IA(I) = T
+      ENDDO
+      DO K=N,2,-1                                          ! Move the largest to the end, restore the heap on 1..K-1
+         T = IA(K)
+         IA(K) = IA(1)
+         I = 1
+         DO
+            J = 2*I
+            IF (J > K-1) EXIT
+            IF ((J < K-1) .AND. (IA(J+1) > IA(J))) J = J + 1
+            IF (T >= IA(J)) EXIT
+            IA(I) = IA(J)
+            I = J
+         ENDDO
+         IA(I) = T
+      ENDDO
+
+      END SUBROUTINE SORT_INT_ASCENDING
 
    END MODULE SPARSE_MATRIX_ALGEBRA
