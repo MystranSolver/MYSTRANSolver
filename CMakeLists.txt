@@ -509,6 +509,14 @@ add_executable(
   ${SLU_DRIVER}
 )
 
+# These two sources use #ifdef (SET_BLAS_THREADS; the SuperLU_MT-only PARAMs) but have the
+# lowercase .f03 extension, which gfortran does not preprocess by default.
+foreach(_src IN LISTS ALL_FORTRAN_FILES)
+  if(_src MATCHES "/(STARTUP_SPECIALS|PARAM_CARDS)[.]f03$")
+    set_source_files_properties("${_src}" PROPERTIES Fortran_PREPROCESS ON)
+  endif()
+endforeach()
+
 # determine which superlu variant to link against
 if(USE_SUPERLU_MT)
   if(PLAT STREQUAL "_PTHREAD")
