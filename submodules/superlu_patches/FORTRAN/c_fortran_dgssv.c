@@ -36,6 +36,21 @@ typedef struct {
  *                    the structure of the factored matrices.
  *      Otherwise, it it an input.
  */
+/*
+ * Matrix kind for the next factorization (iopt == 1), set by the Fortran
+ * caller through c_fortran_dgssv_symmetric_:
+ *   0 = general matrix: column ordering on A'*A, partial pivoting
+ *       (diag_pivot_thresh = 1.0). This is the default.
+ *   1 = symmetric matrix (stiffness, shifted stiffness): ordering on A'+A,
+ *       SuperLU's symmetric mode and threshold pivoting that prefers the
+ *       diagonal (DiagPivotThresh = 0.001). Off-diagonal pivots are still
+ *       taken when a diagonal is too small, so the factorization stays
+ *       correct for any nonsingular matrix; the fill is about half.
+ */
+static int slu_symmetric = 0;
+
+void c_fortran_dgssv_symmetric_(int *flag) { slu_symmetric = (*flag != 0); }
+
 void c_fortran_dgssv_(int *iopt, int *n, int_t *nnz, int *nrhs, double *values,
                       int_t *rowind, int_t *colptr, double *b, int *ldb,
                       fptr *f_factors, /* a handle containing the address
@@ -95,12 +110,18 @@ void c_fortran_dgssv_(int *iopt, int *n, int_t *nnz, int *nrhs, double *values,
  *   permc_spec = 2: minimum degree on structure of A'+A
  *   permc_spec = 3: approximate minimum degree for unsymmetric matrices
  *   permc_spec = 6: METIS ordering on structure of A'*A
+ *   METIS_AT_PLUS_A: METIS ordering on structure of A'+A
  */
+    if (slu_symmetric) {
+      options.SymmetricMode = YES;
+      options.DiagPivotThresh = 0.001;
+    }
 #if (HAVE_METIS)
-    printf("USING METIS ORDERING\r\n");
-    permc_spec = 6;
+    printf(slu_symmetric ? "USING METIS ORDERING (SYMMETRIC)\r\n"
+                         : "USING METIS ORDERING\r\n");
+    permc_spec = slu_symmetric ? METIS_AT_PLUS_A : METIS_ATA;
 #else
-    permc_spec = options.ColPerm;
+    permc_spec = slu_symmetric ? MMD_AT_PLUS_A : options.ColPerm;
 #endif
     //	permc_spec = 0;
     // printf("before get_perm_c: permc_spec %d, *n %d\n", permc_spec, *n);

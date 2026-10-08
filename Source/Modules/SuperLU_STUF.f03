@@ -31,4 +31,9 @@
          INTEGER(LONG)                :: SLU_INFO
          INTEGER(DBL_LONG)            :: SLU_FACTORS
 
+         CHARACTER(LEN=1)             :: SLU_SYMMETRIC = 'Y' ! Matrix kind for the next SYM_MAT_DECOMP_SUPRLU factorization:
+!                                                             'Y' symmetric (KLL, KOO, KMSM): SuperLU orders on A'+A in symmetric
+!                                                             mode (about half the fill); 'N' general (RMM). A caller that sets
+!                                                             'N' sets it back to 'Y' after its factorization.
+
       END MODULE SuperLU_STUF

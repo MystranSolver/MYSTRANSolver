@@ -143,7 +143,7 @@
       USE CONSTANTS_1, ONLY           :  ZERO
       USE PARAMS, ONLY                :  CRS_CCS, SPARSTOR, BAILOUT
       USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
-      USE SuperLU_STUF, ONLY          :  SLU_FACTORS
+      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_SYMMETRIC
 
       USE SCRATCH_MATRIX_LIFECYCLE, ONLY:  ALLOCATE_SCR_CCS_MAT
       USE SPARSE_FORMAT_CONVERSION, ONLY:  SPARSE_CRS_SPARSE_CCS
@@ -172,6 +172,7 @@
 
       INTEGER(LONG)                   :: COMPV             ! Component number (1-6) of a grid DOF
       INTEGER(LONG)                   :: GRIDV             ! Grid number
+      INTEGER                         :: SYM_FLAG          ! 1 = symmetric matrix kind for SuperLU, 0 = general
 
       REAL(DOUBLE) , INTENT(IN)       :: MATIN(NTERMS)
       REAL(DOUBLE)                    :: DUM_COL(NROWS)    ! Temp variable for solving equations
@@ -183,6 +184,10 @@
       DO I=1,NROWS                                         ! Need a null col of loads when SuperLU is called to factor KLL
          DUM_COL(I) = ZERO                                 ! (only because it appears in the calling list)
       ENDDO
+
+      SYM_FLAG = 1                                         ! Matrix kind for SuperLU (see c_fortran_dgssv.c)
+      IF (SLU_SYMMETRIC == 'N') SYM_FLAG = 0
+      CALL C_FORTRAN_DGSSV_SYMMETRIC ( SYM_FLAG )
 
       IF      (SPARSTOR == 'SYM   ') THEN
 

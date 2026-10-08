@@ -2900,7 +2900,7 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
       USE SPARSE_MATRICES, ONLY       :  I_RMN, J_RMN, RMN, I_RMM, J_RMM, RMM, I2_GMN, I_GMN, J_GMN, GMN
       USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
       USE FULL_MATRICES, ONLY         :  RMM_FULL
-      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
+      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO, SLU_SYMMETRIC
 
 ! Interface module not needed for subr's DGETRF and DGETRS. These are "CONTAIN'ed" in module LAPACK_LIN_EQN_DPB, which
 ! is "USE'd" above
@@ -2990,7 +2990,9 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
             SLU_INFO = 0
             CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NDOFM, NTERM_RMM, SUBR_NAME )
             CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
+            SLU_SYMMETRIC = 'N'                            ! RMM is not symmetric
             CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
+            SLU_SYMMETRIC = 'Y'
 
          ELSE
 
