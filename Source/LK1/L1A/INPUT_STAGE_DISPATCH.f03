@@ -1337,13 +1337,8 @@ j_do2:            DO J=2,LMPCADDC
          TRIM_LINE = TRIM(LINE)
       ENDDO
 
-      DO I = 1,256
-          ! remove $
-          IF (LINE(I:I) == '$') THEN
-              LINE(I:) = ' '
-              EXIT
-          ENDIF
-      ENDDO
+      I = INDEX(LINE,'$')                                  ! Remove a $ comment
+      IF (I > 0) LINE(I:) = ' '
 
       LINE = TO_UPPER(LINE)
 

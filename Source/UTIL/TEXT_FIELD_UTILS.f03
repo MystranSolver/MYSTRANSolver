@@ -836,14 +836,12 @@ j_do:                   DO J=1,MAX_LEN_BAD_WRD             ! Loop trying to get 
       IMPLICIT NONE
       CHARACTER(LEN=*), INTENT (IN)   :: IN_TEXT
       CHARACTER(len=len(IN_TEXT))     :: rslt
-      INTEGER                         :: I, J
-      CHARACTER(26), parameter        :: UPP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-      CHARACTER(26), parameter        :: LOW = 'abcdefghijklmnopqrstuvwxyz'
+      INTEGER                         :: I, C
 
-      DO I = 1,len(IN_TEXT)
-         J = index(LOW, IN_TEXT(I:I))
-         IF (J>0) THEN
-            rslt(I:I) = UPP(J:J)
+      DO I = 1,len(IN_TEXT)                                ! a-z (ASCII 97-122) to A-Z; every other character unchanged
+         C = IACHAR(IN_TEXT(I:I))                          ! (a code test: INDEX over 'a..z' for every character of every
+         IF ((C >= 97) .AND. (C <= 122)) THEN              ! Bulk Data line took about 2 s reading a 6.6 MB deck)
+            rslt(I:I) = ACHAR(C - 32)
          ELSE
             rslt(I:I) = IN_TEXT(I:I)
          ENDIF
