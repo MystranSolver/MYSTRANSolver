@@ -276,6 +276,10 @@ if(DEFINED MYSTRAN_BLAS AND NOT _MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED)
   set(_MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED TRUE CACHE INTERNAL "")
 endif()
 
+# The legacy names are mapped on the first configure only: the resolution below caches
+# enable_internal_blaslib itself, which must not be read back as a user setting next time.
+set(_MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED TRUE CACHE INTERNAL "")
+
 set(MYSTRAN_BLAS_LAPACK "AUTO"
   CACHE STRING "BLAS+LAPACK provider: AUTO, SYSTEM, or EMBEDDED")
 set_property(CACHE MYSTRAN_BLAS_LAPACK PROPERTY STRINGS AUTO SYSTEM EMBEDDED)
@@ -289,7 +293,9 @@ endif()
 set(_MYSTRAN_HAVE_SYSTEM_BLAS_LAPACK FALSE)
 
 if(NOT MYSTRAN_BLAS_LAPACK STREQUAL "EMBEDDED")
-  if(TPL_BLAS_LIBRARIES)
+  # TPL_BLAS_LIBRARIES = "blas" written by an earlier EMBEDDED resolution names the embedded
+  # target, not a system library.
+  if(TPL_BLAS_LIBRARIES AND NOT (_MYSTRAN_TPL_BLAS_FROM_EMBEDDED AND TPL_BLAS_LIBRARIES STREQUAL "blas"))
     set(BLAS_FOUND TRUE)
     set(BLAS_LIBRARIES "${TPL_BLAS_LIBRARIES}")
   else()
@@ -381,6 +387,7 @@ endif()
 if(_MYSTRAN_BLAS_LAPACK_MODE STREQUAL "SYSTEM")
   set(TPL_BLAS_LIBRARIES "${BLAS_LIBRARIES}"
     CACHE FILEPATH "Set from MYSTRAN BLAS resolution." FORCE)
+  set(_MYSTRAN_TPL_BLAS_FROM_EMBEDDED FALSE CACHE INTERNAL "")
   set(enable_internal_blaslib OFF
     CACHE BOOL "Use system BLAS for SuperLU" FORCE)
   set(TPL_ENABLE_INTERNAL_BLASLIB OFF
@@ -398,6 +405,7 @@ else()
     CACHE BOOL "Use embedded Reference-LAPACK BLAS for SuperLU" FORCE)
   set(TPL_BLAS_LIBRARIES "blas"
     CACHE STRING "Set from MYSTRAN BLAS resolution." FORCE)
+  set(_MYSTRAN_TPL_BLAS_FROM_EMBEDDED TRUE CACHE INTERNAL "")
   message(STATUS
     "MYSTRAN BLAS+LAPACK mode: EMBEDDED (Reference-LAPACK submodule)")
 endif()
