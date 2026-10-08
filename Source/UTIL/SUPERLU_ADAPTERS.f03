@@ -143,12 +143,12 @@
       USE CONSTANTS_1, ONLY           :  ZERO
       USE PARAMS, ONLY                :  CRS_CCS, SPARSTOR, BAILOUT
       USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
-      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_SYMMETRIC
+      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_SYMMETRIC, SLU_DIAG_RATIO
 
       USE SCRATCH_MATRIX_LIFECYCLE, ONLY:  ALLOCATE_SCR_CCS_MAT
       USE SPARSE_FORMAT_CONVERSION, ONLY:  SPARSE_CRS_SPARSE_CCS
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
-      USE DIAGNOSTICS_MEMORY_REPORTING, ONLY:  GET_GRID_AND_COMP
+      USE DIAGNOSTICS_MEMORY_REPORTING, ONLY:  BAILOUT_CHECK, GET_GRID_AND_COMP
 
       IMPLICIT NONE
 
@@ -173,9 +173,18 @@
       INTEGER(LONG)                   :: COMPV             ! Component number (1-6) of a grid DOF
       INTEGER(LONG)                   :: GRIDV             ! Grid number
       INTEGER                         :: SYM_FLAG          ! 1 = symmetric matrix kind for SuperLU, 0 = general
+      INTEGER                         :: UDIAG_AVAILABLE   ! 1 if the SuperLU driver gave the diagonal of U
+      INTEGER, ALLOCATABLE            :: EXACT_D(:)        ! 1 if the diagonal of U in that col is D(i) of MATIN = L*D*L'
+      INTEGER(LONG), ALLOCATABLE      :: I_DIAG(:)         ! Row starts of the diagonal of MATIN as a matrix with 1 term per row
+      INTEGER(LONG)                   :: K                 ! DO loop index
+      INTEGER(LONG)                   :: NUM_NOT_D         ! Number of cols where the diagonal of U is not D(i)
+
+      LOGICAL                         :: FACTORIZATION_PROBLEM  ! Result of BAILOUT_CHECK
 
       REAL(DOUBLE) , INTENT(IN)       :: MATIN(NTERMS)
       REAL(DOUBLE)                    :: DUM_COL(NROWS)    ! Temp variable for solving equations
+      REAL(DOUBLE) , ALLOCATABLE      :: MATIN_DIAG(:)     ! Diagonal of MATIN
+      REAL(DOUBLE) , ALLOCATABLE      :: FACTOR_DIAG(:)    ! Diagonal of U by col of MATIN
 
 
 
@@ -256,13 +265,56 @@
 
       ENDIF
 
-      ! This should also use BAILOUT_CHECK like SYM_MAT_DECOMP_LAPACK does, however we need to
-      ! build an array of the diagonal values of the U factor. SLU_FACTORS is a pointer to the
-      ! structure containing L, U, perm_c, perm_r. See superlu/FORTRAN/c_fortran_dgssv.c. We
-      ! may need to look up the permutations to find the corresponding rows of U.
-      !
-      ! It still respects the BAILOUT parameter when SuperLU reports an error while processing
-      ! the matrix which seems to work in a similar way.
+! Ratio of matrix diagonal to factor diagonal (PARAM MAXRATIO), as SYM_MAT_DECOMP_LAPACK does with BAILOUT_CHECK, when the
+! caller asks for it (SLU_DIAG_RATIO) for a matrix factored in SuperLU's symmetric mode. Where SuperLU pivoted on the diagonal,
+! the diagonal of U is the pivot D(i) of MATIN = L*D*L', so the ratio is MATIN(i,i)/D(i). An off-diagonal pivot (taken when the
+! diagonal is less than DiagPivotThresh times the largest term left in its col) changes the pivots of every col it updates, so
+! those have no D(i) (the driver finds them from the structure of U); they are counted and given a ratio of 1. A nearly
+! singular MATIN (a mechanism) then gives a large ratio, or a zero or negative D(i), instead of a solution with very large
+! displacements. With BAILOUT >= 0 this is fatal, as on the LAPACK path.
+
+      IF ((SLU_DIAG_RATIO == 'Y') .AND. (SLU_SYMMETRIC == 'Y') .AND. (INFO == 0)) THEN
+
+         ALLOCATE ( MATIN_DIAG(NROWS), FACTOR_DIAG(NROWS), EXACT_D(NROWS), I_DIAG(NROWS+1) )
+         DO I=1,NROWS                                      ! MATIN has all terms of each row (SPARSTOR = NONSYM)
+            MATIN_DIAG(I) = ZERO
+            DO K=I_MATIN(I),I_MATIN(I+1)-1
+               IF (J_MATIN(K) == I) MATIN_DIAG(I) = MATIN(K)
+            ENDDO
+            I_DIAG(I) = I
+         ENDDO
+         I_DIAG(NROWS+1) = NROWS + 1
+
+         UDIAG_AVAILABLE = 0
+         CALL C_FORTRAN_DGSSV_UDIAG ( SLU_FACTORS, NROWS, FACTOR_DIAG, EXACT_D, UDIAG_AVAILABLE )
+
+         IF (UDIAG_AVAILABLE == 1) THEN
+            NUM_NOT_D = 0
+            DO I=1,NROWS
+               IF (EXACT_D(I) == 0) THEN
+                  NUM_NOT_D = NUM_NOT_D + 1
+                  FACTOR_DIAG(I) = MATIN_DIAG(I)
+               ENDIF
+            ENDDO
+            IF (NUM_NOT_D > 0) THEN
+               WRITE(ERR,9904) MATIN_NAME, NUM_NOT_D
+               WRITE(F06,9904) MATIN_NAME, NUM_NOT_D
+            ENDIF
+            FACTORIZATION_PROBLEM = BAILOUT_CHECK ( CALLING_SUBR, MATIN_NAME, MATIN_SET, NROWS, NROWS, I_DIAG, MATIN_DIAG, 'Y',    &
+                                                    FACTOR_DIAG )
+            IF (FACTORIZATION_PROBLEM .AND. (BAILOUT >= 0)) THEN
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,99999) BAILOUT
+               WRITE(F06,99999) BAILOUT
+               CALL OUTA_HERE ( 'Y' )
+            ENDIF
+         ENDIF
+
+         DEALLOCATE ( MATIN_DIAG, FACTOR_DIAG, EXACT_D, I_DIAG )
+
+      ENDIF
+
+! SuperLU reports a zero pivot (INFO > 0). If BAILOUT >= 0 then quit. Otherwise, continue processing.
 
       IF ((INFO > 0)) THEN
                                                            ! If BAILOUT >= 0 then quit. Otherwise, continue processing.
@@ -296,6 +348,9 @@
  9902 FORMAT(' SUPERLU FACTORIZATION OF MATRIX ', A, ' SUCCEEDED IN SUBR ', A)
 
  9903 FORMAT(' *ERROR  9903: SUPERLU SPARSE SOLVER HAS FAILED WITH INFO = ', I12,' IN SUBR ', A, ' CALLED BY SUBR ', A)
+
+ 9904 FORMAT(' *INFORMATION: THE RATIO OF MATRIX DIAGONAL TO FACTOR DIAGONAL OF ',A,' IS NOT FORMED FOR ',I12,' COLS:',    &
+             ' THEY TOOK, OR ARE UPDATED BY, AN OFF-DIAGONAL PIVOT IN SUPERLU')
 
 99999 FORMAT(/,' PROCESSING TERMINATED DUE TO ABOVE MESSAGES AND BULK DATA PARAMETER BAILOUT = ',I7)
 

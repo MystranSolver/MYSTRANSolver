@@ -31,6 +31,13 @@ typedef struct
  */
 void c_fortran_dgssv_symmetric_(int *flag) { (void)flag; }
 
+/* The ratio of matrix diagonal to factor diagonal is not provided with SuperLU_MT. */
+void c_fortran_dgssv_udiag_(fptr *f_factors, int *n, double *udiag,
+                            int *exact_d, int *available) {
+  (void)f_factors; (void)n; (void)udiag; (void)exact_d;
+  *available = 0;
+}
+
 /*!
  * This routine can be called from Fortran.
  *

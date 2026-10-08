@@ -51,6 +51,58 @@ static int slu_symmetric = 0;
 
 void c_fortran_dgssv_symmetric_(int *flag) { slu_symmetric = (*flag != 0); }
 
+/*
+ * Diagonal of U of the factored matrix in f_factors, by column of A:
+ * udiag[i] is the pivot of the column that is column i+1 of A.
+ * exact_d[i] = 1 if that pivot is D(i) of A = L*D*L' for a symmetric A: the
+ * pivot row is A's diagonal (row i+1) and no off-diagonal pivot reaches it.
+ * An off-diagonal pivot at one position changes every later position it
+ * updates (U(k,j) != 0), so those are marked 0 through the structure of U.
+ * *available = 1 (0 from drivers that do not provide it).
+ */
+void c_fortran_dgssv_udiag_(fptr *f_factors, int *n, double *udiag,
+                            int *exact_d, int *available) {
+  factors_t *LUfactors = (factors_t *)*f_factors;
+  SCformat *Lstore = (SCformat *)LUfactors->L->Store;
+  NCformat *Ustore = (NCformat *)LUfactors->U->Store;
+  double *Lval = (double *)Lstore->nzval;
+  int *perm_c = LUfactors->perm_c;
+  int *perm_r = LUfactors->perm_r;
+  double *dpos;
+  int *iperm_c, *clean;
+  int_t p;
+  int i, j, k, ok, fsupc;
+
+  if (!(dpos = doubleMalloc(*n)))
+    ABORT("Malloc fails for dpos[].");
+  if (!(iperm_c = int32Malloc(*n)) || !(clean = int32Malloc(*n)))
+    ABORT("Malloc fails for iperm_c[] or clean[].");
+  for (i = 0; i < *n; ++i)
+    iperm_c[perm_c[i]] = i;
+  /* The diagonal of U is in the diagonal block of each supernode of L; the
+     rest of U is in Ustore by column, with rows as pivot positions. */
+  for (k = 0; k <= Lstore->nsuper; ++k) {
+    fsupc = L_FST_SUPC(k);
+    for (j = fsupc; j < L_FST_SUPC(k + 1); ++j) {
+      dpos[j] = Lval[L_NZ_START(j) + (j - fsupc)];
+      ok = (perm_r[iperm_c[j]] == j);
+      for (i = fsupc; i < j && ok; ++i)
+        ok = clean[i];
+      for (p = U_NZ_START(j); p < U_NZ_START(j + 1) && ok; ++p)
+        ok = clean[U_SUB(p)];
+      clean[j] = ok;
+    }
+  }
+  for (i = 0; i < *n; ++i) {
+    udiag[i] = dpos[perm_c[i]];
+    exact_d[i] = clean[perm_c[i]];
+  }
+  SUPERLU_FREE(dpos);
+  SUPERLU_FREE(iperm_c);
+  SUPERLU_FREE(clean);
+  *available = 1;
+}
+
 void c_fortran_dgssv_(int *iopt, int *n, int_t *nnz, int *nrhs, double *values,
                       int_t *rowind, int_t *colptr, double *b, int *ldb,
                       fptr *f_factors, /* a handle containing the address

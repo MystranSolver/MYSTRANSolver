@@ -56,7 +56,7 @@
       USE MACHINE_PARAMS, ONLY        :  MACH_EPS, MACH_SFMIN
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
-      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
+      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO, SLU_DIAG_RATIO
 
 ! Interface module not needed for subr's DPBTRF and DPBTRS. These are "CONTAIN'ed" in module LAPACK_LIN_EQN_DPB,
 ! which is "USE'd" above
@@ -203,7 +203,9 @@ Factr:IF (SOLLIB == 'BANDED  ') THEN                       ! Use LAPACK
          IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
             SLU_INFO = 0
+            SLU_DIAG_RATIO = 'Y'                           ! Check matrix diag / factor diag (MAXRATIO), as on the LAPACK path
             CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KLL', L_SET, NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, SLU_INFO )
+            SLU_DIAG_RATIO = 'N'
 
          ELSE
 
