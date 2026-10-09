@@ -744,6 +744,7 @@
       LOGICAL                         :: FOUND_ABOVE_FRQ2  ! True if we found an eigenvalue above EIG_FRQ2
       LOGICAL                         :: SEARCH_COMPLETE   ! True when adaptive search should stop
       LOGICAL                         :: ZERO_LOWER_BOUND  ! True when EIG_FRQ1 ~ 0 (one-sided search)
+      LOGICAL                         :: STOPPED_AT_LIMIT  ! True when the search stopped at MAX_NEV or MAX_DOUBLINGS
 
       CHARACTER, PARAMETER            :: CR13 = CHAR(13)   ! Carriage return for screen output
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'EIG_LANCZOS_ARPACK_ADAPTIVE'
@@ -1005,6 +1006,7 @@
 
       NEV = INITIAL_NEV
       SEARCH_COMPLETE = .FALSE.
+      STOPPED_AT_LIMIT = .FALSE.
 
       WRITE(SC1,1002)
       WRITE(SC1,1003) INITIAL_NEV, MAX_DOUBLINGS, MAX_NEV
@@ -1198,10 +1200,12 @@
                WRITE(SC1,1009) NUM_CONVERGED, NEV
             ELSE IF (NEV >= MAX_NEV) THEN
                SEARCH_COMPLETE = .TRUE.
+               STOPPED_AT_LIMIT = .TRUE.
                WRITE(SC1,1025)
                WRITE(SC1,1010) MAX_NEV
             ELSE IF (NUM_DOUBLINGS >= MAX_DOUBLINGS) THEN
                SEARCH_COMPLETE = .TRUE.
+               STOPPED_AT_LIMIT = .TRUE.
                WRITE(SC1,1026)
                WRITE(SC1,1011) MAX_DOUBLINGS
             ELSE IF (NUM_ABOVE_FRQ2 >= MIN_ABOVE_FOR_STOP .AND. NUM_IN_RANGE == PREV_IN_RANGE) THEN
@@ -1232,11 +1236,13 @@
             ELSE IF (NEV >= MAX_NEV) THEN
                ! Reached maximum NEV
                SEARCH_COMPLETE = .TRUE.
+               STOPPED_AT_LIMIT = .TRUE.
                WRITE(SC1,1025)
                WRITE(SC1,1010) MAX_NEV
             ELSE IF (NUM_DOUBLINGS >= MAX_DOUBLINGS) THEN
                ! Reached maximum number of doublings
                SEARCH_COMPLETE = .TRUE.
+               STOPPED_AT_LIMIT = .TRUE.
                WRITE(SC1,1026)
                WRITE(SC1,1011) MAX_DOUBLINGS
             ELSE
@@ -1286,6 +1292,14 @@
       NUM_DISCARDED = NUM_CONVERGED - NUM_IN_RANGE
       WRITE(SC1,1030) NUM_CONVERGED, NUM_IN_RANGE, NUM_DISCARDED
       WRITE(SC1,1031) EIG_FRQ1, EIG_FRQ2
+
+      ! A search stopped by its limits before passing FRQ2 (and short of ND) may have missed modes in the range: always say so in
+      ! the F06, since the results are incomplete. EIGRL sets EIG_N2 = 1 when ND is blank, which asks for every mode in the range.
+      IF (STOPPED_AT_LIMIT .AND. (.NOT. FOUND_ABOVE_FRQ2) .AND. ((EIG_N2 <= 1) .OR. (NUM_IN_RANGE < EIG_N2))) THEN
+         WARN_ERR = WARN_ERR + 1
+         WRITE(ERR,9105) NUM_CONVERGED, EIG_FRQ2, NUM_IN_RANGE, MAX_NEV, NDOFL - NUM_MLL_DIAG_ZEROS
+         WRITE(F06,9105) NUM_CONVERGED, EIG_FRQ2, NUM_IN_RANGE, MAX_NEV, NDOFL - NUM_MLL_DIAG_ZEROS
+      ENDIF
 
       IF (NUM_IN_RANGE == 0) THEN
          WARN_ERR = WARN_ERR + 1
@@ -1499,6 +1513,10 @@
                     /,14X,' USE EIG_LANCZOS_ARPACK FOR NON-FREQUENCY-RANGE SEARCHES.')
 
  9104 FORMAT(' *WARNING 9104: NO EIGENVALUES FOUND IN THE FREQUENCY RANGE ',F12.4,' Hz TO ',F12.4,' Hz')
+
+ 9105 FORMAT(' *WARNING 9105: THE LANCZOS SEARCH STOPPED AT ITS LIMIT WITH ',I0,' EIGENVALUES, NONE ABOVE ',ES12.5,' Hz.',&
+          /,15X,I0,' MODES ARE IN THE REQUESTED RANGE, BUT MORE MAY BE MISSING. THIS SEARCH RETURNS AT MOST ',I0,&
+          /,15X,'EIGENVALUES (THE MODEL HAS ',I0,' DOFS WITH MASS). EIGR WITH METHOD GIV OR MGIV FINDS ALL MODES.')
 
  9892 FORMAT('               THIS IS FOR ROW AND COL IN THE MATRIX FOR GRID POINT ',I8,' COMPONENT ',I3)
 
