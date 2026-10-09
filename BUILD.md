@@ -110,6 +110,41 @@ straightforward.
 
 ---
 
+### CPU architecture and tuning
+
+All C, C++, and Fortran code compiled by this project defaults (on x86_64
+targets) to `-march=x86-64 -mtune=generic`, including the bundled GKlib, METIS,
+SuperLU, and embedded BLAS/LAPACK when applicable.
+
+Use the CMake cache settings `MYSTRAN_MARCH` and `MYSTRAN_MTUNE` to change
+the instruction set and tuning independently, e.g.:
+
+```sh
+cmake -G Ninja . -DCMAKE_BUILD_TYPE=Release \
+  -DMYSTRAN_MARCH=x86-64-v3 -DMYSTRAN_MTUNE=generic
+cmake --build . -j8
+```
+
+For a host-specific experiment, use `-DMYSTRAN_MARCH=native
+-DMYSTRAN_MTUNE=native`. Such binaries can be somewhat faster, but may not run
+on other (older) CPUs!
+
+Restore the portable defaults with:
+
+```sh
+cmake . -DMYSTRAN_MARCH=x86-64 -DMYSTRAN_MTUNE=generic
+cmake --build . -j8
+```
+
+CPU names must be accepted by all three compilers; unsupported settings
+fail at configure time. Set either option to an empty string to omit that
+flag and use the compiler/toolchain default. On non-x86 targets or
+toolchains without these flags, select appropriate supported values or
+disable both with `-DMYSTRAN_MARCH= -DMYSTRAN_MTUNE=`.
+Avoid adding competing `-march`/`-mtune` flags through `CMAKE_*_FLAGS`.
+
+---
+
 ## Troubleshooting
 
 While this process is meant to be straightforward, here is a list of some of

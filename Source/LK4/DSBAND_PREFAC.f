@@ -25,6 +25,11 @@
 
 ! End MIT license text.
 
+      MODULE DSBAND_PREFAC_MOD
+      IMPLICIT NONE
+      PRIVATE
+      PUBLIC :: DSBAND_PREFAC
+      CONTAINS
 c
 c     DSBAND_PREFAC: Version of DSBAND that assumes the matrix has already been factored.
 c
@@ -55,10 +60,9 @@ c
 
       USE ARPACK_LANCZOS_EIG, ONLY    :  dsaupd, dseupd, cr13_a
 
-      USE OURTIM_Interface
-      USE MATMULT_SFF_Interface
-      USE ARPACK_INFO_MSG_Interface
-      USE FBS_SUPRLU_Interface
+      USE SPARSE_FULL_MULTIPLICATION, ONLY: MATMULT_SFF
+      USE ARPACK_DIAGNOSTICS, ONLY : ARPACK_INFO_MSG
+      USE SUPERLU_ADAPTERS, ONLY     :  FBS_SUPRLU
 
       IMPLICIT NONE
 
@@ -727,3 +731,5 @@ c
       END SUBROUTINE ARP_DEB_PREFAC
 
       end subroutine dsband_prefac
+
+      END MODULE DSBAND_PREFAC_MOD
