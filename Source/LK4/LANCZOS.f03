@@ -844,6 +844,8 @@
          MAX_NEV = MAX(MAX_NEV, EIG_N2)
       ENDIF
       MAX_NEV = MIN(MAX_NEV, INITIAL_NEV*(2**MAX_DOUBLINGS))
+      MAX_NEV = MIN(MAX_NEV, NDOFL - NUM_MLL_DIAG_ZEROS - 4)  ! ARPACK needs NEV + 2 <= NCV <= (DOFs with mass) - 2
+      MAX_NEV = MAX(MAX_NEV, 1)
 
       ! Compute sigma (shift point in omega^2 = eigenvalue space)
       OMEGA_FRQ1_SQ = (TWO * PI * EIG_FRQ1)**2
