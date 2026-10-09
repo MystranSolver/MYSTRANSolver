@@ -3,6 +3,7 @@
 conm2_offset_mass.bdf   CONM2 10. with offset (-3, 0, -2), basic coordinates
 conm2_general_mass.bdf  CONM2 10. with offset (1.5, -2, 0.7) and products of inertia I21 = 0.8, I31 = -0.6, I32 = 1.1 in a
                         rotated CID 5, on grid 1 with rotated CP and CD 7; PARAM GRDPNT 0
+conm2_cidm1_mass.bdf    the same mass entered with CID = -1 (c.g. coordinates and inertia in basic)
 
 Exact: the inertia tensor J (off-diagonal terms -I21, -I31, -I32 as on the CONM2 entry) and the offset d are rotated to basic,
 the mass at the grid is M = m*T'*T + [0 0; 0 J], T = [I, -skew(d)] (the c.g. moves with v + w x d), then rotated to the grid's
@@ -122,6 +123,11 @@ def main():
     MO = np.array(rows)
     report('GPWG inertia about the origin vs exact, of the largest term (7-digit print)', abs(MO[3:, 3:] - JO).max() / abs(JO).max(),
            1e-6)
+
+    G1, _ = run(exe, 'conm2_cidm1_mass.bdf', a.work)
+    print('conm2_cidm1_mass')
+    report('MGG at grid 1 vs exact (CID = -1: c.g. and inertia in basic, 10-digit input), of the largest term',
+           abs(G1 - E).max() / abs(E).max(), 1e-8)
     sys.exit(0 if ok else 1)
 
 

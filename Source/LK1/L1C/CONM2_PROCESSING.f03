@@ -50,7 +50,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE PARAMS, ONLY                :  SUPWARN
-      USE MODEL_STUF, ONLY            :  CMASS, CONM2, PMASS, RCONM2, RPMASS, GRID, GRID_ID, CORD
+      USE MODEL_STUF, ONLY            :  CMASS, CONM2, PMASS, RCONM2, RPMASS, GRID, GRID_ID, CORD, RGRID
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
 
       USE DOF_ARRAY_INDEXING, ONLY    :  GET_ARRAY_ROW_NUM, GET_GRID_NUM_COMPS
@@ -203,7 +203,13 @@ outer:DO I=1,NCONM2
 
          CORD_FND = 'N'
          ACID = CONM2(I,3)
-         IF (ACID /= 0) THEN
+         IF (ACID == -1) THEN                              ! CID = -1: X1-X3 are the c.g. in basic, the inertias are in basic
+
+            IF (GRID_FND == 'N') CYCLE outer
+            D_0(1:3) = D_CID(1:3) - RGRID(GRID_ID_ROW_NUM,1:3)
+            MOI_M_0  = MOI_M_CID
+
+         ELSE IF (ACID /= 0) THEN
 
 j_loop1:    DO J=1,NCORD
                IF (ACID == CORD(J,2)) THEN
