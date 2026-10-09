@@ -223,9 +223,9 @@ if(TPL_ENABLE_METISLIB)
   message(STATUS "SuperLU patched.")
 endif()
 
-set(enable_examples OFF FORCE)
-set(enable_tests OFF FORCE)
-set(enable_doc OFF FORCE)
+set(enable_examples OFF CACHE BOOL "" FORCE)
+set(enable_tests OFF CACHE BOOL "" FORCE)
+set(enable_doc OFF CACHE BOOL "" FORCE)
 
 # -----------------------------------------------------------------------
 # BLAS / LAPACK provider resolution
@@ -276,6 +276,10 @@ if(DEFINED MYSTRAN_BLAS AND NOT _MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED)
   set(_MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED TRUE CACHE INTERNAL "")
 endif()
 
+# The legacy names are mapped on the first configure only: the resolution below caches
+# enable_internal_blaslib itself, which must not be read back as a user setting next time.
+set(_MYSTRAN_BLAS_LAPACK_LEGACY_MAPPED TRUE CACHE INTERNAL "")
+
 set(MYSTRAN_BLAS_LAPACK "AUTO"
   CACHE STRING "BLAS+LAPACK provider: AUTO, SYSTEM, or EMBEDDED")
 set_property(CACHE MYSTRAN_BLAS_LAPACK PROPERTY STRINGS AUTO SYSTEM EMBEDDED)
@@ -289,7 +293,9 @@ endif()
 set(_MYSTRAN_HAVE_SYSTEM_BLAS_LAPACK FALSE)
 
 if(NOT MYSTRAN_BLAS_LAPACK STREQUAL "EMBEDDED")
-  if(TPL_BLAS_LIBRARIES)
+  # TPL_BLAS_LIBRARIES = "blas" written by an earlier EMBEDDED resolution names the embedded
+  # target, not a system library.
+  if(TPL_BLAS_LIBRARIES AND NOT (_MYSTRAN_TPL_BLAS_FROM_EMBEDDED AND TPL_BLAS_LIBRARIES STREQUAL "blas"))
     set(BLAS_FOUND TRUE)
     set(BLAS_LIBRARIES "${TPL_BLAS_LIBRARIES}")
   else()
@@ -381,6 +387,7 @@ endif()
 if(_MYSTRAN_BLAS_LAPACK_MODE STREQUAL "SYSTEM")
   set(TPL_BLAS_LIBRARIES "${BLAS_LIBRARIES}"
     CACHE FILEPATH "Set from MYSTRAN BLAS resolution." FORCE)
+  set(_MYSTRAN_TPL_BLAS_FROM_EMBEDDED FALSE CACHE INTERNAL "")
   set(enable_internal_blaslib OFF
     CACHE BOOL "Use system BLAS for SuperLU" FORCE)
   set(TPL_ENABLE_INTERNAL_BLASLIB OFF
@@ -398,6 +405,7 @@ else()
     CACHE BOOL "Use embedded Reference-LAPACK BLAS for SuperLU" FORCE)
   set(TPL_BLAS_LIBRARIES "blas"
     CACHE STRING "Set from MYSTRAN BLAS resolution." FORCE)
+  set(_MYSTRAN_TPL_BLAS_FROM_EMBEDDED TRUE CACHE INTERNAL "")
   message(STATUS
     "MYSTRAN BLAS+LAPACK mode: EMBEDDED (Reference-LAPACK submodule)")
 endif()
@@ -508,6 +516,14 @@ add_executable(
   ${ALL_FORTRAN_FILES}
   ${SLU_DRIVER}
 )
+
+# These two sources use #ifdef (SET_BLAS_THREADS; the SuperLU_MT-only PARAMs) but have the
+# lowercase .f03 extension, which gfortran does not preprocess by default.
+foreach(_src IN LISTS ALL_FORTRAN_FILES)
+  if(_src MATCHES "/(STARTUP_SPECIALS|PARAM_CARDS)[.]f03$")
+    set_source_files_properties("${_src}" PROPERTIES Fortran_PREPROCESS ON)
+  endif()
+endforeach()
 
 # determine which superlu variant to link against
 if(USE_SUPERLU_MT)

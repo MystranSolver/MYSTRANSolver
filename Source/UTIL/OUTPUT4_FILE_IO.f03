@@ -1786,7 +1786,7 @@ do_1: DO                                                   ! Loop over unknown n
 
 ! Write matrix trailer
 
-      WRITE(UNT) NCOLS+1, IROW, PREC, (ZERO, I=1,PREC)
+      WRITE(UNT) NCOLS+1, IROW, PREC, ZERO                    ! Write matrix trailer (PREC words = one DOUBLE)
 
 ! Write matrix to f06 file, if requested
 
@@ -1955,7 +1955,7 @@ do_1: DO                                                   ! Loop over unknown n
          WRITE(F06,*)
       ENDIF
 
-      WRITE(UNT) NCOLS+1, IROW, PREC, (ZERO, I=1,PREC)     ! Write matrix trailer
+      WRITE(UNT) NCOLS+1, IROW, PREC, ZERO                    ! Write matrix trailer (PREC words = one DOUBLE)
 
       CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
       CALL DEALLOCATE_SCR_MAT ( 'CRS1' )

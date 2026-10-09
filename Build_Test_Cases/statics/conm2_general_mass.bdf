@@ -1,0 +1,22 @@
+$ CONM2 with offset and products of inertia in a rotated CID (5), on a grid with rotated CP and CD (7), PARAM GRDPNT 0.
+$ Check: MGG at grid 1 = exact (offset and tensor rotated to basic, parallel axis, rotated to CD 7), and the GPWG
+$ inertia about the origin = exact; see conm2_mass_check.py.
+SOL 103
+OUTPUT4 MGG,,,,//-1/21
+CEND
+METHOD = 1
+BEGIN BULK
+PARAM,GRDPNT,0
+CORD2R,5,,0.,0.,0.,0.3,0.4,0.866,+C5
++C5,1.,0.2,0.1
+CORD2R,7,,1.,2.,3.,1.2,1.9,4.,+C7
++C7,2.,2.5,3.1
+GRID,1,7,2.,-1.,0.5,7
+GRID,2,,10.,0.,0.,,123456
+CBAR,1,1,1,2,0.,0.,1.
+PBAR,1,1,1.,1.,1.,1.
+MAT1,1,1.E6,,0.3
+CONM2,4501,1,5,10.,1.5,-2.,0.7,,+M1
++M1,5.,0.8,7.,-0.6,1.1,9.
+EIGRL,1,,,3
+ENDDATA
