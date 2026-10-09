@@ -1,0 +1,23 @@
+$ One 10-node CTETRA listed with G1, G2, G3 counterclockwise seen from G4 (the same element as tet10_orientation_lh.bdf).
+$ Both orders must give the same displacements (MYSTRAN reorders the clockwise one, ORIENT_TETRA10).
+SOL 101
+CEND
+LOAD = 1
+DISP = ALL
+BEGIN BULK
+GRID,1,,0.0,0.0,0.0,,123456
+GRID,2,,1.0,0.0,0.0,,23
+GRID,3,,0.0,1.0,0.0,,3
+GRID,4,,0.0,0.0,1.0,,
+GRID,112,,0.5,0.0,0.0,,
+GRID,123,,0.5,0.5,0.0,,
+GRID,113,,0.0,0.5,0.0,,
+GRID,114,,0.0,0.0,0.5,,
+GRID,124,,0.5,0.0,0.5,,
+GRID,134,,0.0,0.5,0.5,,
+CTETRA,1,1,1,2,3,4,112,123,
+,113,114,124,134
+PSOLID,1,1
+MAT1,1,1000.,,0.3
+FORCE,1,4,,1.,0.,0.,1.
+ENDDATA
