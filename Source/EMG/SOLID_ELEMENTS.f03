@@ -112,6 +112,9 @@
                                                                 ! Strain-displ matrix for this element for all Gauss points
 
       REAL(DOUBLE)                    :: BI(6,3*ELGP)           ! Strain-displ matrix for this element for one Gauss point
+      REAL(DOUBLE)                    :: B_SH(6,3*ELGP,8)       ! Shear rows of B at the 2x2x2 points (reduced shear integration, IORD = 3)
+      REAL(DOUBLE)                    :: DETJ_SH(8)             ! Jacobian determinants at the 2x2x2 points
+      LOGICAL                         :: RED3                   ! True for IORD = 3 with reduced integration of the shear terms
 
       REAL(DOUBLE)                    :: CBAR(3,3*ELGP)         ! Derivatives of shape fcns wrt x,y,z used in diff stiff matrix
 !                                                                 (contains terms from DPSHX matrices for each grid of the HEXA)
@@ -360,12 +363,12 @@
                      DO I=1,IORD_SH
                         GAUSS_PT = GAUSS_PT + 1
                         CALL SHP3DH ( I, J, K, ELGP, SUBR_NAME, IORD_MSG, IORD_SH, SSS_SH(I), SSS_SH(J), SSS_SH(K), 'N', PSH,DPSHG )
-                        CALL JAC3D ( SSS_SH(I), SSS_SH(J), SSS_SH(K), DPSHG, 'N', JAC, JACI, DETJ(GAUSS_PT) )
+                        CALL JAC3D ( SSS_SH(I), SSS_SH(J), SSS_SH(K), DPSHG, 'N', JAC, JACI, DETJ_SH(GAUSS_PT) )
                         DPSHX = MATMUL(JACI, DPSHG)
                         CALL B3D_ISOPARAMETRIC ( DPSHX, GAUSS_PT, I, J, K, 'direct strains', 'Y', BI )
                         DO L=4,6
                            DO M=1,3*ELGP
-                              B(L,M,GAUSS_PT) = BI(L,M)
+                              B_SH(L,M,GAUSS_PT) = BI(L,M)
                            ENDDO
                         ENDDO
                      ENDDO
@@ -495,6 +498,7 @@
 
          DUM3 = ZERO
 
+         RED3 = ((RED_INT_SHEAR == 'Y') .AND. (IORD == 3))
          IORD_MSG = ' '
          GAUSS_PT = 0
          DO K=1,IORD
@@ -506,6 +510,7 @@
                         BI(L,M) = B(L,M,GAUSS_PT)
                      ENDDO
                   ENDDO
+                  IF (RED3) BI(4:6,:) = ZERO                      ! shear terms are integrated separately with 2x2x2 points                  
                   DUM4 = MATMUL(ES,BI)
                   DUM5 = MATMUL(TRANSPOSE(BI),DUM4)
                   INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
@@ -517,6 +522,28 @@
                ENDDO
             ENDDO
          ENDDO
+
+         IF (RED3) THEN                                       ! Shear strain energy with 2x2x2 Gauss points
+            CALL ORDER_GAUSS ( 2, SSS_SH, HHH_SH )
+            GAUSS_PT = 0
+            DO K=1,2
+               DO J=1,2
+                  DO I=1,2
+                     GAUSS_PT = GAUSS_PT + 1
+                     BI = ZERO
+                     BI(4:6,:) = B_SH(4:6,:,GAUSS_PT)
+                     DUM4 = MATMUL(ES,BI)
+                     DUM5 = MATMUL(TRANSPOSE(BI),DUM4)
+                     INTFAC = DETJ_SH(GAUSS_PT)*HHH_SH(I)*HHH_SH(J)*HHH_SH(K)
+                     DO L=1,3*ELGP
+                        DO M=1,3*ELGP
+                           DUM3(L,M) = DUM3(L,M) + DUM5(L,M)*INTFAC
+                        ENDDO
+                     ENDDO
+                  ENDDO
+               ENDDO
+            ENDDO
+         ENDIF
 
          DO I=1,3*ELGP
             DO J=1,3*ELGP
