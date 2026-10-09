@@ -34,6 +34,57 @@
 
    CONTAINS
 
+! ##################################################################################################################################
+
+      PURE CHARACTER(LEN=8) FUNCTION CARD_NAME ( CARD )
+
+! The name of a Bulk Data entry: field 1 up to a blank, a comma or the large field '*'
+
+      CHARACTER(LEN=*), INTENT(IN)    :: CARD
+      INTEGER                         :: K
+
+      K = SCAN(CARD(1:MIN(LEN(CARD),8)), ' ,*')
+      IF (K == 0) THEN                                     ! No delimiter in field 1: the name is all 8 characters
+         CARD_NAME = CARD(1:MIN(LEN(CARD),8))
+      ELSE IF (K == 1) THEN                                ! Field 1 starts with a delimiter: no name
+         CARD_NAME = ' '
+      ELSE
+         CARD_NAME = CARD(1:K-1)
+      ENDIF
+
+      END FUNCTION CARD_NAME
+
+! ##################################################################################################################################
+
+      PURE CHARACTER(LEN=8) FUNCTION READ_AS_PREFIX ( NAME )
+
+! The entry MYSTRAN reads whose name NAME starts with (the longest one), or blank. Earlier versions compared names by prefix and
+! read such an entry with that entry's layout.
+
+      CHARACTER(LEN=8), PARAMETER     :: KNOWN(84) = [ CHARACTER(LEN=8) :: 'CUSERIN', 'MOMENT1', 'MOMENT2', 'PUSERIN', &
+                                            'RSPLINE', 'BEAMOR', 'CELAS1', 'CELAS2', 'CELAS3', 'CELAS4', 'CMASS1', 'CMASS2', &
+                                            'CMASS3', 'CMASS4', 'CONROD', 'CORD1C', 'CORD1R', 'CORD1S', 'CORD2C', 'CORD2R', &
+                                            'CORD2S', 'CPENTA', 'CQUAD4', 'CQUAD8', 'CSHEAR', 'CTETRA', 'CTRIA3', 'CUSER1', &
+                                            'FORCE1', 'FORCE2', 'GRDSET', 'MOMENT', 'MPCADD', 'NLPARM', 'PCOMP1', 'PLOAD2', &
+                                            'PLOAD4', 'PLOTEL', 'PSHEAR', 'PSHELL', 'PSOLID', 'PUSER1', 'RFORCE', 'SPCADD', &
+                                            'SPOINT', 'SUPORT', 'TEMPP1', 'TEMPRB', 'ASET1', 'BAROR', 'CBEAM', 'CBUSH', &
+                                            'CHEXA', 'CONM2', 'DEBUG', 'EIGRL', 'FORCE', 'OMIT1', 'PARAM', 'PBARL', 'PBEAM', &
+                                            'PBUSH', 'PCOMP', 'PELAS', 'PMASS', 'SEQGP', 'SLOAD', 'SNORM', 'TEMPD', 'CBAR', &
+                                            'CROD', 'GRAV', 'GRID', 'LOAD', 'MAT1', 'MAT2', 'MAT8', 'MAT9', 'PROD', 'RBAR', &
+                                            'RBE1', 'RBE2', 'RBE3', 'SPC1' ]
+      CHARACTER(LEN=8), INTENT(IN)    :: NAME
+      INTEGER                         :: I
+
+      READ_AS_PREFIX = ' '
+      DO I=1,SIZE(KNOWN)
+         IF ((NAME /= KNOWN(I)) .AND. (INDEX(NAME, TRIM(KNOWN(I))) == 1)) THEN
+            READ_AS_PREFIX = KNOWN(I)
+            RETURN
+         ENDIF
+      ENDDO
+
+      END FUNCTION READ_AS_PREFIX
+
       SUBROUTINE ELEPRO ( INCR_NELE, JCARD, NFIELD, NMORE,                                                                         &
                           CHK_FLD2, CHK_FLD3, CHK_FLD4, CHK_FLD5, CHK_FLD6, CHK_FLD7, CHK_FLD8, CHK_FLD9 )
 
@@ -436,34 +487,34 @@ bdf:  DO
                  (CARD(1:5) == 'OMIT '   ) .OR. (CARD(1:5) == 'OMIT*'   )) THEN
             CALL BD_ASET    ( CARD )
 
-         ELSE IF((CARD(1:5) == 'ASET1'   ) .OR. (CARD(1:5) == 'OMIT1'   )) THEN
+         ELSE IF((CARD_NAME(CARD) == 'ASET1'   ) .OR. (CARD_NAME(CARD) == 'OMIT1'   )) THEN
             CALL BD_ASET1   ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'BAROR'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'BAROR'   )  THEN
             CALL BD_BAROR   ( CARD )
 
-         ELSE IF (CARD(1:6) == 'BEAMOR'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'BEAMOR'  )  THEN
             CALL BD_BEAMOR  ( CARD )
 
-         ELSE IF((CARD(1:4) == 'CBAR'    ) .OR. (CARD(1:5) == 'CBEAM'   ))  THEN
+         ELSE IF((CARD_NAME(CARD) == 'CBAR'    ) .OR. (CARD_NAME(CARD) == 'CBEAM'   ))  THEN
             CALL BD_CBAR    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'CBUSH'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CBUSH'   )  THEN
             CALL BD_CBUSH   ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'CELAS1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS1'  )  THEN
             CALL BD_CELAS1  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CELAS2'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS2'  )  THEN
             CALL BD_CELAS2  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CELAS3'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS3'  )  THEN
             CALL BD_CELAS3  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CELAS4'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS4'  )  THEN
             CALL BD_CELAS4  ( CARD )
 
-         ELSE IF (CARD(1:5) == 'CHEXA'   ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CHEXA'   ) THEN
             CALL BD_CHEXA   ( CARD, LARGE_FLD_INP, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
             IF (MELGP < ELEM_NUM_GRDS) THEN
@@ -473,29 +524,29 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'CMASS1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CMASS1'  )  THEN
             CALL BD_CMASS1  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CMASS2'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CMASS2'  )  THEN
             CALL BD_CMASS2  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CMASS3'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CMASS3'  )  THEN
             CALL BD_CMASS3  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CMASS4'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CMASS4'  )  THEN
             CALL BD_CMASS4  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CONROD'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CONROD'  )  THEN
             CALL BD_CONROD  ( CARD )
 
-         ELSE IF (CARD(1:5) == 'CONM2'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CONM2'   )  THEN
             CALL BD_CONM2   ( CARD, LARGE_FLD_INP )
 
-         ELSE IF ((CARD(1:6) == 'CORD1C'  ) .OR. (CARD(1:6) == 'CORD1R'  ) .OR. (CARD(1:6) == 'CORD1S'  ) .OR.                     &
-                  (CARD(1:6) == 'CORD2C'  ) .OR. (CARD(1:6) == 'CORD2R'  ) .OR. (CARD(1:6) == 'CORD2S'  )) THEN
+         ELSE IF ((CARD_NAME(CARD) == 'CORD1C'  ) .OR. (CARD_NAME(CARD) == 'CORD1R'  ) .OR. (CARD_NAME(CARD) == 'CORD1S'  ) .OR. &
+                  (CARD_NAME(CARD) == 'CORD2C'  ) .OR. (CARD_NAME(CARD) == 'CORD2R'  ) .OR. (CARD_NAME(CARD) == 'CORD2S'  )) THEN
             CALL BD_CORD    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'CPENTA'  ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CPENTA'  ) THEN
             CALL BD_CPENTA  ( CARD, LARGE_FLD_INP, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
             IF (MELGP < ELEM_NUM_GRDS) THEN
@@ -505,7 +556,7 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'CQUAD4'  ) THEN
+         ELSE IF ((CARD_NAME(CARD) == 'CQUAD4'  ) .OR. (CARD_NAME(CARD) == 'CQUAD4K' )) THEN    ! CQUAD4K: the reader handles it
             NUM_QUADS = NUM_QUADS + 1
             CALL BD_CQUAD   ( CARD, LARGE_FLD_INP, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
@@ -516,7 +567,7 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'CQUAD8'  ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CQUAD8'  ) THEN
             CALL BD_CQUAD8   ( CARD, LARGE_FLD_INP, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
             IF (MELGP < ELEM_NUM_GRDS) THEN
@@ -526,10 +577,10 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:4) == 'CROD'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CROD'    )  THEN
             CALL BD_CROD    ( CARD )
 
-         ELSE IF (CARD(1:6) == 'CSHEAR'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CSHEAR'  )  THEN
             NUM_QUADS = NUM_QUADS + 1
             CALL BD_CSHEAR  ( CARD, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
@@ -540,7 +591,7 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'CTETRA'  ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CTETRA'  ) THEN
             CALL BD_CTETRA  ( CARD, LARGE_FLD_INP, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
             IF (MELGP < ELEM_NUM_GRDS) THEN
@@ -550,7 +601,7 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'CTRIA3'  ) THEN
+         ELSE IF ((CARD_NAME(CARD) == 'CTRIA3'  ) .OR. (CARD_NAME(CARD) == 'CTRIA3K' )) THEN    ! CTRIA3K: the reader handles it
             CALL BD_CTRIA   ( CARD, LARGE_FLD_INP, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
             IF (MELGP < ELEM_NUM_GRDS) THEN
@@ -560,7 +611,7 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'CUSER1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CUSER1'  )  THEN
             CALL BD_CUSER1  ( CARD, LARGE_FLD_INP, ELEM_NUM_GRDS )
             ELEM_NUM_DOFS = 6*ELEM_NUM_GRDS
             IF (MELGP < ELEM_NUM_GRDS) THEN
@@ -570,7 +621,7 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:7) == 'CUSERIN' )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CUSERIN' )  THEN
             CALL BD_CUSERIN ( CARD, LARGE_FLD_INP, NG, NS )
             ELEM_NUM_GRDS =   NG + NS
             ELEM_NUM_DOFS = 6*NG + NS
@@ -581,49 +632,50 @@ bdf:  DO
                MELDOF = ELEM_NUM_DOFS
             ENDIF
 
-         ELSE IF (CARD(1:5) == 'DEBUG'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'DEBUG'   )  THEN
             CALL BD_DEBUG   ( CARD )
 
          ELSE IF((CARD(1:5) == 'EIGR '   ) .OR. (CARD(1:5) == 'EIGR*'   ))  THEN
             CALL BD_EIGR    ( CARD, LARGE_FLD_INP, EIGFND )
 
-         ELSE IF (CARD(1:5) == 'EIGRL'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'EIGRL'   )  THEN
             CALL BD_EIGRL   ( CARD, LARGE_FLD_INP, EIGFND )
 
-         ELSE IF((CARD(1:5) == 'FORCE'   ) .OR. (CARD(1:6) == 'MOMENT'  )) THEN
+         ELSE IF ((CARD_NAME(CARD) == 'FORCE'  ) .OR. (CARD_NAME(CARD) == 'FORCE1' ) .OR. (CARD_NAME(CARD) == 'FORCE2' ) .OR.  &
+                  (CARD_NAME(CARD) == 'MOMENT' ) .OR. (CARD_NAME(CARD) == 'MOMENT1') .OR. (CARD_NAME(CARD) == 'MOMENT2')) THEN
             CALL BD_FORMOM  ( CARD, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:4) == 'GRAV'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'GRAV'    )  THEN
             CALL BD_GRAV    ( CARD, LARGE_FLD_INP, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:6) == 'GRDSET'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'GRDSET'  )  THEN
             CALL BD_GRDSET  ( CARD )
 
-         ELSE IF (CARD(1:4) == 'GRID'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'GRID'    )  THEN
             CALL BD_GRID    ( CARD )
 
-         ELSE IF (CARD(1:4) == 'LOAD'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'LOAD'    )  THEN
             CALL BD_LOAD    ( CARD, LARGE_FLD_INP, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:4) == 'MAT1'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'MAT1'    )  THEN
             CALL BD_MAT1    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:4) == 'MAT2'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'MAT2'    )  THEN
             CALL BD_MAT2    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:4) == 'MAT8'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'MAT8'    )  THEN
             CALL BD_MAT8    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:4) == 'MAT9'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'MAT9'    )  THEN
             CALL BD_MAT9    ( CARD, LARGE_FLD_INP )
 
          ELSE IF((CARD(1:4) == 'MPC '    ) .OR. (CARD(1:4) == 'MPC*'    ))  THEN
             CALL BD_MPC     ( CARD, LARGE_FLD_INP, CC_MPC_FND )
 
-         ELSE IF (CARD(1:6) == 'MPCADD'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'MPCADD'  )  THEN
             CALL BD_MPCADD  ( CARD, LARGE_FLD_INP, CC_MPC_FND )
 
-         ELSE IF (CARD(1:6) == 'NLPARM'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'NLPARM'  )  THEN
             IF (SOL_NAME(1:8) == 'NLSTATIC') THEN
                CALL BD_NLPARM  ( CARD, CC_NLSID_FND )
             ELSE
@@ -638,7 +690,7 @@ bdf:  DO
                ENDIF
             ENDIF
 
-         ELSE IF (CARD(1:5) == 'PARAM'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PARAM'   )  THEN
             CALL BD_PARAM   ( CARD )
 
          ELSE IF((CARD(1:7) == 'PARVEC ' ) .OR. (CARD(1:7) == 'PARVEC*'  )) THEN
@@ -650,78 +702,78 @@ bdf:  DO
          ELSE IF((CARD(1:5) == 'PBAR '   ) .OR. (CARD(1:5) == 'PBAR*'   ))  THEN
             CALL BD_PBAR    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'PBARL'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PBARL'   )  THEN
             CALL BD_PBARL    ( CARD, LARGE_FLD_INP, SEC_TYPE )
             IPBARL = IPBARL + 1
             PBARL_SEC_TYPES(IPBARL) = SEC_TYPE
 
-         ELSE IF (CARD(1:5) == 'PBEAM'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PBEAM'   )  THEN
             CALL BD_PBEAM   ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'PBUSH'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PBUSH'   )  THEN
             CALL BD_PBUSH   ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'PCOMP'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PCOMP'   )  THEN
             CALL BD_PCOMP   ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'PCOMP1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PCOMP1'  )  THEN
             CALL BD_PCOMP1  ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'PELAS'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PELAS'   )  THEN
             CALL BD_PELAS   ( CARD )
 
-         ELSE IF (CARD(1:6) == 'PLOAD4'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PLOAD4'  )  THEN
             CALL BD_PLOAD4  ( CARD, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:6) == 'PLOAD2'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PLOAD2'  )  THEN
             CALL BD_PLOAD2  ( CARD, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:6) == 'PLOTEL'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PLOTEL'  )  THEN
             CALL BD_PLOTEL  ( CARD )
 
-         ELSE IF (CARD(1:5) == 'PMASS'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PMASS'   )  THEN
             CALL BD_PMASS   ( CARD )
 
-         ELSE IF (CARD(1:4) == 'PROD'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PROD'    )  THEN
             CALL BD_PROD    ( CARD )
 
-         ELSE IF (CARD(1:6) == 'PSHEAR'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PSHEAR'  )  THEN
             CALL BD_PSHEAR  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'PSHELL'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PSHELL'  )  THEN
             CALL BD_PSHEL   ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'PSOLID'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PSOLID'  )  THEN
             CALL BD_PSOLID  ( CARD, IOR3D )
             IF (IOR3D > IOR3D_MAX) THEN
                IOR3D_MAX = IOR3D
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'PUSER1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PUSER1'  )  THEN
             CALL BD_PUSER1  ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:7) == 'PUSERIN' )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PUSERIN' )  THEN
             CALL BD_PUSERIN ( CARD )
 
-         ELSE IF (CARD(1:4) == 'RBAR'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBAR'    )  THEN
             CALL BD_RBAR    ( CARD )
 
-         ELSE IF (CARD(1:4) == 'RBE1'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBE1'    )  THEN
             CALL BD_RBE1    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:4) == 'RBE2'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBE2'    )  THEN
             CALL BD_RBE2    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:4) == 'RBE3'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBE3'    )  THEN
             CALL BD_RBE3    ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'RFORCE'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RFORCE'  )  THEN
             CALL BD_RFORCE  ( CARD, LARGE_FLD_INP, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:7) == 'RSPLINE' )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RSPLINE' )  THEN
             CALL BD_RSPLINE ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'SEQGP'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SEQGP'   )  THEN
             IF (GRIDSEQ(1:6) == 'BANDIT') THEN
                WARN_ERR = WARN_ERR + 1
                WRITE(ERR,101) CARD
@@ -737,34 +789,34 @@ bdf:  DO
                CALL BD_SEQGP( CARD )
             ENDIF
 
-         ELSE IF (CARD(1:5) == 'SLOAD'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SLOAD'   )  THEN
             CALL BD_SLOAD   ( CARD, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:5) == 'SNORM'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SNORM'   )  THEN
             CALL BD_SNORM   ( CARD )
 
          ELSE IF((CARD(1:4) == 'SPC '    ) .OR. (CARD(1:4) == 'SPC*'    )) THEN
             CALL BD_SPC     ( CARD, CC_SPC_FND )
 
-         ELSE IF (CARD(1:4) == 'SPC1'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SPC1'    )  THEN
             CALL BD_SPC1    ( CARD, LARGE_FLD_INP, CC_SPC_FND )
 
-         ELSE IF (CARD(1:6) == 'SPCADD'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SPCADD'  )  THEN
             CALL BD_SPCADD  ( CARD, LARGE_FLD_INP, CC_SPC_FND )
 
-         ELSE IF (CARD(1:6) == 'SPOINT'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SPOINT'  )  THEN
             CALL BD_SPOINT  ( CARD )
 
-         ELSE IF (CARD(1:6) == 'SUPORT'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SUPORT'  )  THEN
             CALL BD_SUPORT  ( CARD )
 
          ELSE IF((CARD(1:5) == 'TEMP '   ) .OR. (CARD(1:5) == 'TEMP*'   ))  THEN
             CALL BD_TEMP    ( CARD, CC_LOAD_FND )
 
-         ELSE IF (CARD(1:5) == 'TEMPD'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'TEMPD'   )  THEN
             CALL BD_TEMPD   ( CARD, CC_LOAD_FND )
 
-         ELSE IF((CARD(1:6) == 'TEMPRB'  ) .OR. (CARD(1:6) == 'TEMPP1'  )) THEN
+         ELSE IF((CARD_NAME(CARD) == 'TEMPRB'  ) .OR. (CARD_NAME(CARD) == 'TEMPP1'  )) THEN
             CALL BD_TEMPRP  ( CARD, LARGE_FLD_INP, CC_LOAD_FND )
 
          ELSE IF((CARD(1:5) == 'USET '   ) .OR. (CARD(1:5) == 'USET*'    )) THEN
@@ -784,6 +836,13 @@ bdf:  DO
             ! only defined when it's a large field continuation
             !WRITE(ERR,'(A)') CARD2
             !WRITE(F06,'(A)') CARD2
+
+         ELSE IF (READ_AS_PREFIX(CARD_NAME(CARD)) /= ' ') THEN ! Starts with the name of an entry MYSTRAN reads: say so and stop
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,101) CARD
+            WRITE(ERR,1705) TRIM(CARD_NAME(CARD)), TRIM(READ_AS_PREFIX(CARD_NAME(CARD)))
+            IF (ECHO(1:4) /= 'NONE') WRITE(F06,101) CARD
+            WRITE(F06,1705) TRIM(CARD_NAME(CARD)), TRIM(READ_AS_PREFIX(CARD_NAME(CARD)))
 
          ELSE                                              ! CARD not processed by MYSTRAN
             WARN_ERR = WARN_ERR + 1
@@ -1237,6 +1296,9 @@ j_do2:            DO J=2,LMPCADDC
 
  9993 FORMAT(' *LOADB-WARNING    : PRIOR ENTRY NOT PROCESSED BY ',A)
 
+ 1705 FORMAT(' *ERROR  1705: MYSTRAN DOES NOT READ BULK DATA ENTRY ',A,' (IT IS NOT ',A,'; VERSIONS BEFORE THIS ONE MISREAD IT AS',&
+             ' THAT ENTRY)')
+
  9994 FORMAT(' *WARNING    : Due to the presence of ',I8,' scalar points (SPOINT''s) the user should be aware of the following:'   &
                     ,/,14X,'    a) They have no geometry; however their displ, forces, etc are reported in F06 as T1 components'   &
                     ,/,14X,'    b) As a consequence of (a), displ components 2-6 are undefined for SPOINT''s'                      &
@@ -1548,116 +1610,116 @@ j_do2:            DO J=2,LMPCADDC
           ! No errors, so process Bulk Data card. No need to check for
           ! imbedded blanks found when FFIELD was run - this will be
           ! checked when LOADB reads the bulk data
-          IF      (CARD(1:5) == 'BAROR'   )  THEN
+          IF      (CARD_NAME(CARD) == 'BAROR'   )  THEN
             CALL BD_BAROR0 ( CARD )
 
-         ELSE IF (CARD(1:6) == 'BEAMOR'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'BEAMOR'  )  THEN
             CALL BD_BEAMOR0( CARD )
 
-         ELSE IF ((CARD(1:4) == 'CBAR'    ) .OR. (CARD(1:5) == 'CBEAM'   ))  THEN
+         ELSE IF ((CARD_NAME(CARD) == 'CBAR'    ) .OR. (CARD_NAME(CARD) == 'CBEAM'   ))  THEN
             LELE  = LELE + 1
-            IF (CARD(1:4) == 'CBAR'    ) THEN
+            IF (CARD_NAME(CARD) == 'CBAR'    ) THEN
                LEDAT = LEDAT + MEDAT_CBAR
             ELSE
                LEDAT = LEDAT + MEDAT_CBEAM
             ENDIF
             CALL BD_CBAR0 ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:5) == 'CBUSH'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CBUSH'   )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CBUSH
             CALL BD_CBUSH0 ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'CELAS1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS1'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CELAS1
 
-         ELSE IF (CARD(1:6) == 'CELAS2'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS2'  )  THEN
             LELE   = LELE + 1
             LEDAT  = LEDAT + MEDAT_CELAS2
             LPELAS = LPELAS + 1                            ! CELAS2 has props on conn entry and we create a PELAS for them
 
-         ELSE IF (CARD(1:6) == 'CELAS3'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS3'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CELAS3
 
-         ELSE IF (CARD(1:6) == 'CELAS4'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CELAS4'  )  THEN
             LELE   = LELE + 1
             LEDAT  = LEDAT + MEDAT_CELAS4
             LPELAS = LPELAS + 1                            ! CELAS4 has props on conn entry and we create a PELAS for them
 
-         ELSE IF (CARD(1:5) == 'CHEXA'   ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CHEXA'   ) THEN
             LELE  = LELE + 1
             CALL BD_CHEXA0 ( CARD, LARGE_FLD_INP, DELTA_LEDAT )
             LEDAT = LEDAT + DELTA_LEDAT
 
-         ELSE IF (CARD(1:6) == 'CMASS1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CMASS1'  )  THEN
             LCMASS = LCMASS + 1
 
-         ELSE IF (CARD(1:6) == 'CMASS2'  )  THEN
-            LCMASS = LCMASS + 1
-            LPMASS = LPMASS + 1
-
-         ELSE IF (CARD(1:6) == 'CMASS3'  )  THEN
-            LCMASS = LCMASS + 1
-
-         ELSE IF (CARD(1:6) == 'CMASS4'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CMASS2'  )  THEN
             LCMASS = LCMASS + 1
             LPMASS = LPMASS + 1
 
-         ELSE IF (CARD(1:5) == 'CONM2'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CMASS3'  )  THEN
+            LCMASS = LCMASS + 1
+
+         ELSE IF (CARD_NAME(CARD) == 'CMASS4'  )  THEN
+            LCMASS = LCMASS + 1
+            LPMASS = LPMASS + 1
+
+         ELSE IF (CARD_NAME(CARD) == 'CONM2'   )  THEN
             LCONM2 = LCONM2 + 1
 
-         ELSE IF (CARD(1:6) == 'CONROD'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CONROD'  )  THEN
             LELE  = LELE  + 1
             LPROD = LPROD + 1
             LEDAT = LEDAT + MEDAT_CROD
 
-         ELSE IF((CARD(1:6) == 'CORD1C'  ) .OR. (CARD(1:6) == 'CORD1R'  ) .OR. (CARD(1:6) == 'CORD1S'  )) THEN
+         ELSE IF((CARD_NAME(CARD) == 'CORD1C'  ) .OR. (CARD_NAME(CARD) == 'CORD1R'  ) .OR. (CARD_NAME(CARD) == 'CORD1S'  )) THEN
             LCORD = LCORD + 1
             IF (CARD(41:48) /= '        ') LCORD = LCORD + 1
 
-         ELSE IF((CARD(1:6) == 'CORD2C'  ) .OR. (CARD(1:6) == 'CORD2R'  ) .OR. (CARD(1:6) == 'CORD2S'  )) THEN
+         ELSE IF((CARD_NAME(CARD) == 'CORD2C'  ) .OR. (CARD_NAME(CARD) == 'CORD2R'  ) .OR. (CARD_NAME(CARD) == 'CORD2S'  )) THEN
             LCORD = LCORD + 1
 
-         ELSE IF (CARD(1:6) == 'CPENTA'  ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CPENTA'  ) THEN
             LELE  = LELE + 1
             CALL BD_CPENTA0 ( CARD, LARGE_FLD_INP, DELTA_LEDAT )
             LEDAT = LEDAT + DELTA_LEDAT
 
-         ELSE IF (CARD(1:6) == 'CQUAD4'  ) THEN
+         ELSE IF ((CARD_NAME(CARD) == 'CQUAD4'  ) .OR. (CARD_NAME(CARD) == 'CQUAD4K' )) THEN    ! CQUAD4K: the reader handles it
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CQUAD
             CALL BD_CQUAD0 ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'CQUAD8'  ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CQUAD8'  ) THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CQUAD8
             CALL BD_CQUAD80 ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:4) == 'CROD'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CROD'    )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CROD
 
-         ELSE IF (CARD(1:6) == 'CSHEAR'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CSHEAR'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CSHEAR
 
-         ELSE IF (CARD(1:6) == 'CTETRA'  ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'CTETRA'  ) THEN
             LELE  = LELE + 1
             CALL BD_CTETRA0 ( CARD, LARGE_FLD_INP, DELTA_LEDAT )
             LEDAT = LEDAT + DELTA_LEDAT
 
-         ELSE IF (CARD(1:6) == 'CTRIA3'  ) THEN
+         ELSE IF ((CARD_NAME(CARD) == 'CTRIA3'  ) .OR. (CARD_NAME(CARD) == 'CTRIA3K' )) THEN    ! CTRIA3K: the reader handles it
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CTRIA
             CALL BD_CTRIA0 ( CARD, LARGE_FLD_INP )
 
-         ELSE IF (CARD(1:6) == 'CUSER1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CUSER1'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_CUSER1
 
-         ELSE IF (CARD(1:7) == 'CUSERIN' )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'CUSERIN' )  THEN
             LELE  = LELE + 1
             CALL BD_CUSERIN0 ( CARD, NG_USERIN, NS_USERIN )
             IF (NG_USERIN > LGUSERIN) THEN
@@ -1669,31 +1731,32 @@ j_do2:            DO J=2,LMPCADDC
                                                            ! LEDAT has "+ 1" term since last record is NUM_BDY_DOF not in MEDAT0
             LEDAT = LEDAT + MEDAT0_CUSERIN + 2*NG_USERIN + NS_USERIN +  1
 
-         ELSE IF (CARD(1:5) == 'DEBUG'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'DEBUG'   )  THEN
             CALL BD_DEBUG0 ( CARD )
 
-         ELSE IF((CARD(1:5) == 'FORCE'   ) .OR. (CARD(1:6) == 'MOMENT'  )) THEN
+         ELSE IF ((CARD_NAME(CARD) == 'FORCE'  ) .OR. (CARD_NAME(CARD) == 'FORCE1' ) .OR. (CARD_NAME(CARD) == 'FORCE2' ) .OR.  &
+                  (CARD_NAME(CARD) == 'MOMENT' ) .OR. (CARD_NAME(CARD) == 'MOMENT1') .OR. (CARD_NAME(CARD) == 'MOMENT2')) THEN
             LFORCE = LFORCE +1
 
-         ELSE IF (CARD(1:4) == 'GRAV'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'GRAV'    )  THEN
             LGRAV = LGRAV + 1
 
-         ELSE IF (CARD(1:6) == 'GRDSET'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'GRDSET'  )  THEN
             CALL BD_GRDSET0 ( CARD )
 
-         ELSE IF (CARD(1:4) == 'GRID'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'GRID'    )  THEN
             LGRID = LGRID + 1
             LDOFG = LDOFG + 6
 
-         ELSE IF (CARD(1:4) == 'LOAD'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'LOAD'    )  THEN
             LLOADR = LLOADR + 1
             CALL BD_LOAD0 ( CARD, LARGE_FLD_INP, ILOAD )
             IF (ILOAD > LLOADC) THEN
                LLOADC = ILOAD
             ENDIF
 
-         ELSE IF((CARD(1:4) == 'MAT1'    ) .OR. (CARD(1:4) == 'MAT2'    )  .OR.                                                    &
-                 (CARD(1:4) == 'MAT8'    ) .OR. (CARD(1:4) == 'MAT9'    )) THEN
+         ELSE IF((CARD_NAME(CARD) == 'MAT1'    ) .OR. (CARD_NAME(CARD) == 'MAT2'    )  .OR. &
+                 (CARD_NAME(CARD) == 'MAT8'    ) .OR. (CARD_NAME(CARD) == 'MAT9'    )) THEN
             LMATL = LMATL + 1
 
          ELSE IF((CARD(1:4) == 'MPC '    ) .OR. (CARD(1:4) == 'MPC*'    )) THEN
@@ -1703,7 +1766,7 @@ j_do2:            DO J=2,LMPCADDC
                MMPC = IMPC
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'MPCADD'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'MPCADD'  )  THEN
             LMPCADDR = LMPCADDR + 1
             CALL BD_MPCADD0 ( CARD, LARGE_FLD_INP, IMPCADD )
             IF (IMPCADD > LMPCADDC) THEN
@@ -1716,125 +1779,125 @@ j_do2:            DO J=2,LMPCADDC
          ELSE IF((CARD(1:5) == 'PBAR '   ) .OR. (CARD(1:5) == 'PBAR*'   ))  THEN
             LPBAR = LPBAR + 1
 
-         ELSE IF (CARD(1:5) == 'PBARL'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PBARL'   )  THEN
             LPBAR  = LPBAR  + 1
             NPBARL = NPBARL + 1
 
-         ELSE IF (CARD(1:5) == 'PBEAM'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PBEAM'   )  THEN
             LPBEAM = LPBEAM + 1
 
-         ELSE IF (CARD(1:5) == 'PBUSH'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PBUSH'   )  THEN
             LPBUSH = LPBUSH + 1
 
-         ELSE IF (CARD(1:5) == 'PCOMP'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PCOMP'   )  THEN
             LPCOMP = LPCOMP + 1
             CALL BD_PCOMP0 ( CARD, LARGE_FLD_INP, IPLIES )
             IF (IPLIES > LPCOMP_PLIES) THEN
                LPCOMP_PLIES = IPLIES
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'PCOMP1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PCOMP1'  )  THEN
             LPCOMP = LPCOMP + 1
             CALL BD_PCOMP10 ( CARD, LARGE_FLD_INP, IPLIES )
             IF (IPLIES > LPCOMP_PLIES) THEN
                LPCOMP_PLIES = IPLIES
             ENDIF
 
-         ELSE IF (CARD(1:5) == 'PELAS'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PELAS'   )  THEN
             LPELAS = LPELAS + 1
 
-         ELSE IF (CARD(1:6) == 'PLOAD2'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PLOAD2'  )  THEN
             LPDAT  = LPDAT  + MPDAT_PLOAD2
             LPLOAD = LPLOAD + 1
 
-         ELSE IF (CARD(1:6) == 'PLOAD4'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PLOAD4'  )  THEN
             LPDAT  = LPDAT  + MPDAT_PLOAD4
             LPLOAD = LPLOAD + 1
 
-         ELSE IF (CARD(1:6) == 'PLOTEL'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PLOTEL'  )  THEN
             LELE  = LELE + 1
             LEDAT = LEDAT + MEDAT_PLOTEL
 
-         ELSE IF (CARD(1:5) == 'PMASS'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PMASS'   )  THEN
             LPMASS = LPMASS + 4
 
-         ELSE IF (CARD(1:4) == 'PROD'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PROD'    )  THEN
             LPROD = LPROD + 1
 
-         ELSE IF (CARD(1:6) == 'PSHEAR'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PSHEAR'  )  THEN
             LPSHEAR = LPSHEAR + 1
 
-         ELSE IF (CARD(1:6) == 'PSHELL'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PSHELL'  )  THEN
             LPSHEL = LPSHEL + 1
 
-         ELSE IF (CARD(1:6) == 'PSOLID'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PSOLID'  )  THEN
             LPSOLID = LPSOLID + 1
 
-         ELSE IF (CARD(1:6) == 'PUSER1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PUSER1'  )  THEN
             LPUSER1 = LPUSER1 + 1
 
-         ELSE IF (CARD(1:7) == 'PUSERIN' )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'PUSERIN' )  THEN
             LPUSERIN = LPUSERIN + 1
 
-         ELSE IF (CARD(1:4) == 'RBAR'    ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBAR'    ) THEN
             LRIGEL  = LRIGEL + 1
 
-         ELSE IF (CARD(1:4) == 'RBE1'    ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBE1'    ) THEN
             LRIGEL  = LRIGEL + 1
 
-         ELSE IF (CARD(1:4) == 'RBE2'    ) THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBE2'    ) THEN
             LRIGEL  = LRIGEL + 1
 
-         ELSE IF (CARD(1:4) == 'RBE3'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RBE3'    )  THEN
             LRIGEL  = LRIGEL + 1
             CALL BD_RBE30 ( CARD, LARGE_FLD_INP, IRBE3 )
             IF (IRBE3 > MRBE3) THEN
                MRBE3 = IRBE3
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'RFORCE'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RFORCE'  )  THEN
             LRFORCE = LRFORCE + 1
 
-         ELSE IF (CARD(1:7) == 'RSPLINE' )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'RSPLINE' )  THEN
             CALL BD_RSPLINE0 ( CARD, LARGE_FLD_INP, IRSPLINE )
             LRIGEL = LRIGEL + 1
             IF (IRSPLINE > MRSPLINE) THEN
                MRSPLINE = IRSPLINE
             ENDIF
 
-         ELSE IF (CARD(1:5) == 'SLOAD'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SLOAD'   )  THEN
             CALL BD_SLOAD0 ( CARD, DELTA_SLOAD )
             LSLOAD = LSLOAD + DELTA_SLOAD
 
-         ELSE IF (CARD(1:5) == 'SEQGP'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SEQGP'   )  THEN
             LSEQ = LSEQ + 4                                ! Conservative estimate. There can only be 4 entries per card
 
-         ELSE IF (CARD(1:5) == 'SNORM'   )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SNORM'   )  THEN
             LSNORM = LSNORM + 1
 
          ELSE IF((CARD(1:4) == 'SPC '    ) .OR. (CARD(1:4) == 'SPC*'    )) THEN
             LSPC = LSPC + 1
 
-         ELSE IF (CARD(1:4) == 'SPC1'    )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SPC1'    )  THEN
             LSPC1 = LSPC1 + 1
 
-         ELSE IF (CARD(1:6) == 'SPCADD'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SPCADD'  )  THEN
             LSPCADDR = LSPCADDR + 1
             CALL BD_SPCADD0 ( CARD, LARGE_FLD_INP, ISPCADD )
             IF (ISPCADD > LSPCADDC) THEN
                LSPCADDC = ISPCADD
             ENDIF
 
-         ELSE IF (CARD(1:6) == 'SPOINT'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'SPOINT'  )  THEN
             CALL BD_SPOINT0 ( CARD, DELTA_SPOINT )
             NSPOINT = NSPOINT + DELTA_SPOINT               ! DELTA_SPOINT = number of SPOINTS defined on this SPOINT Bulk Data entry
             LGRID   = LGRID   + DELTA_SPOINT               ! Each SPOINT counts as 1 in the number of grids
             LDOFG   = LDOFG   + DELTA_SPOINT
 
-         ELSE IF (CARD(1:6) == 'TEMPRB'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'TEMPRB'  )  THEN
             LTDAT = LTDAT + MTDAT_TEMPRB
 
-         ELSE IF (CARD(1:6) == 'TEMPP1'  )  THEN
+         ELSE IF (CARD_NAME(CARD) == 'TEMPP1'  )  THEN
             LTDAT = LTDAT + MTDAT_TEMPP1
 
          ELSE IF (CARD(1:7) == 'ENDDATA' )  THEN
