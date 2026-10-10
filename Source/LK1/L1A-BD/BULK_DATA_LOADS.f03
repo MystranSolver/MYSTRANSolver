@@ -692,7 +692,6 @@
       USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD
       USE BDF_FIELD_VALIDATION, ONLY  :  BD_IMBEDDED_BLANK, CRDERR, I4FLD, R8FLD
       USE BDF_SET_SYNTAX, ONLY        :  TOKCHK
-      USE TEXT_FIELD_UTILS, ONLY      :  CARD_FLDS_NOT_BLANK
 
       IMPLICIT NONE
 
@@ -805,7 +804,12 @@
             CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,9 )  ! Make sure that there are no imbedded blanks in fields 2-9
          ELSE
             CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,0,0,0 )  ! Make sure that there are no imbedded blanks in fields 2-6
-            CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,0,0,7,8,9 )! Issue warning if fieldS 7, 8, 9 not blank
+            IF ((JCARD(7)(1:) /= ' ') .OR. (JCARD(8)(1:) /= ' ') .OR. (JCARD(9)(1:) /= ' ')) THEN
+               JERR      = JERR + 1                    ! "EID1 THRU EID2" is the whole list: IDs after it would be lost
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1217) JCARD(1), JCARD(2)
+               WRITE(F06,1217) JCARD(1), JCARD(2)
+            ENDIF
          ENDIF
          CALL CRDERR ( CARD )                                 ! CRDERR prints errors found when reading fields
 
@@ -829,6 +833,9 @@
  1128 FORMAT(' *ERROR  1128: ON ',A,A,' THE IDs MUST BE IN INCREASING ORDER FOR THRU OPTION')
 
  1152 FORMAT(' *ERROR  1152: ON ',A,A,' ELEM IDs MUST BE > 0')
+
+ 1217 FORMAT(' *ERROR  1217: ON ',A,A,' THE ELEMENTS ARE "EID1 THRU EID2" (FIELDS 4-6) OR A LIST OF IDs (FIELDS 4-9), NOT',  &
+             ' BOTH: FIELDS 7-9 MUST BE BLANK AFTER "THRU"')
 
  1163 FORMAT(' *ERROR  1163: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' TOO MANY ',A,' ENTRIES; LIMIT = ',I12)

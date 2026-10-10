@@ -753,7 +753,7 @@ bdf:  DO
             CALL BD_SPCADD  ( CARD, LARGE_FLD_INP, CC_SPC_FND )
 
          ELSE IF (CARD(1:6) == 'SPOINT'  )  THEN
-            CALL BD_SPOINT  ( CARD )
+            CALL BD_SPOINT  ( CARD, LARGE_FLD_INP )
 
          ELSE IF (CARD(1:6) == 'SUPORT'  )  THEN
             CALL BD_SUPORT  ( CARD )
@@ -1831,7 +1831,7 @@ j_do2:            DO J=2,LMPCADDC
             ENDIF
 
          ELSE IF (CARD(1:6) == 'SPOINT'  )  THEN
-            CALL BD_SPOINT0 ( CARD, DELTA_SPOINT )
+            CALL BD_SPOINT0 ( CARD, LARGE_FLD_INP, DELTA_SPOINT )
             NSPOINT = NSPOINT + DELTA_SPOINT               ! DELTA_SPOINT = number of SPOINTS defined on this SPOINT Bulk Data entry
             LGRID   = LGRID   + DELTA_SPOINT               ! Each SPOINT counts as 1 in the number of grids
             LDOFG   = LDOFG   + DELTA_SPOINT

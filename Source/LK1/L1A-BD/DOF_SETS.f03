@@ -156,59 +156,45 @@
 ! Data is written to file LINK1N for later processing after checks on format of data.
 ! Each record contains:   COMPJ, GRIDJ1, GRIDJ2, SET
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, L1N
-      USE SCONTR, ONLY                :  FATAL_ERR, IERRFL, JCARD_LEN, JF, NAOCARD, BLNK_SUB_NAM
-      USE TIMDAT, ONLY                :  TSEC
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG
+      USE IOUNT1, ONLY                :  ERR, F06, L1N
+      USE SCONTR, ONLY                :  FATAL_ERR, JCARD_LEN, JF, NAOCARD, BLNK_SUB_NAM
       USE DOF_TABLES, ONLY            :  TSET_CHR_LEN
 
-      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD, NEXTC, NEXTC2
-      USE BDF_SET_SYNTAX, ONLY        :  TOKCHK
-      USE BDF_FIELD_VALIDATION, ONLY  :  BD_IMBEDDED_BLANK, CRDERR, I4FLD, IP6CHK
-      USE TEXT_FIELD_UTILS, ONLY      :  CARD_FLDS_NOT_BLANK
+      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD
+      USE BDF_FIELD_VALIDATION, ONLY  :  I4FLD, IP6CHK
+
+      USE BDF_ID_LISTS, ONLY          :  READ_ID_LIST
 
       IMPLICIT NONE
 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'BD_ASET1'
       CHARACTER(LEN=*), INTENT(INOUT) :: CARD              ! A Bulk Data card
       CHARACTER(LEN=*), INTENT(IN)    :: LARGE_FLD_INP     ! If 'Y', CARD is large field format
-      CHARACTER(LEN(CARD))            :: CHILD             ! "Child" card read in subr NEXTC, called herein
       CHARACTER( 8*BYTE)              :: IP6TYP            ! An output from subr IP6CHK called herein
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! The 10 fields of 8 characters making up CARD
       CHARACTER(LEN(JCARD))           :: JCARDO            ! An output from subr IP6CHK called herein
       CHARACTER(LEN(TSET_CHR_LEN))    :: SET               ! 'A' or 'O' depending on whether the B.D card is ASET or OMIT
-      CHARACTER( 8*BYTE)              :: TOKEN             ! The 1st 8 characters from a JCARD
-      CHARACTER( 8*BYTE)              :: TOKTYP            ! An output from subr TOKCHK called herein
 
-      INTEGER(LONG)                   :: ICONT             ! Indicator of whether a continuation card exists for this parent card
       INTEGER(LONG)                   :: IDUM              ! Dummy arg in subr IP^CHK not used herein
-      INTEGER(LONG)                   :: IERR              ! Error indicator returned from subr NEXTC called herein
       INTEGER(LONG)                   :: J                 ! DO loop index
       INTEGER(LONG)                   :: JERR      = 0     ! Error indicator for several types of error in format #2 of input
       INTEGER(LONG)                   :: COMPJ     = 0     ! Displ component(s)  read from a B.D. ASET/OMIT card
-      INTEGER(LONG)                   :: GRIDJ     = 0     ! A grid point number read from a B.D. ASET/OMIT card in format #2
-      INTEGER(LONG)                   :: GRIDJ1    = 0     ! 1st grid in format #1 of ASET/OMIT input
-      INTEGER(LONG)                   :: GRIDJ2    = 0     ! 2nd grid in format #1 of ASET/OMIT input
 
 
 
+
+      INTEGER(LONG), ALLOCATABLE      :: RANGES(:,:)       ! The grid IDs of the list: single (G, G) or ranges (G1, G2)
+      INTEGER(LONG)                   :: NRANGE            ! Number of items in RANGES
+      INTEGER(LONG)                   :: NBAD              ! Number of list fields in error
 
 ! **********************************************************************************************************************************
 ! ASET1, OMIT1 Bulk Data Card routine
 
 !   FIELD   ITEM
 !   -----   ------------
-! Format #1:
 !    2      COMPJ, Displ component(s)
-!   3-9     GRIDJ's, Grid ID's
-! on optional continuation cards:
-!   2-9     Grid ID's
-
-! Format #2:
-!    2      COMPJ , Displ component(s)
-!    3      GRIDJ1, Grid ID number 1
-!    4      "THRU"
-!    5      GRIDJ2, Grid ID number 2
+!   3-9     Grid IDs, and fields 2-9 of optional continuations: single IDs and ranges "G1 THRU G2" in any mix
 
 ! Make JCARD from CARD
 
@@ -222,132 +208,35 @@
          SET = 'O '
       ENDIF
 
-! Field 4 of ASET1 or OMIT1 must have "THRU" or a grid pt number or blank.
+! Get the components (and put into integer COMPJ)
 
-      TOKEN = JCARD(4)(1:8)                                ! Only send the 1st 8 chars of this JCARD. It has been left justified
-      CALL TOKCHK ( TOKEN, TOKTYP )                        ! TOKTYP must be THRU', 'INTEGR', or 'BLANK'
+      JERR = 0
+      CALL IP6CHK ( JCARD(2), JCARDO, IP6TYP, IDUM )
+      IF ((IP6TYP == 'COMP NOS') .OR. (IP6TYP == 'ZERO    ') .OR. (IP6TYP == 'BLANK   ')) THEN
+         CALL I4FLD ( JCARDO, JF(2), COMPJ )
+      ELSE
+         JERR      = JERR + 1
+         FATAL_ERR = FATAL_ERR + 1
+         WRITE(ERR,1123) JF(2),JCARD(1),JF(2),JCARD(2)
+         WRITE(F06,1123) JF(2),JCARD(1),JF(2),JCARD(2)
+      ENDIF
 
-! **********************************************************************************************************************************
-! Format # 2
+! Fields 3-9 and the continuations: the grid IDs, single or as ranges "G1 THRU G2" in any mix (subr READ_ID_LIST). All records
+! are written to file LINK1N only if the whole entry is correct.
 
-      IF (TOKTYP == 'THRU    ') THEN
+      CALL READ_ID_LIST ( CARD, LARGE_FLD_INP, 3_LONG, .FALSE., NRANGE, RANGES, NBAD )
 
-         JERR = 0
+      IF ((NRANGE == 0) .AND. (NBAD == 0)) THEN            ! No grids on the entry
+         FATAL_ERR = FATAL_ERR + 1
+         WRITE(ERR,1125) 'GRID POINT', JF(3), JCARD(1)
+         WRITE(F06,1125) 'GRID POINT', JF(3), JCARD(1)
+      ENDIF
 
-         CALL IP6CHK ( JCARD(2), JCARDO, IP6TYP, IDUM )    ! Get components (and put into integer COMPJ)
-         IF ((IP6TYP == 'COMP NOS') .OR. (IP6TYP == 'ZERO    ') .OR. (IP6TYP == 'BLANK   ')) THEN
-            CALL I4FLD ( JCARDO, JF(2), COMPJ )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1123) JF(2),JCARD(1),JF(2),JCARD(2)
-            WRITE(F06,1123) JF(2),JCARD(1),JF(2),JCARD(2)
-         ENDIF
-
-         IF (JCARD(3)(1:) /= ' ') THEN                     ! Get 1st Grid ID, GRIDJ1
-            CALL I4FLD ( JCARD(3), JF(3), GRIDJ1 )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1125) 'GRID POINT', JF(3), JCARD(1)
-            WRITE(F06,1125) 'GRID POINT', JF(3), JCARD(1)
-         ENDIF
-
-         IF (JCARD(5)(1:) /= ' ') THEN                     ! Get 2nd Grid ID, GRIDJ2
-            CALL I4FLD ( JCARD(5), JF(5), GRIDJ2 )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1125) 'GRID POINT', JF(5), JCARD(1)
-            WRITE(F06,1125) 'GRID POINT', JF(5), JCARD(1)
-         ENDIF
-
-         IF ((IERRFL(3)=='N') .AND. (IERRFL(5)=='N')) THEN ! Check GRIDJ2 > GRIDJ1 if there were no errors reading them
-            IF (GRIDJ2 <= GRIDJ1) THEN
-               JERR      = JERR + 1
-               FATAL_ERR = FATAL_ERR + 1
-               WRITE(ERR,1128) JCARD(1)
-               WRITE(F06,1128) JCARD(1)
-            ENDIF
-         ENDIF
-
-         CALL BD_IMBEDDED_BLANK ( JCARD,0,3,0,5,0,0,0,0 )  ! Make sure that there are no imbedded blanks in fields 3, 5
-         CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,0,6,7,8,9 )! Issue warning if fields 6, 7, 8, 9 not blank
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
-         IF ((JERR == 0) .AND. (IERRFL(2) == 'N') .AND. (IERRFL(3) == 'N') .AND. (IERRFL(5) == 'N')) THEN
-            WRITE(L1N) COMPJ,GRIDJ1,GRIDJ2,SET             ! Write data to file LINK1N if no errors
+      IF ((JERR == 0) .AND. (NBAD == 0)) THEN
+         DO J=1,NRANGE
+            WRITE(L1N) COMPJ,RANGES(1,J),RANGES(2,J),SET   ! A single grid G is written as the range G, G
             NAOCARD = NAOCARD + 1
-         ENDIF
-
-
-! **********************************************************************************************************************************
-! Format #1
-
-      ELSE IF ((TOKTYP == 'INTEGER ') .OR. (TOKTYP == 'BLANK   ')) THEN
-
-         JERR = 0
-
-         CALL IP6CHK ( JCARD(2), JCARDO, IP6TYP, IDUM )    ! Get components (and put into integer COMPJ)
-         IF ((IP6TYP == 'COMP NOS') .OR. (IP6TYP == 'ZERO    ') .OR. (IP6TYP == 'BLANK   ')) THEN
-            CALL I4FLD ( JCARDO, JF(2), COMPJ )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1123) JF(2),JCARD(1),JF(2),JCARD(2)
-            WRITE(F06,1123) JF(2),JCARD(1),JF(2),JCARD(2)
-         ENDIF
-
-         DO J=3,9                                          ! Get Grid ID's in fields 3 - 9 and write data to LINK1N
-            IF (JCARD(J)(1:) == ' ') THEN
-               CYCLE
-            ELSE
-               CALL I4FLD ( JCARD(J), JF(J), GRIDJ )
-               IF ((JERR == 0) .AND. (IERRFL(J) == 'N')) THEN
-                  WRITE(L1N) COMPJ,GRIDJ,GRIDJ,SET         ! Note, GRIDJ is written twice to be compatible w/ Format #2
-                  NAOCARD = NAOCARD + 1
-               ENDIF
-            ENDIF
          ENDDO
-
-         CALL BD_IMBEDDED_BLANK ( JCARD,0,3,4,5,6,7,8,9 )  ! Make sure that there are no imbedded blanks in fields 3-9
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
-         DO                                                ! Optional continuation cards w/ grid ID's, or blank, in fields 2-9
-            IF (LARGE_FLD_INP == 'N') THEN
-               CALL NEXTC  ( CARD, ICONT, IERR )
-            ELSE
-               CALL NEXTC2 ( CARD, ICONT, IERR, CHILD )
-               CARD = CHILD
-            ENDIF
-            CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
-            IF (ICONT == 1) THEN
-               DO J=2,9
-                  IF (JCARD(J)(1:) == ' ') THEN
-                     CYCLE                                 ! CYCLE to next field when a field is blank
-                  ELSE
-                     CALL I4FLD ( JCARD(J), JF(J), GRIDJ )
-                     IF ((JERR == 0) .AND. (IERRFL(J) == 'N')) THEN
-                        WRITE(L1N) COMPJ,GRIDJ,GRIDJ,SET   ! Note we don't write if error in either COMPJ or GRIDJ
-                        NAOCARD = NAOCARD + 1
-                     ENDIF
-                  ENDIF
-               ENDDO
-               CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,9 ) ! Make sure that there are no imbedded blanks in fields 2-9
-               CALL CRDERR ( CARD )                        ! CRDERR prints errors found when reading fields
-               CYCLE
-            ELSE
-               EXIT
-            ENDIF
-         ENDDO
-
-      ELSE                                                 ! Error - Field 4 did not have "THRU", or an integer, or was blank
-
-         FATAL_ERR = FATAL_ERR+1
-         WRITE(ERR,1127) JF(4), JCARD(1)
-         WRITE(F06,1127) JF(4), JCARD(1)
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
       ENDIF
 
 
@@ -360,10 +249,6 @@
 
  1125 FORMAT(' *ERROR  1125: NO ',A,' SPECIFIED IN FIELD',I4,' ON ',A,' CARD')
 
- 1127 FORMAT(' *ERROR  1127: INVALID DATA IN FIELD ',I2,' OF ',A,' CARD. FIELD MUST HAVE THRU OR A GRID NUMBER OR BE BLANK')
-
-
- 1128 FORMAT(' *ERROR  1128: ON ',A,' THE IDs MUST BE IN INCREASING ORDER FOR THRU OPTION')
 
 ! **********************************************************************************************************************************
 
@@ -517,17 +402,15 @@
 
 !          USET_NAME, COMPJ, GRIDJ, DOFSET
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, L1X
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG
+      USE IOUNT1, ONLY                :  ERR, F06, L1X
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, IERRFL, JCARD_LEN, JF, NUM_USET_RECORDS
-      USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
-      USE DOF_TABLES, ONLY            :  TSET_CHR_LEN
 
-      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD, NEXTC, NEXTC2
-      USE BDF_FIELD_VALIDATION, ONLY  :  BD_IMBEDDED_BLANK, CHAR_FLD, CRDERR, I4FLD, IP6CHK, LEFT_ADJ_BDFLD
-      USE BDF_SET_SYNTAX, ONLY        :  TOKCHK
-      USE TEXT_FIELD_UTILS, ONLY      :  CARD_FLDS_NOT_BLANK
+      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD
+      USE BDF_FIELD_VALIDATION, ONLY  :  BD_IMBEDDED_BLANK, CHAR_FLD, I4FLD, IP6CHK, LEFT_ADJ_BDFLD
+
+      USE BDF_ID_LISTS, ONLY          :  READ_ID_LIST
 
       IMPLICIT NONE
 
@@ -535,44 +418,31 @@
       CHARACTER(LEN=*), INTENT(INOUT) :: CARD              ! A Bulk Data card
       CHARACTER(LEN=*), INTENT(IN)    :: LARGE_FLD_INP     ! If 'Y', CARD is large field format
       CHARACTER(LEN=JCARD_LEN)        :: CHRFLD            ! A character field from the entry
-      CHARACTER(LEN(CARD))            :: CHILD             ! "Child" card read in subr NEXTC, called herein
       CHARACTER( 8*BYTE)              :: IP6TYP            ! An output from subr IP6CHK called herein
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! The 10 fields of characters making up CARD
       CHARACTER(LEN(JCARD))           :: JCARDO            ! An output from subr IP6CHK called herein
-      CHARACTER( 8*BYTE)              :: TOKEN             ! The 1st 8 characters from a JCARD
-      CHARACTER( 8*BYTE)              :: TOKTYP            ! An output from subr TOKCHK called herein
       CHARACTER( 2*BYTE)              :: USET_NAME         ! Name in field 2 of the USET entry
 
       INTEGER(LONG)                   :: COMPJ     = 0     ! DOF's constrained at GRIDJ
-      INTEGER(LONG)                   :: GRIDJ1    = 0     ! Grid ID on USET1 card
-      INTEGER(LONG)                   :: GRIDJ2    = 0     ! Grid ID on USET1 card
-      INTEGER(LONG)                   :: ICONT     = 0     ! Indicator of whether a cont card exists. Output from subr NEXTC
       INTEGER(LONG)                   :: IDUM              ! Dummy arg in subr IP^CHK not used herein
-      INTEGER(LONG)                   :: IERR      = 0     ! Error indicator returned from subr NEXTC called herein
       INTEGER(LONG)                   :: J                 ! DO loop index
       INTEGER(LONG)                   :: JERR      = 0     ! A local error count
 
 
 
 
+      INTEGER(LONG), ALLOCATABLE      :: RANGES(:,:)       ! The grid IDs of the list: single (G, G) or ranges (G1, G2)
+      INTEGER(LONG)                   :: NRANGE            ! Number of items in RANGES
+      INTEGER(LONG)                   :: NBAD              ! Number of list fields in error
+
 ! **********************************************************************************************************************************
 !  USET1 Bulk Data Card routine
 
 !    FIELD   ITEM           ARRAY ELEMENT
 !    -----   ------------   -------------
-! Format #1:
-!     2      USET name (e.g. "U1", "U2", "R", etc)
-!     3      Comp. numbers
-!     4-9    Grid ID's
-! Optional continuation cards
-!     2-9    Grid ID's
-
-! Format #2:
-!     2      USET name (e.g. "U1", "U2", "R", etc)
+!     2      USET name (e.g. "U1", "U2")
 !     3      Component numbers
-!     4      Grid ID number 1
-!     5      "THRU"
-!     6      Grid ID number 2
+!     4-9    Grid IDs, and fields 2-9 of optional continuations: single IDs and ranges "G1 THRU G2" in any mix
 
 
 ! Initialize
@@ -613,128 +483,23 @@
          JERR = JERR + 1
       ENDIF
 
-! Field 5 of USET1 must have "THRU" or a grid pt number or blank.
+! Fields 4-9 and the continuations: the grid IDs, single or as ranges "G1 THRU G2" in any mix (subr READ_ID_LIST). All records
+! are written to file LINK1X only if the whole entry is correct.
 
-      TOKEN = JCARD(5)(1:8)                                ! Only send the 1st 8 chars of this JCARD. It has been left justified
-      CALL TOKCHK ( TOKEN, TOKTYP )                        ! TOKTYP must be THRU', 'INTEGER', or 'BLANK'
+      CALL BD_IMBEDDED_BLANK ( JCARD,2,0,0,0,0,0,0,0 )     ! Make sure that there are no imbedded blanks in field 2
+      CALL READ_ID_LIST ( CARD, LARGE_FLD_INP, 4_LONG, .FALSE., NRANGE, RANGES, NBAD )
 
-! **********************************************************************************************************************************
-! Format # 2
+      IF ((NRANGE == 0) .AND. (NBAD == 0)) THEN            ! No grids were specified on the USET1 entry, so error
+         FATAL_ERR = FATAL_ERR + 1
+         WRITE(ERR,1100) JCARD(1)
+         WRITE(F06,1100) JCARD(1)
+      ENDIF
 
-      IF (TOKTYP == 'THRU    ') THEN
-
-         JERR = 0
-
-         IF (JCARD(4)(1:) /= ' ') THEN                     ! Get 1st Grid ID, GRIDJ1
-            CALL I4FLD ( JCARD(4), JF(4), GRIDJ1 )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1125) 'GRID POINT', JF(4), JCARD(1)
-            WRITE(F06,1125) 'GRID POINT', JF(4), JCARD(1)
-         ENDIF
-
-         IF (JCARD(6)(1:) /= ' ') THEN                     ! Get 2nd Grid ID, GRIDJ2
-            CALL I4FLD ( JCARD(6), JF(6), GRIDJ2 )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1125) 'GRID POINT', JF(6), JCARD(1)
-            WRITE(F06,1125) 'GRID POINT', JF(6), JCARD(1)
-         ENDIF
-
-         IF ((IERRFL(4)=='N') .AND. (IERRFL(5)=='N')) THEN ! Check GRIDJ2 > GRIDJ1 if there were no errors reading them
-            IF (GRIDJ2 < GRIDJ1) THEN
-               JERR      = JERR + 1
-               FATAL_ERR = FATAL_ERR + 1
-               WRITE(ERR,1128) JCARD(1), JCARD(2)
-               WRITE(F06,1128) JCARD(1), JCARD(2)
-            ENDIF
-         ENDIF
-
-         CALL BD_IMBEDDED_BLANK ( JCARD,2,0,4,5,6,0,0,0 )  ! Make sure that there are no imbedded blanks in fields 2,4,5,6
-         CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,0,0,7,8,9 )! Issue warning if fields 7,8,9 not blank
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
-         IF (JERR == 0) THEN
+      IF ((JERR == 0) .AND. (NBAD == 0)) THEN
+         DO J=1,NRANGE
             NUM_USET_RECORDS = NUM_USET_RECORDS + 1        ! Incr count of number of entries written to file LINK1X
-            WRITE(L1X) USET_NAME, COMPJ, GRIDJ1, GRIDJ2
-         ENDIF
-
-! **********************************************************************************************************************************
-! Format # 1
-
-      ELSE IF ((TOKTYP == 'INTEGER ') .OR. (TOKTYP == 'BLANK   ')) THEN
-
-! Read and check data on parent card
-
-         DO J=4,9                                          ! Read fields 4-9: Grid ID's.
-            IF (JCARD(J)(1:) == ' ') THEN
-               CYCLE
-            ELSE
-               CALL I4FLD ( JCARD(J), JF(J), GRIDJ1 )      ! Read another grid ID
-               IF ((JERR == 0) .AND. (IERRFL(J) == 'N')) THEN
-                  NUM_USET_RECORDS = NUM_USET_RECORDS + 1  ! Incr count of number of entries written to file LINK1X
-                  WRITE(L1X) USET_NAME, COMPJ, GRIDJ1, GRIDJ1
-               ELSE
-                  JERR = JERR + 1
-               ENDIF
-            ENDIF
+            WRITE(L1X) USET_NAME, COMPJ, RANGES(1,J), RANGES(2,J)
          ENDDO
-
-         CALL BD_IMBEDDED_BLANK ( JCARD,2,0,4,5,6,7,8,9 )  ! Make sure there are no imbeded blanks fields 2-9, except 3 (components)
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
-! Read and check data on optional continuation cards if JERR = 0 to this point
-
-         IF (JERR == 0) THEN
-
-            DO
-               IF (LARGE_FLD_INP == 'N') THEN
-                  CALL NEXTC  ( CARD, ICONT, IERR )
-               ELSE
-                  CALL NEXTC2 ( CARD, ICONT, IERR, CHILD )
-                  CARD = CHILD
-               ENDIF
-               CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
-               IF (ICONT == 1) THEN
-                  DO J=2,9
-                     IF (JCARD(J)(1:) == ' ') THEN
-                        CYCLE
-                     ELSE                                  ! Read another grid ID
-                        CALL I4FLD ( JCARD(J), JF(J), GRIDJ1)
-                        IF ((JERR == 0) .AND. (IERRFL(J) == 'N')) THEN
-                           NUM_USET_RECORDS = NUM_USET_RECORDS + 1
-                           WRITE(L1X) USET_NAME, COMPJ, GRIDJ1, GRIDJ1
-                        ENDIF
-                     ENDIF
-                  ENDDO
-                                                           ! Make sure that there are no imbedded blanks in fields 2-9
-                  CALL BD_IMBEDDED_BLANK (JCARD,2,3,4,5,6,7,8,9 )
-                  CALL CRDERR ( CARD )                     ! CRDERR prints errors found when reading fields
-
-                  CYCLE
-               ELSE
-                  EXIT
-               ENDIF
-
-            ENDDO
-
-         ENDIF
-
-         IF (NUM_USET_RECORDS == 0) THEN                   ! No grids were specified on the USET1 entry, so error
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1100) JCARD(1)
-            WRITE(F06,1100) JCARD(1)
-         ENDIF
-
-      ELSE                                                 ! Error - Field 5 did not have "THRU", or an integer, or was blank
-
-         FATAL_ERR = FATAL_ERR+1
-         WRITE(ERR,1127) JF(5), JCARD(1)
-         WRITE(F06,1127) JF(5), JCARD(1)
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
       ENDIF
 
 
@@ -746,12 +511,6 @@
 
  1124 FORMAT(' *ERROR  1124: INVALID DOF NUMBER IN FIELD ',I3,' ON ',A,' ENTRY WITH ID = ',A                                       &
                     ,/,14X,' MUST BE A COMBINATION OF DIGITS 1-6. HOWEVER, FIELD ',I3, ' HAS: "',A,'"')
-
- 1125 FORMAT(' *ERROR  1125: NO ',A,' SPECIFIED IN FIELD',I4,' ON ',A,' CARD')
-
- 1127 FORMAT(' *ERROR  1127: INVALID DATA IN FIELD ',I2,' OF ',A,' CARD. FIELD MUST HAVE THRU OR A GRID NUMBER OR BE BLANK')
-
- 1128 FORMAT(' *ERROR  1128: ON ',A,A,' THE IDs MUST BE IN INCREASING ORDER FOR THRU OPTION')
 
  1199 FORMAT(' *ERROR  1199: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' SNAME ON THE ABOVE USET ENTRY MUST BE "U1" OR "U2" BUT IS "',A,'"')
