@@ -242,6 +242,9 @@
                FOUND = 'Y'
             ENDIF
          ENDDO
+         IF ((TYPE(1:4) == 'ELAS') .AND. (EDAT(EPNTK+3) <= 0)) THEN
+            ELGP = 1                                       ! A grounded spring: point B is 0 or -1 (subr ELAS_GROUND_END)
+         ENDIF
 
       ENDIF
 
