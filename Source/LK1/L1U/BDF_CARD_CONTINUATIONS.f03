@@ -30,7 +30,7 @@
 
    PRIVATE
 
-   PUBLIC :: NEXTC, NEXTC0, NEXTC2, NEXTC20, MKCARD, MKJCARD, MKJCARD_08
+   PUBLIC :: NEXTC, NEXTC0, NEXTC2, NEXTC20, MKCARD, MKJCARD, MKJCARD_08, TAGS_MATCH, LINE_TAG
 
    CONTAINS
 
@@ -97,6 +97,15 @@
       CALL READ_BDF_LINE(IN1, IOCHK, TCARD)
       CARD_IN = TCARD
       NEWCHAR = TCARD(1:1)
+
+      ! A large field continuation ('*' and the rest of the marker in field 10 of CARD) may follow a small field entry: NEXTC2
+      ! reads its two physical lines
+      IF ((TCARD(1:1) == '*') .AND. TAGS_MATCH ( OLDTAG, TCARD(1:8) )) THEN
+         BACKSPACE(IN1)
+         CALL NEXTC2 ( CARD, ICONTINUE, IERR, TCARD )
+         CARD = TCARD
+         RETURN
+      ENDIF
       !
       ! Make JCARD for TCARD above and get FFIELD to left adjust and
       ! fix-field it (if necessary).
@@ -121,13 +130,7 @@
          BACKSPACE(IN1)
          return
 
-      ELSE IF (NEWTAG == OLDTAG) THEN
-         ICONTINUE = 1
-      ELSE IF ((OLDTAG(1:1) == '+') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-         ! small field
-         ICONTINUE = 1
-      ELSE IF ((OLDTAG(1:1) == ' ') .AND. (NEWTAG(1:1) == '+') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-         ! small field
+      ELSE IF (TAGS_MATCH ( OLDTAG, NEWTAG )) THEN       ! The first characters may differ: ' ', '+' or '*'
          ICONTINUE = 1
       ELSE IF ((NEWTAG(1:1) /= ' ') .AND. (NEWTAG(1:1) /= '+') .AND. (NEWTAG(1:1) /= '$')) THEN
          ! different card type (e.g., LOAD -> FORCE
@@ -261,15 +264,20 @@
 !xx      BACKSPACE(IN1)
 !xx   ENDIF
 
+      ! The same continuations as NEXTC reads, so that this first pass counts what the second pass reads: a large field
+      ! continuation ('*' line) of a small field entry is read by NEXTC20, and the markers match as in TAGS_MATCH
+      IF ((TCARD(1:1) == '*') .AND. TAGS_MATCH ( OLDTAG, TCARD(1:8) )) THEN
+         BACKSPACE(IN1)
+         CALL NEXTC20 ( CARD, ICONT, IERR, TCARD )
+         CARD = TCARD
+         RETURN
+      ENDIF
+
       IF (TCARD(1:1) /= '$') THEN
          CALL FFIELD ( TCARD, IERR )
          CALL MKJCARD ( SUBR_NAME, TCARD, JCARD )
          NEWTAG = JCARD(1)
-         IF (NEWTAG == OLDTAG) THEN
-            ICONT = 1
-         ELSE IF ((OLDTAG(1:1) == '+') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-            ICONT = 1
-         ELSE IF ((OLDTAG(1:1) == ' ') .AND. (NEWTAG(1:1) == '+') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
+         IF ((NEWTAG == OLDTAG) .OR. ((INDEX(' +', NEWTAG(1:1)) > 0) .AND. TAGS_MATCH ( OLDTAG, NEWTAG ))) THEN
             ICONT = 1
          ELSE
             BACKSPACE(IN1)
@@ -351,15 +359,19 @@
       ! be the 1st half of the whole continuation
       CALL READ_BDF_LINE(IN1, IOCHK, CHILD1)
 
-      NEWTAG = CHILD1(1:8)
-      IF (NEWTAG == OLDTAG) THEN
+      NEWTAG = LINE_TAG ( CHILD1 )                          ! Field 1, also of a free field line
+      ! A continuation: its field 1 is the parent's field 10 except for the first character, which is blank, '+' (small field)
+      ! or '*' (large field) in either; the parent and its continuations may mix small and large field lines
+      IF (TAGS_MATCH ( OLDTAG, NEWTAG )) THEN
          ICONTINUE = 1
-      ELSE IF ((OLDTAG(1:1) == '*') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-         ! large field
-         ICONTINUE = 1
-      ELSE IF ((OLDTAG(1:1) == ' ') .AND. (NEWTAG(1:1) == '*') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-         ! large field
-         ICONTINUE = 1
+      ELSE IF ((NEWTAG(1:1) == ' ') .OR. (NEWTAG(1:1) == '+')) THEN
+         ! A continuation line whose marker is not the one in field 10 before it: it continues no entry (as in NEXTC)
+         BACKSPACE(IN1)
+         WRITE(F06,102) OLDTAG(1:8), NEWTAG(1:8)
+         WRITE(ERR,102) OLDTAG(1:8), NEWTAG(1:8)
+         FATAL_ERR = FATAL_ERR + 1
+         CALL OUTA_HERE('Y')
+         RETURN
       ELSE IF ((NEWTAG(1:1) /= '*') .AND. (NEWTAG(1:1) /= '$')) THEN
          ! different card type (e.g., LOAD -> FORCE
          BACKSPACE(IN1)
@@ -382,6 +394,17 @@
          RETURN
       ENDIF
 
+      ! A small field continuation (field 1 blank or starting with '+') may follow a large field entry: it is one physical
+      ! line with 8 character fields
+      IF (CHILD1(1:1) /= '*') THEN
+         CALL FFIELD ( CHILD1, IERR )
+         CHILD = CHILD1
+         IF (ECHO(1:4) /= 'NONE') THEN
+            WRITE(F06,101) CHILD1
+         ENDIF
+         RETURN
+      ENDIF
+
       ! Read 2nd half of continuation entry, if it exists
       CALL READ_BDF_LINE(IN1, IOCHK, CHILD2)
 
@@ -390,11 +413,9 @@
       ICONTINUE = 0
 
 
-     IF (NEWTAG == OLDTAG) THEN
-        ICONTINUE = 1
-     ELSE IF ((OLDTAG(1:1) == '*') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-        ICONTINUE = 1
-     ELSE IF ((OLDTAG(1:1) == ' ') .AND. (NEWTAG(1:1) == '*') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
+     ! The second half of a large field continuation starts with '*'; a line starting with a blank or '+' is the next
+     ! (small field) continuation, read by the next call
+     IF ((NEWTAG(1:1) == '*') .AND. TAGS_MATCH ( OLDTAG, NEWTAG )) THEN
         ICONTINUE = 1
      ELSE
         BACKSPACE(IN1)
@@ -413,8 +434,10 @@
       ENDIF
 ! **********************************************************************************************************************************
   101 FORMAT('ECHO nextc2: ', A)
+  102 FORMAT(' *FATAL: THE CONTINUATION MARKER "',A,'" IN FIELD 10 IS NOT CONTINUED BY THE NEXT LINE, WHOSE FIELD 1 IS "',A,'"')
 
 ! **********************************************************************************************************************************
+
 
       END SUBROUTINE NEXTC2
 
@@ -477,7 +500,7 @@
          FATAL_ERR = FATAL_ERR + 1
          RETURN
       ENDIF
-      NEWTAG = CHILD1(1:8)
+      NEWTAG = LINE_TAG ( CHILD1 )                          ! Field 1, also of a free field line
 
 !xx CODE COMMENTED OUT IS REPLACED WITH CODE BELOW IT
 !xx   IF (NEWTAG == OLDTAG) THEN
@@ -491,14 +514,18 @@
 !xx      RETURN
 !xx   ENDIF
 
-      IF (NEWTAG == OLDTAG) THEN
-         ICONT = 1
-      ELSE IF ((OLDTAG(1:1) == '*') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-         ICONT = 1
-      ELSE IF ((OLDTAG(1:1) == ' ') .AND. (NEWTAG(1:1) == '*') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
+      ! The same continuations as NEXTC2 reads (this first pass must count what the second pass reads)
+      IF ((NEWTAG == OLDTAG) .OR. TAGS_MATCH ( OLDTAG, NEWTAG )) THEN
          ICONT = 1
       ELSE
          BACKSPACE(IN1)
+         RETURN
+      ENDIF
+
+      ! A small field continuation (field 1 blank or starting with '+'): one line of 8 character fields
+      IF (CHILD1(1:1) /= '*') THEN
+         CALL FFIELD ( CHILD1, IERR )
+         CHILD = CHILD1
          RETURN
       ENDIF
 
@@ -513,17 +540,12 @@
       OLDTAG = CHILD1(73:80)
       NEWTAG = CHILD2( 1: 8)
 
-      ICONT = 0
-      IF (NEWTAG == OLDTAG) THEN
-         ICONT = 1
-!xx   ELSE IF ((OLDTAG(1:8) == '*       ') .AND. (NEWTAG(1:8) == '       ')) THEN
-      ELSE IF ((OLDTAG(1:1) == '*') .AND. (NEWTAG(1:1) == ' ') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-         ICONT = 1
-!xx   ELSE IF ((OLDTAG(1:8) == '        ') .AND. (NEWTAG(1:8) == '*      ')) THEN
-      ELSE IF ((OLDTAG(1:1) == ' ') .AND. (NEWTAG(1:1) == '*') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
-         ICONT = 1
-      ELSE
+      ! The second half starts with '*'; otherwise the first half is the whole continuation (as in NEXTC2)
+      IF (.NOT. ((NEWTAG(1:1) == '*') .AND. TAGS_MATCH ( OLDTAG, NEWTAG ))) THEN
          BACKSPACE(IN1)
+         CHILD2(1:) = ' '
+         CALL FFIELD2 ( CHILD1, CHILD2, CHILD, IERR )
+         ICONT = 1
          RETURN
       ENDIF
 
@@ -650,5 +672,46 @@
 ! **********************************************************************************************************************************
 
       END SUBROUTINE MKJCARD_08
+
+! ##################################################################################################################################
+
+      LOGICAL FUNCTION TAGS_MATCH ( TAG_A, TAG_B )
+
+! Continuation markers TAG_A (field 10 of a line) and TAG_B (field 1 of the next) match: equal after their first character,
+! which is blank, '+' (small field) or '*' (large field) in each, so an entry may mix small and large field lines
+
+      IMPLICIT NONE
+
+      CHARACTER(LEN=*), INTENT(IN)    :: TAG_A, TAG_B
+
+      TAGS_MATCH = (INDEX(' +*', TAG_A(1:1)) > 0) .AND. (INDEX(' +*', TAG_B(1:1)) > 0) .AND. (TAG_A(2:8) == TAG_B(2:8))
+
+      END FUNCTION TAGS_MATCH
+
+! ##################################################################################################################################
+
+      CHARACTER(LEN=8) FUNCTION LINE_TAG ( LINE )
+
+! Field 1 (the continuation marker) of a Bulk Data line: its first 8 columns, or for a free field line (a comma before any
+! comment, and not a large field '*' line) field 1 after FFIELD has made it fixed field ("+,50.,,23456" has field 1 "+")
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG
+
+      IMPLICIT NONE
+
+      CHARACTER(LEN=*), INTENT(IN)    :: LINE
+      CHARACTER(LEN=LEN(LINE))        :: T
+      INTEGER(LONG)                   :: IERR, K
+
+      LINE_TAG = LINE(1:8)
+      IF (LINE(1:1) == '*') RETURN
+      K = INDEX(LINE(2:), '$')                             ! A comment (after column 1, so at column K+1) ends the data:
+      IF (K == 0) K = LEN(LINE)                            ! LINE(1:K)
+      IF (INDEX(LINE(1:K), ',') == 0) RETURN
+      T = LINE(1:K)
+      CALL FFIELD ( T, IERR )
+      LINE_TAG = T(1:8)
+
+      END FUNCTION LINE_TAG
 
    END MODULE BDF_CARD_CONTINUATIONS
