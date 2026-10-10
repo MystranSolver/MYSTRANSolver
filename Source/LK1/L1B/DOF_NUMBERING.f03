@@ -240,12 +240,17 @@
       CALL TDOF_COL_NUM ( 'U1', U1_SET_COL )
       CALL TDOF_COL_NUM ( 'U2', U2_SET_COL )
 
-! Set 1st 4 cols of TDOF (actual grid ID - component number, internal grid ID - component number)
+! Set 1st 4 cols of TDOF (actual grid ID - component number, internal grid ID - component number). The rows are in GRID_ID order,
+! TDOF_ROW_START(I) + J - 1 for component J of point I (subr CALC_TDOF_ROW_START), so each point is written with its own number of
+! components. (It took the number of components of INV_GRID_SEQ(I), the point at sequence position I: with scalar points and grids
+! sequenced in another order than their IDs, the rows were labelled with the wrong point and component, and subr MGGS_MASS_MATRIX,
+! which finds each point's first row by its component label 1, put the CMASS masses at other DOFs: ERROR 989 (MLL singular), or
+! a wrong eigenvalue without a message.)
 
       IROW = 0
       CALL COUNTER_INIT('       Process col 1-4 of TDOF', NGRID)
       DO I = 1,NGRID
-         CALL GET_GRID_NUM_COMPS ( INV_GRID_SEQ(I), NUM_COMPS, SUBR_NAME )
+         CALL GET_GRID_NUM_COMPS ( I, NUM_COMPS, SUBR_NAME )
          DO J = 1,NUM_COMPS
             IROW = IROW + 1
             TDOF(IROW,1) = GRID_ID(I)
