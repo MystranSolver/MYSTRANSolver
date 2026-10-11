@@ -1175,6 +1175,9 @@
 
       REAL(DOUBLE), ALLOCATABLE       :: PLATETHICK(:)       ! Array of plate thicknesses for quads, trias that have thickness
 !                                                              defined on the connection entry
+      REAL(DOUBLE), PARAMETER         :: PLATETHICK_BLANK = -1.0D+300
+!                                                            ! PLATETHICK of a blank Ti on the connection entry: the element
+!                                                              uses the T of its PSHELL there
 
 ! **********************************************************************************************************************************
 ! Overall element data
