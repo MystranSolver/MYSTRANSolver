@@ -805,271 +805,74 @@
       END SUBROUTINE BD_SEQGP
 
 
-      SUBROUTINE BD_SPOINT0 ( CARD, DELTA_SPOINT )
+      SUBROUTINE BD_SPOINT0 ( CARD, LARGE_FLD_INP, DELTA_SPOINT )
 
-! Processes SPOINT Bulk Data Cards to count the number of SPOINT's on one entry
+! Counts the SPOINT's of one SPOINT Bulk Data entry in the first pass over the Bulk Data. The list (fields 2-9 of the parent line and
+! fields 2-9 of the continuations, single IDs and ranges "ID1 THRU ID2" in any mix) is read by subr READ_ID_LIST as in BD_SPOINT,
+! so the count is the number of SPOINT's that BD_SPOINT enters into array GRID. An entry with an error is not counted.
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, IERRFL, JCARD_LEN, JF
-      USE TIMDAT, ONLY                :  TSEC
-
-      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD
-      USE BDF_SET_SYNTAX, ONLY        :  TOKCHK
-      USE BDF_FIELD_VALIDATION, ONLY  :  I4FLD
+      USE PENTIUM_II_KIND, ONLY       :  LONG
+      USE BDF_ID_LISTS, ONLY          :  READ_ID_LIST
 
       IMPLICIT NONE
 
-      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'BD_SPOINT0'
-      CHARACTER(LEN=*), INTENT(IN)    :: CARD              ! A Bulk Data card
-      CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! The 10 fields of characters making up CARD
-      CHARACTER( 8*BYTE)              :: TOKEN             ! The 1st 8 characters from a JCARD
-      CHARACTER( 8*BYTE)              :: TOKTYP            ! An output from subr TOKCHK called herein
-
+      CHARACTER(LEN=*), INTENT(INOUT) :: CARD              ! A Bulk Data card (the parent line; continuations are read)
+      CHARACTER(LEN=*), INTENT(IN)    :: LARGE_FLD_INP     ! If 'Y', CARD is large field format
       INTEGER(LONG), INTENT(OUT)      :: DELTA_SPOINT      ! Number of SPOINT's defined on this B.D. SPOINT entry
+      INTEGER(LONG), ALLOCATABLE      :: RANGES(:,:)       ! The SPOINT IDs: single (S, S) or ranges (S1, S2)
       INTEGER(LONG)                   :: J                 ! DO loop index
-      INTEGER(LONG)                   :: JERR      = 0     ! Error indicator for several types of error in format #2 of input
-      INTEGER(LONG)                   :: SPOINT1   = 0     ! An SPOINT number
-      INTEGER(LONG)                   :: SPOINT2   = 0     ! An SPOINT number
-
-
-
+      INTEGER(LONG)                   :: NBAD              ! Number of list fields in error
+      INTEGER(LONG)                   :: NRANGE            ! Number of items in RANGES
 
 ! **********************************************************************************************************************************
-! SPOINT Bulk Data Card routine
-
-!   FIELD      ITEM
-!   -----   ------------
-! Format #1:
-!   2-9     SPOINT ID's
-! on optional continuation cards:
-!   2-9     Grid ID's
-
-! Format #2:
-!    2      SPOINT ID 1
-!    3      "THRU"
-!    4      SPOINT ID 2
-
-! Make JCARD from CARD
-
-      CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
-
-! Field 3 of SPOINT must have "THRU" or a SPOINT number or blank.
-
-      TOKEN = JCARD(3)(1:8)                                ! Only send the 1st 8 chars of this JCARD. It has been left justified
-      CALL TOKCHK ( TOKEN, TOKTYP )                        ! TOKTYP must be THRU', 'INTEGR', or 'BLANK'
+      CALL READ_ID_LIST ( CARD, LARGE_FLD_INP, 2_LONG, .TRUE., NRANGE, RANGES, NBAD )
 
       DELTA_SPOINT = 0
-
-! **********************************************************************************************************************************
-! Format # 2
-
-      IF (TOKTYP == 'THRU    ') THEN
-
-         JERR = 0
-
-         IF (JCARD(2)(1:) /= ' ') THEN                     ! Get 1st SPOINT ID
-            CALL I4FLD ( JCARD(2), JF(2), SPOINT1 )
-         ELSE
-            JERR = JERR + 1
-         ENDIF
-
-         IF (JCARD(4)(1:) /= ' ') THEN                     ! Get 2nd SPOINT ID
-            CALL I4FLD ( JCARD(4), JF(4), SPOINT2 )
-         ELSE
-            JERR = JERR + 1
-         ENDIF
-
-         IF ((IERRFL(2)=='N') .AND. (IERRFL(4)=='N')) THEN ! Check SPOINT2 > SPOINT1 if there were no errors reading them
-            IF (SPOINT2 <= SPOINT1) THEN
-               JERR      = JERR + 1
-            ENDIF
-         ENDIF
-
-         IF ((JERR == 0) .AND. (IERRFL(2) == 'N') .AND. (IERRFL(5) == 'N')) THEN
-            DO J=1,SPOINT2-SPOINT1+1
-               DELTA_SPOINT = DELTA_SPOINT + 1
-            ENDDO
-         ENDIF
-
-! Format #1
-
-      ELSE IF ((TOKTYP == 'INTEGER ') .OR. (TOKTYP == 'BLANK   ')) THEN
-
-         JERR = 0
-
-         DO J=2,9                                          ! Get SPOINT ID's in fields 2 - 9
-            IF (JCARD(J)(1:) == ' ') THEN
-               CYCLE
-            ELSE
-               CALL I4FLD ( JCARD(J), JF(J), SPOINT1 )
-               IF ((JERR == 0) .AND. (IERRFL(J) == 'N')) THEN
-                  DELTA_SPOINT = DELTA_SPOINT + 1
-               ENDIF
-            ENDIF
+      IF (NBAD == 0) THEN
+         DO J=1,NRANGE
+            DELTA_SPOINT = DELTA_SPOINT + RANGES(2,J) - RANGES(1,J) + 1
          ENDDO
-
       ENDIF
-
-! Reset DELTA_SPOINT back to 0 if there were errors (i.e. don't count this entry if there are errors)
-
-      IF (JERR > 0) THEN
-         DELTA_SPOINT = 0
-      ENDIF
-
-
 
       RETURN
-
-! **********************************************************************************************************************************
 
       END SUBROUTINE BD_SPOINT0
 
 
-      SUBROUTINE BD_SPOINT ( CARD )
+      SUBROUTINE BD_SPOINT ( CARD, LARGE_FLD_INP )
 
-! Read Bulk Data SPOINT entries. Enter the SPOINT number into array GRID (in col 1) and set GRID(ngrid,6) to 1 to indicate SPOINT
+! Read Bulk Data SPOINT entries. Enter the SPOINT number into array GRID (in col 1) and set GRID(ngrid,6) to 1 to indicate SPOINT.
+! The list is fields 2-9 of the parent line and fields 2-9 of the continuations: single IDs and ranges "ID1 THRU ID2" in any mix
+! (subr READ_ID_LIST; before, a range was read only as the whole entry "ID1 THRU ID2" and the continuations were not read).
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, IERRFL, JCARD_LEN, JF, NGRID
-      USE TIMDAT, ONLY                :  TSEC
+      USE PENTIUM_II_KIND, ONLY       :  LONG
+      USE SCONTR, ONLY                :  NGRID
       USE MODEL_STUF, ONLY            :  GRID
-
-      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD
-      USE BDF_SET_SYNTAX, ONLY        :  TOKCHK
-      USE BDF_FIELD_VALIDATION, ONLY  :  BD_IMBEDDED_BLANK, CRDERR, I4FLD
-      USE TEXT_FIELD_UTILS, ONLY      :  CARD_FLDS_NOT_BLANK
+      USE BDF_ID_LISTS, ONLY          :  READ_ID_LIST
 
       IMPLICIT NONE
 
-      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'BD_SPOINT'
-      CHARACTER(LEN=*), INTENT(IN)    :: CARD              ! A Bulk Data card
-      CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! The 10 fields of characters making up CARD
-      CHARACTER( 8*BYTE)              :: TOKEN             ! The 1st 8 characters from a JCARD
-      CHARACTER( 8*BYTE)              :: TOKTYP            ! An output from subr TOKCHK called herein
-
-      INTEGER(LONG)                   :: J                 ! DO loop index
-      INTEGER(LONG)                   :: JERR      = 0     ! Error indicator for several types of error in format #2 of input
-      INTEGER(LONG)                   :: SPOINT1   = 0     ! An SPOINT number
-      INTEGER(LONG)                   :: SPOINT2   = 0     ! An SPOINT number
-
-
-
+      CHARACTER(LEN=*), INTENT(INOUT) :: CARD              ! A Bulk Data card (the parent line; continuations are read)
+      CHARACTER(LEN=*), INTENT(IN)    :: LARGE_FLD_INP     ! If 'Y', CARD is large field format
+      INTEGER(LONG), ALLOCATABLE      :: RANGES(:,:)       ! The SPOINT IDs: single (S, S) or ranges (S1, S2)
+      INTEGER(LONG)                   :: J, K              ! DO loop indices
+      INTEGER(LONG)                   :: NBAD              ! Number of list fields in error
+      INTEGER(LONG)                   :: NRANGE            ! Number of items in RANGES
 
 ! **********************************************************************************************************************************
-! SPOINT Bulk Data Card routine
+      CALL READ_ID_LIST ( CARD, LARGE_FLD_INP, 2_LONG, .FALSE., NRANGE, RANGES, NBAD )
 
-!   FIELD   ITEM
-!   -----   ------------
-! Format #1:
-!   2-9     SPOINT ID's
-! on optional continuation cards:
-!   2-9     SPOINT ID's
-
-! Format #2:
-!    2      SPOINT ID 1
-!    3      "THRU"
-!    4      SPOINT ID 2
-
-! Make JCARD from CARD
-
-      CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
-
-! Field 3 of SPOINT must have "THRU" or a SPOINT number or blank.
-
-      TOKEN = JCARD(3)(1:8)                                ! Only send the 1st 8 chars of this JCARD. It has been left justified
-      CALL TOKCHK ( TOKEN, TOKTYP )                        ! TOKTYP must be THRU', 'INTEGR', or 'BLANK'
-
-! **********************************************************************************************************************************
-! Format # 2
-
-      IF (TOKTYP == 'THRU    ') THEN
-
-         JERR = 0
-
-         IF (JCARD(2)(1:) /= ' ') THEN                     ! Get 1st SPOINT ID
-            CALL I4FLD ( JCARD(2), JF(2), SPOINT1 )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1125) 'SCALAR POINT', JF(2), JCARD(1)
-            WRITE(F06,1125) 'SCALAR POINT', JF(2), JCARD(1)
-         ENDIF
-
-         IF (JCARD(4)(1:) /= ' ') THEN                     ! Get 2nd SPOINT ID
-            CALL I4FLD ( JCARD(4), JF(4), SPOINT2 )
-         ELSE
-            JERR      = JERR + 1
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1125) 'SCALAR POINT', JF(4), JCARD(1)
-            WRITE(F06,1125) 'SCALAR POINT', JF(4), JCARD(1)
-         ENDIF
-
-         IF ((IERRFL(2)=='N') .AND. (IERRFL(4)=='N')) THEN ! Check SPOINT2 > SPOINT1 if there were no errors reading them
-            IF (SPOINT2 <= SPOINT1) THEN
-               JERR      = JERR + 1
-               FATAL_ERR = FATAL_ERR + 1
-               WRITE(ERR,1128) JCARD(1)
-               WRITE(F06,1128) JCARD(1)
-            ENDIF
-         ENDIF
-
-         CALL BD_IMBEDDED_BLANK ( JCARD,2,0,4,0,0,0,0,0 )  ! Make sure that there are no imbedded blanks in fields 2, 4
-         CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,5,6,7,8,9 )! Issue warning if fields 5, 6, 7, 8, 9 not blank
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
-         IF ((JERR == 0) .AND. (IERRFL(2) == 'N') .AND. (IERRFL(4) == 'N')) THEN
-            DO J=1,SPOINT2-SPOINT1+1
+      IF (NBAD == 0) THEN                                  ! As counted in BD_SPOINT0 (an entry with an error is not counted)
+         DO J=1,NRANGE
+            DO K=RANGES(1,J),RANGES(2,J)
                NGRID = NGRID + 1
-               GRID(NGRID,1) = SPOINT1 + J - 1
+               GRID(NGRID,1) = K
                GRID(NGRID,6) = 1
             ENDDO
-         ENDIF
-
-! **********************************************************************************************************************************
-! Format #1
-
-      ELSE IF ((TOKTYP == 'INTEGER ') .OR. (TOKTYP == 'BLANK   ')) THEN
-
-         JERR = 0
-
-         DO J=2,9                                          ! Get SPOINT ID's in fields 2 - 9
-            IF (JCARD(J)(1:) == ' ') THEN
-               CYCLE
-            ELSE
-               CALL I4FLD ( JCARD(J), JF(J), SPOINT1 )
-               IF ((JERR == 0) .AND. (IERRFL(J) == 'N')) THEN
-                  NGRID = NGRID + 1
-                  GRID(NGRID,1) = SPOINT1
-                  GRID(NGRID,6) = 1
-               ENDIF
-            ENDIF
          ENDDO
-
-         CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,9 )  ! Make sure that there are no imbedded blanks in fields 2-9
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
-      ELSE                                                 ! Error - Field 4 did not have "THRU", or an integer, or was blank
-
-         FATAL_ERR = FATAL_ERR+1
-         WRITE(ERR,1127) JF(4), JCARD(1)
-         WRITE(F06,1127) JF(4), JCARD(1)
-         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
-
       ENDIF
 
-
-
       RETURN
-
-! **********************************************************************************************************************************
- 1125 FORMAT(' *ERROR  1125: NO ',A,' SPECIFIED IN FIELD',I4,' ON ',A,' CARD')
-
- 1127 FORMAT(' *ERROR  1127: INVALID DATA IN FIELD ',I2,' OF ',A,' CARD. FIELD MUST HAVE THRU OR A SPOINT NUMBER OR BE BLANK')
-
- 1128 FORMAT(' *ERROR  1128: ON ',A,' THE IDs MUST BE IN INCREASING ORDER FOR THRU OPTION')
-
-! **********************************************************************************************************************************
 
       END SUBROUTINE BD_SPOINT
 
