@@ -49,7 +49,7 @@
       USE DOF_NUMBERING, ONLY         :  TDOF_COL_NUM
       USE FILE_LIFECYCLE, ONLY        :  READERR
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
-      USE DOF_ARRAY_INDEXING, ONLY    :  GET_ARRAY_ROW_NUM
+      USE DOF_ARRAY_INDEXING, ONLY    :  GET_ARRAY_ROW_NUM, GET_GRID_NUM_COMPS
       USE MODEL_STORAGE_DEALLOCATION, ONLY:  DEALLOCATE_MODEL_STUF
 
       IMPLICIT NONE
@@ -138,10 +138,7 @@ j_do3:   DO J=1,NUM_MPCSIDS
                ENDIF
                                                            ! Get row num (in GRID_ID) corresponding to grid GID (we know GID exists)
 !xx            CALL CALC_TDOF_ROW_NUM ( GID, ROW_NUM_START, 'N' )
-               CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GID, IGRID )
-               ROW_NUM_START = TDOF_ROW_START(IGRID)
-                                                           ! Determine the row and col for COEFF in RMG and write to L1J
-               ROW_NUM = ROW_NUM_START + COMP - 1
+               ROW_NUM = MPC_TDOF_ROW ( GID, COMP )        ! Determine the row and col for COEFF in RMG and write to L1J
                RMG_ROW_NUM = TDOF(ROW_NUM,M_SET_COL_NUM)
                RMG_COL_NUM = TDOF(ROW_NUM,G_SET_COL_NUM)
                IF ((RMG_ROW_NUM > 0) .AND. (RMG_COL_NUM > 0)) THEN
@@ -176,11 +173,8 @@ j_do3:   DO J=1,NUM_MPCSIDS
 !xx05/05/07             CYCLE j_do3
 !xx05/05/07          ENDIF
 !xx               CALL CALC_TDOF_ROW_NUM ( GID, ROW_NUM_START, 'N' )
-                  CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GID, IGRID )
-                  ROW_NUM_START = TDOF_ROW_START(IGRID)
-
 !xx05/05/07       ROW_NUM = 6*(GRID_ID_ROW_NUM - 1) + COMP
-                  ROW_NUM = ROW_NUM_START + COMP - 1
+                  ROW_NUM = MPC_TDOF_ROW ( GID, COMP )
                   RMG_COL_NUM = TDOF(ROW_NUM,G_SET_COL_NUM)
                   IF (RMG_COL_NUM > 0) THEN
                      WRITE(L1J) RMG_ROW_NUM,RMG_COL_NUM,COEFF
@@ -240,6 +234,41 @@ j_do3:   DO J=1,NUM_MPCSIDS
 
 
 ! **********************************************************************************************************************************
+
+! ##################################################################################################################################
+
+      CONTAINS
+
+         INTEGER(LONG) FUNCTION MPC_TDOF_ROW ( POINT, COMPONENT )
+
+! The row in TDOF of a term of an MPC equation. A scalar point has 1 component, written 0 or blank on the MPC (also 1 is taken);
+! a grid has 6. Before, the row was TDOF_ROW_START + COMP - 1 for every point, so a scalar point's component 0 named the last DOF of
+! the point before it in the TDOF order: a dependent scalar point stopped the run with ERROR 1517 (the row was not in the M-set),
+! and an independent one tied the equation to the wrong DOF without a message (an MPC from GRID 1 T3 to scalar point 1002 gave
+! GRID 1 T3 = 0, the held point 1001 before it). A component the point does not have stops the run (ERROR 1528).
+
+         INTEGER(LONG), INTENT(IN)    :: POINT             ! The grid or scalar point
+         INTEGER(LONG), INTENT(IN)    :: COMPONENT         ! Its component on the MPC
+         INTEGER(LONG)                :: C                 ! The component used (1 for a scalar point)
+         INTEGER(LONG)                :: IG                ! The point's row in GRID_ID
+         INTEGER(LONG)                :: NCOMPS            ! The point's number of components (1 or 6)
+
+         CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, POINT, IG )
+         CALL GET_GRID_NUM_COMPS ( IG, NCOMPS, SUBR_NAME )
+         C = COMPONENT
+         IF ((NCOMPS == 1) .AND. (C == 0)) C = 1
+         IF ((C < 1) .OR. (C > NCOMPS)) THEN
+            WRITE(ERR,1528) SETID, POINT, COMPONENT, NCOMPS
+            WRITE(F06,1528) SETID, POINT, COMPONENT, NCOMPS
+            FATAL_ERR = FATAL_ERR + 1
+            CALL OUTA_HERE ( 'Y' )
+         ENDIF
+         MPC_TDOF_ROW = TDOF_ROW_START(IG) + C - 1
+
+ 1528    FORMAT(' *ERROR  1528: MPC SET ',I8,' NAMES POINT ',I8,' COMPONENT ',I2,'; THE POINT HAS ',I2,' COMPONENT(S): A SCALAR', &
+                ' POINT (SPOINT) TAKES COMPONENT 0 OR BLANK (OR 1), A GRID COMPONENTS 1-6')
+
+         END FUNCTION MPC_TDOF_ROW
 
       END SUBROUTINE MPC_PROC
 

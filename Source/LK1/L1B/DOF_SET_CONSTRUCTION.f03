@@ -245,7 +245,7 @@
       USE DATE_TIME_UTILS, ONLY       :  OURTIM
       USE FILE_LIFECYCLE, ONLY        :  READERR
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
-      USE DOF_ARRAY_INDEXING, ONLY    :  ARRAY_SIZE_ERROR_1, GET_ARRAY_ROW_NUM
+      USE DOF_ARRAY_INDEXING, ONLY    :  ARRAY_SIZE_ERROR_1, GET_ARRAY_ROW_NUM, GET_GRID_NUM_COMPS
 
       IMPLICIT NONE
 
@@ -265,6 +265,7 @@
 
       INTEGER(LONG)                   :: COMPS_D           ! Comp number for the dep grid for an MPC eqn (read from file LINK1S)
       INTEGER(LONG)                   :: COMPS_D_TSET      ! COMPS_D converted (e.g. if COMPS_D read from L1S is 0, change to 1)
+      INTEGER(LONG)                   :: NCOMPS_D          ! Number of components of the dependent point (1 SPOINT, 6 grid)
       INTEGER(LONG)                   :: DOF_ERR   = 0     ! Count of errors that result from setting displ sets in TSET
       INTEGER(LONG)                   :: GRID_ID_ROW_NUM   ! Row number, in array GRID_ID, where an actual grid ID resides
       INTEGER(LONG)                   :: GID_ERR   = 0     ! Count of errors that result from undefined grid ID's
@@ -371,6 +372,15 @@ j_do3:   DO J=1,NUM_MPCSIDS                                ! NUM_MPCSIDS will be
                IF (GID_ERR > 0) THEN
                   CYCLE j_do3
                ENDIF
+                                                           ! Component 0 (or blank) is the one component of a scalar point; a
+               CALL GET_GRID_NUM_COMPS ( GRID_ID_ROW_NUM, NCOMPS_D, SUBR_NAME )   ! component the point does not have is an error
+               IF (((COMPS_D == 0) .AND. (NCOMPS_D > 1)) .OR. (COMPS_D_TSET > NCOMPS_D) .OR. (COMPS_D_TSET < 1)) THEN
+                  DOF_ERR = DOF_ERR + 1
+                  FATAL_ERR = FATAL_ERR + 1
+                  WRITE(ERR,1528) SETID, AGRID_D, COMPS_D, NCOMPS_D
+                  WRITE(F06,1528) SETID, AGRID_D, COMPS_D, NCOMPS_D
+                  CYCLE j_do3
+               ENDIF
 
                DOFSET = 'M '
                IF(TSET(GRID_ID_ROW_NUM,COMPS_D_TSET) == '  ') THEN
@@ -415,6 +425,9 @@ j_do3:   DO J=1,NUM_MPCSIDS                                ! NUM_MPCSIDS will be
 
 ! **********************************************************************************************************************************
  1822 FORMAT(' *ERROR  1822: ',A,I8,' ON ',A,I8,' IS UNDEFINED')
+
+ 1528 FORMAT(' *ERROR  1528: MPC SET ',I8,' NAMES POINT ',I8,' COMPONENT ',I2,'; THE POINT HAS ',I2,' COMPONENT(S): A SCALAR',    &
+             ' POINT (SPOINT) TAKES COMPONENT 0 OR BLANK (OR 1), A GRID COMPONENTS 1-6')
 
  1333 FORMAT(' *ERROR  1333: MPC SET ',I8,' HAS GRID POINT ',I8,' COMPONENT ',I2,' IN THE ',A2,' DISPL SET.',                      &
                            ' HOWEVER THIS GRID/COMPONENT IS ALREADY IN THE ',A2,' DISPL SET')

@@ -849,12 +849,13 @@
          JERR = JERR + 1
       ENDIF
 
-! Read and check dependent grid/comp/coeff in fields 3, 4, 5 on parent card. If fields 3, 4 or 5 are blank then dep
-! grid, comp, or coeff was not input which is an error (must have dependent grid/comp/coeff)
+! Read and check dependent grid/comp/coeff in fields 3, 4, 5 on parent card. If field 3 or 5 is blank then the dep grid or
+! coeff was not input which is an error. Field 4 may be blank: the component of a scalar point is blank or 0 (read as 0; subrs
+! TSET_PROC_FOR_MPCS and MPC_PROC stop when the point is a grid, which needs a component 1-6).
 
       NUM_TRIPLES = 0
 
-      IF ((JCARD(3)(1:) == ' ') .OR. (JCARD(4)(1:) == ' ') .OR. (JCARD(5)(1:) == ' ')) THEN
+      IF ((JCARD(3)(1:) == ' ') .OR. (JCARD(5)(1:) == ' ')) THEN
          WRITE(ERR,1126)
          WRITE(F06,1126)
          FATAL_ERR = FATAL_ERR + 1
@@ -1020,7 +1021,7 @@
                     ,/,14X,' MUST BE A COMBINATION OF DIGITS 1-6. HOWEVER, FIELD ',I3, ' HAS: "',A,'"')
 
 
- 1126 FORMAT(' *ERROR  1126: FIELDS 3, 4 AND 5 ON MPC ENTRY (DEFINING THE DEPENDENT GRID, COMPONENT, MPC COEFF) MUST NOT BE BLANK')
+ 1126 FORMAT(' *ERROR  1126: FIELDS 3 AND 5 ON MPC ENTRY (THE DEPENDENT POINT AND ITS MPC COEFF) MUST NOT BE BLANK')
 
  1163 FORMAT(' *ERROR  1163: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' TOO MANY ',A,' ENTRIES; LIMIT = ',I12)
