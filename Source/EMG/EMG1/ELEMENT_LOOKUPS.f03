@@ -30,7 +30,7 @@
 
    PRIVATE
 
-   PUBLIC :: GET_ELEM_AGRID_BGRID, GET_ELEM_ONAME, GET_ELGP, GRID_ELEM_CONN_TABLE, GET_MATANGLE_FROM_CID
+   PUBLIC :: GET_ELEM_AGRID_BGRID, GET_ELEM_ONAME, GET_ELGP, GRID_ELEM_CONN_TABLE, GET_MATANGLE_FROM_CID, ORIENT_TETRA10
 
    CONTAINS
 
@@ -132,6 +132,58 @@
 
       END SUBROUTINE GET_ELEM_AGRID_BGRID
 
+
+      SUBROUTINE ORIENT_TETRA10
+
+! CTETRA with 10 grids may list its corners in either order: G1, G2, G3 counterclockwise or clockwise seen from G4. The TETRA10
+! shape functions need the order with a positive volume, (x2 - x1).((x3 - x1) x (x4 - x1)) > 0. A 10-node tetra with the other
+! order gets G2 and G3 swapped in EDAT, and its midside grids follow their edges: G1 G3 G2 G4, then the grids of edges 1-3, 3-2,
+! 2-1, 1-4, 3-4, 2-4 (input positions 7, 6, 5, 8, 10, 9). Called once in LINK1 after the grids are in basic coordinates, so that
+! every later use of the element (stiffness, mass, loads, recovery) sees the same order. (4-node tetras take either order.)
+
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE IOUNT1, ONLY                :  ERR, F06
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, NELE, NGRID
+      USE MODEL_STUF, ONLY            :  EDAT, EPNT, ETYPE, GRID_ID, RGRID
+      USE DOF_ARRAY_INDEXING, ONLY    :  GET_ARRAY_ROW_NUM
+
+      IMPLICIT NONE
+
+      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'ORIENT_TETRA10'
+      INTEGER(LONG), PARAMETER        :: PERM(10) = (/ 1, 3, 2, 4, 7, 6, 5, 8, 10, 9 /)
+      INTEGER(LONG)                   :: I, J, K, NFLIP, IG(4), OLD(10)
+      REAL(DOUBLE)                    :: A(3), B(3), C(3), V
+
+      NFLIP = 0
+      DO I=1,NELE
+         IF (ETYPE(I) /= 'TETRA10 ') CYCLE
+         K = EPNT(I) + 1                                   ! The grids are EDAT(K+1:K+10)
+         DO J=1,4
+            CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, EDAT(K+J), IG(J) )
+         ENDDO
+         IF (ANY(IG <= 0)) CYCLE                           ! Undefined grid: reported elsewhere
+         A = RGRID(IG(2),1:3) - RGRID(IG(1),1:3)
+         B = RGRID(IG(3),1:3) - RGRID(IG(1),1:3)
+         C = RGRID(IG(4),1:3) - RGRID(IG(1),1:3)
+         V = A(1)*(B(2)*C(3) - B(3)*C(2)) + A(2)*(B(3)*C(1) - B(1)*C(3)) + A(3)*(B(1)*C(2) - B(2)*C(1))
+         IF (V >= 0.0D0) CYCLE
+         OLD = EDAT(K+1:K+10)
+         DO J=1,10
+            EDAT(K+J) = OLD(PERM(J))
+         ENDDO
+         NFLIP = NFLIP + 1
+      ENDDO
+      IF (NFLIP > 0) THEN
+         WRITE(ERR,101) NFLIP
+         WRITE(F06,101) NFLIP
+      ENDIF
+
+  101 FORMAT(' *INFORMATION: ',I8,' CTETRA WITH 10 GRIDS HAD G1, G2, G3 CLOCKWISE SEEN FROM G4; THEIR GRIDS WERE REORDERED',     &
+             ' (G2 AND G3 SWAPPED, MIDSIDE GRIDS WITH THEIR EDGES)')
+
+      END SUBROUTINE ORIENT_TETRA10
+
+! ##################################################################################################################################
 
       SUBROUTINE GET_ELEM_ONAME ( NAME )
 
