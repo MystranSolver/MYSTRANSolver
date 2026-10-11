@@ -899,6 +899,11 @@ i_do1:DO I=1,NGRID
       SUBROUTINE MGGS_MASS_MATRIX
 
 ! Forms the sparse scalar mass matrix, MGGS, (for masses defined on Bulk Data CMASS)
+! Each mass is at the G-set DOF of its point and component (CMASS column 5 or 7; 0 or 1 for a scalar point). Before, every mass
+! was put at the DOF of the first row whose component label was 1 counted in GRID_ID order: the component of a CMASS1/CMASS2 on a
+! grid was ignored (a mass on T3 went to T1, Agent 2 a2_m13: MLL singular), and with the TDOF labels wrong for points sequenced out
+! of ID order (fixed in TDOF_PROC) the masses of scalar points went to other DOFs. Masses at the same DOF are now added (before,
+! only the first one counted).
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
@@ -907,13 +912,13 @@ i_do1:DO I=1,NGRID
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE PARAMS, ONLY                :  SPARSTOR, WTMASS
       USE TIMDAT, ONLY                :  TSEC
-      USE DOF_TABLES, ONLY            :  TDOF
+      USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  CMASS, GRID_ID, PMASS, RPMASS
       USE SPARSE_MATRICES, ONLY       :  I_MGGS, J_MGGS, MGGS
 
       USE LINK1_WORKSPACE_LIFECYCLE, ONLY:  ALLOCATE_L1_MGG
       USE DOF_NUMBERING, ONLY         :  TDOF_COL_NUM
-      USE DOF_ARRAY_INDEXING, ONLY    :  ARRAY_SIZE_ERROR_1, GET_ARRAY_ROW_NUM
+      USE DOF_ARRAY_INDEXING, ONLY    :  ARRAY_SIZE_ERROR_1, GET_ARRAY_ROW_NUM, GET_GRID_NUM_COMPS
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
       USE SORTING, ONLY               :  SORT_INT2_REAL1
 
@@ -922,7 +927,8 @@ i_do1:DO I=1,NGRID
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'MGGS_MASS_MATRIX'
       CHARACTER( 1*BYTE)              :: FOUND             ! 'Y'/'N' indicator of whether we found something
 
-      INTEGER(LONG)                   :: G_SET_DOF(NGRID)  ! G-set array with grid actual ID's for the grids that have scalar mass
+      INTEGER(LONG)                   :: COMP              ! Component of a scalar mass at its point
+      INTEGER(LONG)                   :: NCOMPS            ! Number of components of that point (1 scalar point, 6 grid)
       INTEGER(LONG)                   :: G_SET_COL         ! Col in TDOF where G-set exists
       INTEGER(LONG)                   :: I,J,K             ! DO loop indices or counters
       INTEGER(LONG)                   :: IERROR            ! Local error count
@@ -948,27 +954,32 @@ i_do1:DO I=1,NGRID
       CALL ALLOCATE_L1_MGG ( 'MGGS', SUBR_NAME )
 
       CALL TDOF_COL_NUM ( 'G ', G_SET_COL )
-      K = 0
-      DO I=1,NDOFG
-         IF (TDOF(I,2) == 1) THEN
-            K = K + 1
-            G_SET_DOF(K)  = TDOF(I,G_SET_COL)
-         ENDIF
-      ENDDO
 
       DO I=1,NCMASS
 
          IF (CMASS(I,4) /= 0) THEN                         ! The scalar point is in either col 4 or 6 in CMASS (checked in BD read)
             SGRID(I) = CMASS(I,4)
+            COMP     = CMASS(I,5)
          ELSE
             SGRID(I) = CMASS(I,6)
+            COMP     = CMASS(I,7)
          ENDIF
          PMASS_ID(I) = CMASS(I,3)
 
          ROW_NUM = -1
          CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, SGRID(I), ROW_NUM )
          IF (ROW_NUM /= -1) THEN
-            IDOF(I) = G_SET_DOF(ROW_NUM)
+            CALL GET_GRID_NUM_COMPS ( ROW_NUM, NCOMPS, SUBR_NAME )
+            IF ((NCOMPS == 1) .AND. (COMP == 0)) COMP = 1
+            IF ((COMP < 1) .OR. (COMP > NCOMPS)) THEN
+               IERROR    = IERROR + 1
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1362) CMASS(I,1), SGRID(I), COMP, NCOMPS
+               WRITE(F06,1362) CMASS(I,1), SGRID(I), COMP, NCOMPS
+               IDOF(I) = 0
+            ELSE
+               IDOF(I) = TDOF(TDOF_ROW_START(ROW_NUM)+COMP-1,G_SET_COL)
+            ENDIF
          ELSE
             IERROR    = IERROR + 1
             FATAL_ERR = FATAL_ERR + 1
@@ -1014,21 +1025,26 @@ j_do1:   DO J=1,NPMASS
 
 ! Formulate sparse matrix MGGS. Note that the MGGS matrix is diagonal since CMASS is attached to only 1 grid/scalar point
 
-      KTERM_MGGS = 0
+      KTERM_MGGS = 0                                       ! IDOF is sorted: walk it once, adding the masses at the same DOF
       I_MGGS(1) = 1
+      J = 1
 i_do2:DO I=1,NDOFG
-j_do2:   DO J=1,NCMASS
+         I_MGGS(I+1) = I_MGGS(I)
+         DO WHILE (J <= NCMASS)
+            IF (IDOF(J) > I) EXIT
             IF (IDOF(J) == I) THEN
-               I_MGGS(I+1)        = I_MGGS(I) + 1
-               KTERM_MGGS         = KTERM_MGGS + 1
-               IF (KTERM_MGGS > NTERM_MGGS) CALL ARRAY_SIZE_ERROR_1 ( SUBR_NAME, NTERM_MGGS, 'MGGS' )
-               J_MGGS(KTERM_MGGS) = I                      ! Since MGGS is diagonal
-               MGGS(KTERM_MGGS)   = PMASS_VAL(J)
-               EXIT j_do2
-            ELSE
-               I_MGGS(I+1) = I_MGGS(I)
+               IF (I_MGGS(I+1) == I_MGGS(I)) THEN          ! The first mass at this DOF
+                  I_MGGS(I+1)        = I_MGGS(I) + 1
+                  KTERM_MGGS         = KTERM_MGGS + 1
+                  IF (KTERM_MGGS > NTERM_MGGS) CALL ARRAY_SIZE_ERROR_1 ( SUBR_NAME, NTERM_MGGS, 'MGGS' )
+                  J_MGGS(KTERM_MGGS) = I                   ! Since MGGS is diagonal
+                  MGGS(KTERM_MGGS)   = PMASS_VAL(J)
+               ELSE
+                  MGGS(KTERM_MGGS)   = MGGS(KTERM_MGGS) + PMASS_VAL(J)
+               ENDIF
             ENDIF
-         ENDDO j_do2
+            J = J + 1
+         ENDDO
       ENDDO i_do2
 
       IF (DEBUG(182) > 0) CALL DEB_MGGS ( 3 )
@@ -1043,6 +1059,9 @@ j_do2:   DO J=1,NCMASS
 
 ! **********************************************************************************************************************************
  1361 FORMAT(' *ERROR  1361: UNDEFINED ',A,I8,' ON ',A)
+
+ 1362 FORMAT(' *ERROR  1362: SCALAR MASS ',I8,' IS ON POINT ',I8,' COMPONENT ',I2,', BUT THE POINT HAS ',I2,' COMPONENT(S)',    &
+             ' (A SCALAR POINT TAKES 0 OR BLANK, A GRID 1-6)')
 
  1601 FORMAT(' *ERROR  1601: UNDEFINED SCALAR MASS PROPERTY ID = ',I8,' ON CMASS ID ',I8)
 
