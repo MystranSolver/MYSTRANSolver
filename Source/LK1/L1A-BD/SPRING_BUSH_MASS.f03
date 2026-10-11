@@ -32,7 +32,7 @@
 
    EXTERNAL :: ELEPRO
 
-   PUBLIC :: BD_CELAS1, BD_CELAS2, BD_CELAS3, BD_CELAS4, BD_PELAS, BD_CBUSH, BD_CBUSH0, BD_PBUSH, BD_CMASS1, BD_CMASS2, BD_CMASS3, BD_CMASS4, BD_PMASS, BD_CONM2
+   PUBLIC :: ELAS_GROUND_END, BD_CELAS1, BD_CELAS2, BD_CELAS3, BD_CELAS4, BD_PELAS, BD_CBUSH, BD_CBUSH0, BD_PBUSH, BD_CMASS1, BD_CMASS2, BD_CMASS3, BD_CMASS4, BD_PMASS, BD_CONM2
 
    CONTAINS
 
@@ -60,6 +60,8 @@
       CHARACTER(LEN(JCARD))           :: CELAS_ELID        ! Field 2 of CELAS1 card (this CELAS1's elem ID)
       CHARACTER(LEN(JCARD))           :: JCARD_EDAT(10)    ! JCARD but with fields 5 and 6 switched to get G.P.'s together in EDAT
 
+      CHARACTER(LEN=1)                :: CHKB              ! 'Y' to check point B > 0 (not for a grounded spring)
+      INTEGER(LONG)                   :: GROUNDED          ! Output of ELAS_GROUND_END (0: two points)
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG)                   :: IDOF              ! Displ component (1,2,3,4,5 or 6) that one end of CELSA conn. to
 
@@ -83,6 +85,7 @@
 ! Make JCARD from CARD
 
       CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
+      CALL ELAS_GROUND_END ( JCARD, 4, 5, 6, 7, GROUNDED ) ! A grounded end (blank or 0 point) is put second
       CELAS_ELID = JCARD(2)
 
 ! Make JCARD_EDAT, which is the version that will have JCARD fields 5, 6 switched when subr ELEPRO called
@@ -102,7 +105,9 @@
       JCARD_EDAT(5) = JCARD(6)
       JCARD_EDAT(6) = JCARD(5)
 
-      CALL ELEPRO ( 'Y', JCARD_EDAT, 6, MEDAT_CELAS1, 'Y', 'Y', 'Y', 'Y', 'N', 'N', 'N', 'N' )
+      CHKB = 'Y'
+      IF (GROUNDED > 0) CHKB = 'N'                         ! Grid B is 0 or -1: a grounded spring
+      CALL ELEPRO ( 'Y', JCARD_EDAT, 6, MEDAT_CELAS1, 'Y', 'Y', 'Y', CHKB, 'N', 'N', 'N', 'N' )
       NCELAS1 = NCELAS1+1
       ETYPE(NELE) = 'ELAS1   '
 
@@ -110,7 +115,7 @@
 
       IF (IERRFL(JF(5)) == 'N') THEN
          CALL I4FLD ( JCARD(5), JF(5), IDOF )
-         IF ((IDOF <= 0) .OR. (IDOF > 6)) THEN
+         IF ((IDOF < 0) .OR. (IDOF > 6)) THEN
             FATAL_ERR = FATAL_ERR + 1
             WRITE(ERR,1133) IDOF, JF(5), CELAS_ELID
             WRITE(F06,1133) IDOF, JF(5), CELAS_ELID
@@ -119,7 +124,7 @@
 
       IF (IERRFL(JF(7)) == 'N') THEN
          CALL I4FLD ( JCARD(7), JF(7), IDOF )
-         IF ((IDOF <= 0) .OR. (IDOF > 6)) THEN
+         IF ((IDOF < 0) .OR. (IDOF > 6)) THEN
             FATAL_ERR = FATAL_ERR + 1
             WRITE(ERR,1133) IDOF, JF(7), CELAS_ELID
             WRITE(F06,1133) IDOF, JF(7), CELAS_ELID
@@ -137,7 +142,7 @@
       RETURN
 
 ! **********************************************************************************************************************************
- 1133 FORMAT(' *ERROR  1133: INVALID COMPONEMT NUMBER = ',I8,' IN FIELD ',I2,' ON CELAS1 ID = ',A8,' .MUST BE SINGLE DIGIT 1-6')
+ 1133 FORMAT(' *ERROR  1133: INVALID COMPONEMT NUMBER = ',I8,' IN FIELD ',I2,' ON CELAS1 ID = ',A8,' .MUST BE 0 (SCALAR POINT OR GROUND) OR A SINGLE DIGIT 1-6')
 
 ! **********************************************************************************************************************************
 
@@ -167,6 +172,7 @@
       CHARACTER(LEN(JCARD))           :: CELAS_ELID        ! Field 2 of CELAS2 card (this CELAS2's elem ID)
       CHARACTER(LEN(JCARD))           :: JCARD_EDAT(10)    ! JCARD but with fields 5 and 6 switched to get G.P.'s together in EDAT
 
+      INTEGER(LONG)                   :: GROUNDED          ! Output of ELAS_GROUND_END (0: two points)
       INTEGER(LONG)                   :: ELEM_ID           ! Elem ID from field 2
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG)                   :: I4INP             ! An integer read
@@ -197,6 +203,7 @@
 ! Make JCARD from CARD
 
       CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
+      CALL ELAS_GROUND_END ( JCARD, 4, 5, 6, 7, GROUNDED ) ! A grounded end (blank or 0 point) is put second
 
 ! First, check that fields 2-9 have the proper data type (we are going to have to rearrange the fields prior to calling ELEPRO).
 ! If any erors, return
@@ -259,7 +266,7 @@
 
       IF (IERRFL(JF(5)) == 'N') THEN
          CALL I4FLD ( JCARD(5), JF(5), IDOF )
-         IF ((IDOF <= 0) .OR. (IDOF > 6)) THEN
+         IF ((IDOF < 0) .OR. (IDOF > 6)) THEN
             FATAL_ERR = FATAL_ERR + 1
             WRITE(ERR,1133) IDOF,JF(5),CELAS_ELID
             WRITE(F06,1133) IDOF,JF(5),CELAS_ELID
@@ -268,7 +275,7 @@
 
       IF (IERRFL(JF(7)) == 'N') THEN
          CALL I4FLD ( JCARD(7), JF(7), IDOF )
-         IF ((IDOF <= 0) .OR. (IDOF > 6)) THEN
+         IF ((IDOF < 0) .OR. (IDOF > 6)) THEN
             FATAL_ERR = FATAL_ERR + 1
             WRITE(ERR,1133) IDOF,JF(7),CELAS_ELID
             WRITE(F06,1133) IDOF,JF(7),CELAS_ELID
@@ -283,7 +290,7 @@
       RETURN
 
 ! **********************************************************************************************************************************
- 1133 FORMAT(' *ERROR  1133: INVALID COMPONEMT NUMBER = ',I8,' IN FIELD ',I2,' ON CELAS2 ID = ',A8,' .MUST BE SINGLE DIGIT 1-6')
+ 1133 FORMAT(' *ERROR  1133: INVALID COMPONEMT NUMBER = ',I8,' IN FIELD ',I2,' ON CELAS2 ID = ',A8,' .MUST BE 0 (SCALAR POINT OR GROUND) OR A SINGLE DIGIT 1-6')
 
 ! **********************************************************************************************************************************
 
@@ -313,6 +320,8 @@
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! The 10 fields of characters making up CARD
       CHARACTER(LEN(JCARD))           :: JCARD_EDAT(10)    ! JCARD but with fields 5 and 6 switched to get G.P.'s together in EDAT
 
+      CHARACTER(LEN=1)                :: CHKB              ! 'Y' to check point B > 0 (not for a grounded spring)
+      INTEGER(LONG)                   :: GROUNDED          ! Output of ELAS_GROUND_END (0: two points)
       INTEGER(LONG)                   :: I                 ! DO loop index
 
 
@@ -333,6 +342,7 @@
 ! Make JCARD from CARD
 
       CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
+      CALL ELAS_GROUND_END ( JCARD, 4, 0, 5, 0, GROUNDED ) ! A grounded end (blank or 0 scalar point) is put second
 
 ! Make JCARD_EDAT, which is the version that will have JCARD fields 5, 6 switched when subr ELEPRO called
 
@@ -346,7 +356,9 @@
          JCARD_EDAT(3) = JCARD(2)
       ENDIF
 
-      CALL ELEPRO ( 'Y', JCARD_EDAT, 4, MEDAT_CELAS3, 'Y', 'Y', 'Y', 'Y', 'Y', 'Y', 'N', 'N' )
+      CHKB = 'Y'
+      IF (GROUNDED > 0) CHKB = 'N'                         ! Scalar point B is 0 or -1: a grounded spring
+      CALL ELEPRO ( 'Y', JCARD_EDAT, 4, MEDAT_CELAS3, 'Y', 'Y', 'Y', CHKB, 'Y', 'Y', 'N', 'N' )
       NCELAS3 = NCELAS3+1
       ETYPE(NELE) = 'ELAS3   '
 
@@ -388,6 +400,7 @@
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)         ! The 10 fields of characters making up CARD
       CHARACTER(LEN(JCARD))           :: JCARD_EDAT(10)    ! JCARD but with fields 5 and 6 switched to get G.P.'s together in EDAT
 
+      INTEGER(LONG)                   :: GROUNDED          ! Output of ELAS_GROUND_END (0: two points)
       INTEGER(LONG)                   :: ELEM_ID           ! Elem ID from field 2
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG)                   :: I4INP             ! Integer value read from a field of the CELAS4 entry
@@ -413,6 +426,7 @@
 ! Make JCARD from CARD
 
       CALL MKJCARD ( SUBR_NAME, CARD, JCARD )
+      CALL ELAS_GROUND_END ( JCARD, 4, 0, 5, 0, GROUNDED ) ! A grounded end (blank or 0 scalar point) is put second
 
 ! First, check that fields 2-5 have the proper data type (we are going to have to rearrange the fields prior to calling ELEPRO).
 ! If any erors, return
@@ -2010,5 +2024,93 @@ pcont:DO I=1,4
 ! **********************************************************************************************************************************
 
       END SUBROUTINE BD_CONM2
+
+
+! ##################################################################################################################################
+
+      SUBROUTINE ELAS_GROUND_END ( JCARD, FG1, FC1, FG2, FC2, GROUNDED )
+
+! A scalar spring (CELAS1-4) connects two points, or one point to ground when the other point is blank or 0. The element keeps its
+! point first: if the first point is the blank one, the two ends (fields FG1, FC1 and FG2, FC2) are swapped. Point B is then 0 in
+! EDAT, or -1 when the ends were swapped: subr GET_ELGP gives a grounded spring 1 grid point, subr ELAS1 a 1 x 1 stiffness, and
+! for B = -1 the engineering force keeps the sign of the entry as written, K*(UA - UB) with UA = 0 (ground) and UB the point.
+! FC1, FC2 = 0 for CELAS3/4 (no component fields). Errors: both points blank or 0, a component at the grounded end, a negative
+! point. GROUNDED = 0 for a spring between two points, 1 for point B grounded, 2 for point A grounded (ends swapped).
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG
+      USE IOUNT1, ONLY                :  ERR, F06
+      USE SCONTR, ONLY                :  FATAL_ERR, JCARD_LEN
+
+      CHARACTER(LEN=JCARD_LEN), INTENT(INOUT) :: JCARD(10) ! The fields of the entry
+      INTEGER(LONG), INTENT(IN)       :: FG1, FC1          ! Fields of point A and its component (FC1 = 0: none)
+      INTEGER(LONG), INTENT(IN)       :: FG2, FC2          ! Fields of point B and its component (FC2 = 0: none)
+      INTEGER(LONG), INTENT(OUT)      :: GROUNDED          ! 0: two points; 1: B grounded; 2: A grounded (ends swapped)
+      CHARACTER(LEN=JCARD_LEN)        :: SWAP              ! A field being swapped
+      CHARACTER(LEN=JCARD_LEN)        :: PA, PB            ! Points A and B, left adjusted
+
+      GROUNDED = 0
+      PA = ADJUSTL(JCARD(FG1))
+      PB = ADJUSTL(JCARD(FG2))
+      IF ((PA(1:1) == '-') .OR. (PB(1:1) == '-')) THEN
+         FATAL_ERR = FATAL_ERR + 1
+         WRITE(ERR,1220) TRIM(JCARD(1)), TRIM(JCARD(2))
+         WRITE(F06,1220) TRIM(JCARD(1)), TRIM(JCARD(2))
+         RETURN
+      ENDIF
+
+      IF (NO_POINT(JCARD(FG1)) .AND. NO_POINT(JCARD(FG2))) THEN
+         FATAL_ERR = FATAL_ERR + 1
+         WRITE(ERR,1218) TRIM(JCARD(1)), TRIM(JCARD(2))
+         WRITE(F06,1218) TRIM(JCARD(1)), TRIM(JCARD(2))
+         RETURN
+      ENDIF
+
+      IF (NO_POINT(JCARD(FG1))) THEN                       ! Point A is ground: swap the ends
+         GROUNDED = 2
+         SWAP = JCARD(FG1) ; JCARD(FG1) = JCARD(FG2) ; JCARD(FG2) = SWAP
+         IF (FC1 > 0) THEN
+            SWAP = JCARD(FC1) ; JCARD(FC1) = JCARD(FC2) ; JCARD(FC2) = SWAP
+         ENDIF
+      ELSE IF (NO_POINT(JCARD(FG2))) THEN
+         GROUNDED = 1
+      ENDIF
+
+      IF (GROUNDED > 0) THEN
+         IF (FC2 > 0) THEN
+            IF (.NOT.NO_POINT(JCARD(FC2))) THEN
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1219) TRIM(JCARD(1)), TRIM(JCARD(2)), TRIM(ADJUSTL(JCARD(FC2)))
+               WRITE(F06,1219) TRIM(JCARD(1)), TRIM(JCARD(2)), TRIM(ADJUSTL(JCARD(FC2)))
+            ENDIF
+            JCARD(FC2) = ' '
+         ENDIF
+         IF (GROUNDED == 1) THEN
+            JCARD(FG2) = '0'
+         ELSE
+            JCARD(FG2) = '-1'
+         ENDIF
+      ENDIF
+
+      RETURN
+
+! **********************************************************************************************************************************
+ 1218 FORMAT(' *ERROR  1218: ',A,' ',A,' HAS NO POINT: AT LEAST ONE OF ITS TWO POINTS MUST BE GIVEN (A BLANK OR 0 POINT IS',     &
+             ' GROUND)')
+
+ 1219 FORMAT(' *ERROR  1219: ',A,' ',A,' HAS A GROUNDED END (BLANK OR 0 POINT) WITH A COMPONENT ',A,'; THE COMPONENT OF A',      &
+             ' GROUNDED END MUST BE BLANK OR 0')
+
+ 1220 FORMAT(' *ERROR  1220: ',A,' ',A,' HAS A NEGATIVE POINT; A POINT IS AN ID > 0, OR BLANK OR 0 FOR GROUND')
+
+! **********************************************************************************************************************************
+
+      CONTAINS
+
+         LOGICAL FUNCTION NO_POINT ( FLD )                 ! The field is blank or 0
+         CHARACTER(LEN=*), INTENT(IN) :: FLD
+         NO_POINT = (FLD == ' ') .OR. (TRIM(ADJUSTL(FLD)) == '0')
+         END FUNCTION NO_POINT
+
+      END SUBROUTINE ELAS_GROUND_END
 
    END MODULE SPRING_BUSH_MASS

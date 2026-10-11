@@ -561,8 +561,12 @@
          I1 = ELAS_COMP(1)
          CALL GET_GRID_NUM_COMPS ( BGRID(1), NUM_COMPS_GRID_1, SUBR_NAME )
          I2 = NUM_COMPS_GRID_1 + ELAS_COMP(2)
-         PEL(I1) = KE(I1,I1)*UEL(I1) + KE(I1,I2)*UEL(I2)   ! Note: KE is global and local for the ELAS elems
-         PEL(I2) = KE(I2,I1)*UEL(I1) + KE(I2,I2)*UEL(I2)
+         IF (ELGP == 1) THEN                               ! A grounded spring: one point
+            PEL(I1) = KE(I1,I1)*UEL(I1)
+         ELSE
+            PEL(I1) = KE(I1,I1)*UEL(I1) + KE(I1,I2)*UEL(I2)! Note: KE is global and local for the ELAS elems
+            PEL(I2) = KE(I2,I1)*UEL(I1) + KE(I2,I2)*UEL(I2)
+         ENDIF
 
       ELSE IF (TYPE == 'ROD     ') THEN                    ! Calculate forces for ROD1 elem
 

@@ -206,7 +206,7 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE SCONTR, ONLY                :  BLNK_SUB_NAM
-      USE MODEL_STUF, ONLY            :  BGRID, ELAS_COMP, EPROP, FCONV, KE, SE1, TYPE
+      USE MODEL_STUF, ONLY            :  BGRID, ELAS_COMP, ELGP, EPROP, FCONV, KE, SE1, TYPE
 
       USE DATE_TIME_UTILS, ONLY       :  OURTIM
       USE DOF_ARRAY_INDEXING, ONLY    :  GET_GRID_NUM_COMPS
@@ -243,17 +243,20 @@
 
       IF (OPT(4) == 'Y') THEN
          KE(I1,I1) =  K
-         KE(I1,I2) = -KE(I1,I1)
-         KE(I2,I1) = -KE(I1,I1)
-         KE(I2,I2) =  KE(I1,I1)
+         IF (ELGP == 2) THEN                               ! (ELGP = 1: a grounded spring, the point B is ground)
+            KE(I1,I2) = -KE(I1,I1)
+            KE(I2,I1) = -KE(I1,I1)
+            KE(I2,I2) =  KE(I1,I1)
+         ENDIF
       ENDIF
 
 ! **********************************************************************************************************************************
 ! Calculate SE1 matrix for force recovery.
 
       IF (OPT(3) == 'Y') THEN
-         SE1(1,I1,1) =  K
-         SE1(1,I2,1) = -K
+         SE1(1,I1,1) =  K                                  ! The force is K*(UA - UB) for the entry as written: with a grounded
+         IF (ELGP == 2) SE1(1,I2,1) = -K                   ! end B, K*UA; with a grounded end A (ELAS_COMP(2) = -1, the ends
+         IF ((ELGP == 1) .AND. (ELAS_COMP(2) == -1)) SE1(1,I1,1) = -K   ! swapped by ELAS_GROUND_END), -K*UB
       ENDIF
 
 

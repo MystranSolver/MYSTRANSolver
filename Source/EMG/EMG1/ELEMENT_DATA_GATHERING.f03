@@ -1003,7 +1003,7 @@
          ENDDO
 
          IERROR = 0
-         DO I=1,2                                          ! If displ comps on CELAS1,2 entry were blank or 0, change to 1,2
+         DO I=1,ELGP                                       ! If displ comps on CELAS1,2 entry were blank or 0, change to 1,2
             ELAS_COMP(I) = EDAT(EPNTK+3+I)                 ! (i.e. ELAS has 2 components of displ)
             IF (ELAS_COMP(I) == 0) THEN
                CALL GET_GRID_NUM_COMPS ( BGRID(I), NUM_COMPS, SUBR_NAME )
@@ -1021,11 +1021,13 @@
          IF (IERROR > 0) THEN
             CALL OUTA_HERE ( 'Y' )
          ENDIF
+         IF (ELGP == 1) ELAS_COMP(2) = EDAT(EPNTK+3)       ! A grounded spring: 0, or -1 if its point A was the grounded end
 
       ELSE IF ((TYPE == 'ELAS3   ') .OR. (TYPE == 'ELAS4   ')) THEN
 
          ELAS_COMP(1) = 1                                  ! These are the components at the SPOINT, not the cols of the KE matrix
          ELAS_COMP(2) = 1                                  ! (for cols of the KE matrix, see subr ELAS1, they depend on ELAS_COMP)
+         IF (ELGP == 1) ELAS_COMP(2) = EDAT(EPNTK+3)       ! A grounded spring: 0, or -1 if its point A was the grounded end
 
       ENDIF
 
