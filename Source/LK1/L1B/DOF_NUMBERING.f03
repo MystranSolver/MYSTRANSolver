@@ -217,6 +217,13 @@
 
       CALL CALC_TDOF_ROW_START ( 'Y' )
 
+! Start from a zero table. The sets taken from TSET (M, SA, SB, SG, SE, O, R, U1, U2) are written only at their own DOFs, so when
+! the table is generated again (after AUTOSPC moved DOFs to the SA-set) a DOF that left a set kept its old number there: an O-set
+! DOF moved to SA by AUTOSPC kept an O-set number greater than the new NDOFO (ERROR 938 in subr MERGE_COL_VECS for an ASET1 with
+! some of the components of plate grids, whose drilling DOFs are in the O-set and are AUTOSPC'd).
+
+      TDOF(:,:) = 0
+
 ! First, set NDOFG = LDOFG. It will be counted later.
 
       NDOFG = LDOFG
