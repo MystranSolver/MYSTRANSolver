@@ -66,7 +66,7 @@
                                          INTL_MID, INTL_PID, ISOLID, MATANGLE, MATL, MTRL_TYPE, NUM_SEi, OFFDIS, OFFDIS_O, OFFSET, &
                                          PBAR, PBEAM, PCOMP, PCOMP_PROPS, PLATEOFF, PLATETHICK, PROD, PSHEAR, PSHEL, PSOLID,       &
                                          PUSER1, PUSERIN, RMATL, RPBAR, RPBEAM, RPBUSH, RPELAS, RPROD, RPSHEAR, RPSHEL, RPUSER1,   &
-                                         TYPE, VVEC, XEB, ZOFFS
+                                         TYPE, VVEC, XEB, ZOFFS, PLATETHICK_BLANK
 
       USE MODEL_STUF, ONLY            :  USERIN_ACT_GRIDS, USERIN_ACT_COMPS, USERIN_CID0, USERIN_IN4_INDEX,                        &
                                          USERIN_MAT_NAMES, USERIN_NUM_BDY_DOF, USERIN_NUM_ACT_GRDS, USERIN_NUM_SPOINTS,            &
@@ -461,8 +461,12 @@
             IF (EDAT(EPNTK+DELTA) > 0) THEN                ! Membrane thickness was defined as grid thicknesses on connection entry
                IPNTR = EDAT(EPNTK+DELTA)
                DO I=1,ELGP
-                  EPROP(6+I) = PLATETHICK(IPNTR+I-1)
-                  THICK_AVG  = THICK_AVG + PLATETHICK(IPNTR+I-1)/ELGP
+                  IF (PLATETHICK(IPNTR+I-1) == PLATETHICK_BLANK) THEN
+                     EPROP(6+I) = RPSHEL(INTL_PID,1)       ! Ti blank on the connection entry: the PSHELL T
+                  ELSE
+                     EPROP(6+I) = PLATETHICK(IPNTR+I-1)
+                  ENDIF
+                  THICK_AVG  = THICK_AVG + EPROP(6+I)/ELGP
                ENDDO
                IF (DABS(EPROP(5)) == ZERO) THEN            ! Since thick was defined on conn entry, reset Z1,2 if they were zero
                   EPROP(5) = -THICK_AVG/TWO
