@@ -1,0 +1,21 @@
+$ The CONM2 of conm2_general_mass.bdf entered with CID = -1: X1-X3 are the c.g. in basic, the inertias in basic
+$ (products of inertia I21 = -J21 etc. of the basic inertia tensor). MGG at grid 1 must equal that of conm2_general_mass.
+SOL 103
+OUTPUT4 MGG,,,,//-1/21
+CEND
+METHOD = 1
+BEGIN BULK
+PARAM,GRDPNT,0
+CORD2R,5,,0.,0.,0.,0.3,0.4,0.866,+C5
++C5,1.,0.2,0.1
+CORD2R,7,,1.,2.,3.,1.2,1.9,4.,+C7
++C7,2.,2.5,3.1
+GRID,1,7,2.,-1.,0.5,7
+GRID,2,,10.,0.,0.,,123456
+CBAR,1,1,1,2,0.,0.,1.
+PBAR,1,1,1.,1.,1.,1.
+MAT1,1,1.E6,,0.3
+CONM2,4501,1,-1,10.,5.206369268E+00,5.036465183E-01,3.909346860E+00,,+M1
++M1,6.058627752E+00,4.862638779E-01,6.498707062E+00,-2.082135724E+00,-1.699373105E-01,8.442665186E+00
+EIGRL,1,,,3
+ENDDATA

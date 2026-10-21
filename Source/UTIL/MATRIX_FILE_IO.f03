@@ -66,7 +66,7 @@
       USE IOUNT1, ONLY                :  ERR, F06, SC1, WRT_ERR
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO
+      USE CONSTANTS_1, ONLY           :  ZERO, MATRIX_FILE_BULK
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
 
       USE DATE_TIME_UTILS, ONLY       :  OURTIM
@@ -107,6 +107,9 @@
 
       REAL(DOUBLE) , INTENT(OUT)      :: MATOUT(NTERM)     ! Real values for matrix MATOUT
       REAL(DOUBLE)                    :: RVAL              ! Real values read from FILNAM
+      INTEGER(LONG)                   :: FIRST             ! First word of the record after the header (MATRIX_FILE_BULK or a row)
+      INTEGER(LONG), ALLOCATABLE      :: IROW_ALL(:)       ! Row numbers of all terms, when the file has the 3-record form
+      LOGICAL                         :: BULK              ! .TRUE. if the file has the 3-record form (see CONSTANTS_1)
 
       CHARACTER(LEN=7+LEN(NAME)+LEN(": read row")) :: COUNTER_TEMPLATE
 
@@ -163,8 +166,33 @@
 !xx   WRITE(SC1, * )
       WRITE(COUNTER_TEMPLATE, 12345) NAME
       !CALL COUNTER_INIT(COUNTER_TEMPLATE, NROWS)
+! The terms are either three records (rows, columns, values) after a MATRIX_FILE_BULK record, or one record per term.
+
+      BULK = .FALSE.
+      READ(UNT,IOSTAT=IOCHK) FIRST
+      IF ((IOCHK == 0) .AND. (FIRST == MATRIX_FILE_BULK)) THEN
+         BULK = .TRUE.
+         ALLOCATE ( IROW_ALL(NTERM) )
+         READ(UNT,IOSTAT=IOCHK) IROW_ALL(1:NTERM)
+         IF (IOCHK == 0) READ(UNT,IOSTAT=IOCHK) J_MATOUT(1:NTERM)
+         IF (IOCHK == 0) READ(UNT,IOSTAT=IOCHK) MATOUT(1:NTERM)
+         IF (IOCHK /= 0) THEN
+            REC_NO = 0
+            CALL READERR ( IOCHK, FILNAM, MESSAG, REC_NO, OUNT )
+            CALL OUTA_HERE ( 'Y' )                                 ! Can't read the terms from the file, so quit
+         ENDIF
+      ELSE
+         BACKSPACE(UNT)
+      ENDIF
+
 k_do1:DO K = 1,NTERM
-         READ(UNT,IOSTAT=IOCHK) IROW,JCOL,RVAL
+         IF (BULK) THEN
+            IROW = IROW_ALL(K)
+            JCOL = J_MATOUT(K)
+            RVAL = MATOUT(K)
+         ELSE
+            READ(UNT,IOSTAT=IOCHK) IROW,JCOL,RVAL
+         ENDIF
          IF (IOCHK /= 0) THEN
             IF (READ_NTERM == 'Y') THEN
                REC_NO = K + 1
@@ -194,6 +222,7 @@ k_do1:DO K = 1,NTERM
          J_MATOUT(KTERM)  = JCOL
            MATOUT(KTERM)  = RVAL
       ENDDO k_do1
+      IF (ALLOCATED(IROW_ALL)) DEALLOCATE ( IROW_ALL )
       WRITE(SC1,*) CR13
 
       IF (READ_ERR /= 0) THEN
@@ -506,6 +535,7 @@ k_do1:DO K = 1,NTERM
       USE IOUNT1, ONLY                :  ERR, F06, SC1, WRT_ERR
       USE SCONTR, ONLY                :  BLNK_SUB_NAM
       USE TIMDAT, ONLY                :  TSEC
+      USE CONSTANTS_1, ONLY           :  MATRIX_FILE_BULK
 
       USE DATE_TIME_UTILS, ONLY       :  OURTIM
       USE FILE_LIFECYCLE, ONLY: FILE_OPEN
@@ -530,6 +560,7 @@ k_do1:DO K = 1,NTERM
       INTEGER(LONG), INTENT(IN)       :: J_MATIN(NTERM)    ! Col numbers for terms in matrix MATIN
       INTEGER(LONG)                   :: I,J,K             ! DO loop indices or counters
       INTEGER(LONG)                   :: NTERM_ROW_I       ! Number of terms in row I of MATIN
+      INTEGER(LONG), ALLOCATABLE      :: IROW(:)           ! Row number of each term
       INTEGER(LONG)                   :: OUNT(2)           ! File units to write messages to. Input to subr UNFORMATTED_OPEN
 
 
@@ -550,19 +581,27 @@ k_do1:DO K = 1,NTERM
 ! Write sparse (compressed row storage) matrix to file in i, j, val format:
 
       WRITE(UNT) NTERM
-      K = 0
-!xx   WRITE(SC1, * )
-      WRITE(COUNTER_TEMPLATE, 12345) NAME
-      CALL COUNTER_INIT(COUNTER_TEMPLATE, NROWS)
-      DO I=1,NROWS
-         NTERM_ROW_I = I_MATIN(I+1) - I_MATIN(I)
-         DO J=1,NTERM_ROW_I
-            K = K + 1
-            IF (K > NTERM) CALL ARRAY_SIZE_ERROR_1( SUBR_NAME, NTERM, NAME)
-            WRITE(UNT) I,J_MATIN(K),MATIN(K)
+
+! The terms go as three records (row numbers, column numbers, values) after a MATRIX_FILE_BULK record. One record per term
+! took most of the file time for large matrices.
+
+      IF (NTERM > 0) THEN
+         ALLOCATE ( IROW(NTERM) )
+         K = 0
+         DO I=1,NROWS
+            NTERM_ROW_I = I_MATIN(I+1) - I_MATIN(I)
+            DO J=1,NTERM_ROW_I
+               K = K + 1
+               IF (K > NTERM) CALL ARRAY_SIZE_ERROR_1( SUBR_NAME, NTERM, NAME)
+               IROW(K) = I
+            ENDDO
          ENDDO
-         CALL COUNTER_PROGRESS(I)
-      ENDDO
+         WRITE(UNT) MATRIX_FILE_BULK
+         WRITE(UNT) IROW(1:NTERM)
+         WRITE(UNT) J_MATIN(1:NTERM)
+         WRITE(UNT) MATIN(1:NTERM)
+         DEALLOCATE ( IROW )
+      ENDIF
 
       IF (CLOSE_IT == 'Y') THEN
          CALL FILE_CLOSE ( UNT, FILNAM, CLOSE_STAT )

@@ -186,7 +186,7 @@ if(TPL_ENABLE_METISLIB) # # want to use metis
       message(FATAL_ERROR "METIS include directory not found: ${dir}")
     endif()
 
-    set(CMAKE_C_FLAGS "-I${dir} ${CMAKE_C_FLAGS}")
+    include_directories("${dir}") # not -I in CMAKE_C_FLAGS: that breaks on paths with spaces
   endforeach()
 
   message("-- Enabled support for METIS.")

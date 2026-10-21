@@ -131,7 +131,6 @@
       SUBTITLE2 = SUBTITLE(1:67)
       LABEL2 = LABEL(1:100)
 
-      WRITE(*,*) NEW_RESULT, itable
       IF(NEW_RESULT .AND. (ITABLE .NE. -3)) THEN
 !        header = [
 !          4, 146, 4,

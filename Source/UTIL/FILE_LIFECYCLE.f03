@@ -1655,7 +1655,7 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
 
-      USE IOUNT1, ONLY                :  BUGOUT, F06FIL, SC1,                                                 &
+      USE IOUNT1, ONLY                :  BUGOUT, F06, F06FIL, SC1,                                                 &
                                          BUGSTAT, BUGSTAT_OLD, ERRSTAT, ERRSTAT_OLD,                          &
                                          OP2STAT, L1A, LINK1A, L1ASTAT
 
@@ -1673,6 +1673,7 @@
       INTEGER(LONG)                   :: IOCHK             ! IOSTAT status while deleting LINK1A
       LOGICAL                         :: L1A_OPEN          ! Whether LINK1A is currently open
       LOGICAL                         :: L1A_EXIST         ! Whether LINK1A exists on disk
+      LOGICAL                         :: F06_OPEN          ! Whether the F06 file is open
 
 
 
@@ -1685,6 +1686,8 @@
 
          IF (FATAL_ERR > 0) THEN                           ! Check fatal error flag and write message
             WRITE(SC1,9992) FATAL_ERR
+            INQUIRE ( UNIT=F06, OPENED=F06_OPEN )          ! Every stop for fatal errors ends the F06 with the same line
+            IF (F06_OPEN) WRITE(F06,9991) FATAL_ERR
          ENDIF
 
          IF (WARN_ERR > 0) THEN                            ! Check warning flag and write message
@@ -1745,6 +1748,8 @@
       STOP
 
 ! **********************************************************************************************************************************
+ 9991 FORMAT(/,' *** PROCESSING TERMINATED: ',I0,' FATAL ERROR(S), LISTED ABOVE')
+
  9992 FORMAT(' CHECK F06 OUTPUT FILE FOR ',I8,' FATAL MESSAGE(S)')
 
  9993 FORMAT(' CHECK F06 OUTPUT FILE FOR ',I8,' WARNING MESSAGE(S)')

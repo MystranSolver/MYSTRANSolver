@@ -287,10 +287,8 @@ j_do:    DO J=1,LEN(ARRAY_NAME)
       NONPOS_DEF    = 'N'
       CALL COUNTER_INIT("     Calc ratios of matrix diag to factor diag: row", NROWS)
       DO I=1,NROWS
-
-         CALL GET_GRID_AND_COMP ( MATIN_SET, I, GRIDV, COMPV  )
-
-         FAC_DIAG = FACTOR_DIAG(I)
+                                                           ! (Grid and comp are looked up only for a message: GET_GRID_AND_COMP
+         FAC_DIAG = FACTOR_DIAG(I)                         ! searches the G-set, so calling it for every row is NROWS*NDOFG steps)
 
          IF (FAC_DIAG <= EPS1) THEN                        ! Zero or negative factor diagonal. (MATIN is nonpositive definite)
 
@@ -298,6 +296,7 @@ j_do:    DO J=1,LEN(ARRAY_NAME)
             IF (PRT_ERRS /= 'N') THEN
                WRITE(ERR,982) MATIN_NAME, FAC_DIAG
                WRITE(F06,982) MATIN_NAME, FAC_DIAG
+               CALL GET_GRID_AND_COMP ( MATIN_SET, I, GRIDV, COMPV  )
                IF ((GRIDV > 0) .AND. (COMPV > 0)) THEN
                   WRITE(ERR,9811) GRIDV, COMPV, CALLING_SUBR
                   WRITE(F06,9811) GRIDV, COMPV, CALLING_SUBR
@@ -314,6 +313,7 @@ j_do:    DO J=1,LEN(ARRAY_NAME)
             IF ((DABS(RATIO) > MAXRATIO) .AND. (PRT_ERRS /= 'N')) THEN
                WRITE(ERR,983) MATIN_NAME, RATIO, MAXRATIO
                WRITE(F06,983) MATIN_NAME, RATIO, MAXRATIO
+               CALL GET_GRID_AND_COMP ( MATIN_SET, I, GRIDV, COMPV  )
                IF ((GRIDV > 0) .AND. (COMPV > 0)) THEN
                   WRITE(ERR,9811) GRIDV, COMPV, CALLING_SUBR
                   WRITE(F06,9811) GRIDV, COMPV, CALLING_SUBR

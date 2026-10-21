@@ -718,6 +718,7 @@ FreeS:      IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free th
       USE SPARSE_MATRIX_ALLOCATION, ONLY:  ALLOCATE_SPARSE_MAT
       USE LAPACK_ADAPTERS, ONLY       :  SYM_MAT_DECOMP_LAPACK
       USE SUPERLU_ADAPTERS, ONLY      :  SYM_MAT_DECOMP_SUPRLU
+      USE SuperLU_STUF, ONLY          :  SLU_DIAG_RATIO
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
       USE MATRIX_FILE_IO, ONLY        :  WRITE_MATRIX_1
       USE SCRATCH_MATRIX_LIFECYCLE, ONLY:  ALLOCATE_SCR_CCS_MAT, ALLOCATE_SCR_CRS_MAT, DEALLOCATE_SCR_MAT
@@ -844,7 +845,9 @@ FreeS:      IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free th
             IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
                INFO = 0
+               SLU_DIAG_RATIO = 'Y'                        ! Check matrix diag / factor diag (MAXRATIO), as on the LAPACK path
                CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KOO', 'O ', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, INFO )
+               SLU_DIAG_RATIO = 'N'
 
             ELSE
 

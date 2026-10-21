@@ -21,6 +21,23 @@ typedef struct
   int_t *perm_r;
 } factors_t;
 
+/*
+ * The single-threaded driver (c_fortran_dgssv.c) factors symmetric matrices
+ * in SuperLU's symmetric mode when the Fortran caller says so through
+ * c_fortran_dgssv_symmetric_. This driver accepts the call and ignores it:
+ * SuperLU_MT's symmetric mode (SymmetricMode = YES with ordering on A'+A)
+ * crashed on a 15-RBE static deck (W1000BOstat) even with diag_pivot_thresh
+ * = 0, while the unsymmetric path below is safe.
+ */
+void c_fortran_dgssv_symmetric_(int *flag) { (void)flag; }
+
+/* The ratio of matrix diagonal to factor diagonal is not provided with SuperLU_MT. */
+void c_fortran_dgssv_udiag_(fptr *f_factors, int *n, double *udiag,
+                            int *exact_d, int *available) {
+  (void)f_factors; (void)n; (void)udiag; (void)exact_d;
+  *available = 0;
+}
+
 /*!
  * This routine can be called from Fortran.
  *
@@ -112,10 +129,11 @@ void c_fortran_pdgssv_(int *iopt, int *n, int_t *nnz, int *nrhs, int *nprocs,
      *   permc_spec = 1: minimum degree on structure of A'*A
      *   permc_spec = 2: minimum degree on structure of A'+A
      *   permc_spec = 3: approximate minimum degree for unsymmetric matrices (COLAMD)
+     *   permc_spec = 6: METIS ordering on structure of A'*A (patched get_perm_c.c)
      */
 #if (HAVE_METIS)
     printf("USING METIS ORDERING\r\n");
-    permc_spec = 6; /* METIS_AT_PLUS_A in MT SuperLU enum */
+    permc_spec = 6; /* METIS on A'*A (case 6 in the patched get_perm_c.c) */
 #else
     permc_spec = COLAMD;
 #endif

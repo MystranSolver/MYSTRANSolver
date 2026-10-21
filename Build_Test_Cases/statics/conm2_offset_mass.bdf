@@ -1,0 +1,16 @@
+$ CONM2 with offset (-3, 0, -2) and no inertia: the 6x6 mass at grid 1 must be m*T*T, T = [I, -skew(x)], positive
+$ semi-definite. Before the fix the R1-R3 term had the wrong sign (MGG eigenvalue -29.2; NASA/TU Delft pCRM9 wing).
+$ Check: OUTPUT4 MGG (unit 21) against the exact matrix, see conm2_mass_check.py.
+SOL 103
+OUTPUT4 MGG,,,,//-1/21
+CEND
+METHOD = 1
+BEGIN BULK
+GRID,1,,0.,0.,0.
+GRID,2,,10.,0.,0.,,123456
+CBAR,1,1,1,2,0.,0.,1.
+PBAR,1,1,1.,1.,1.,1.
+MAT1,1,1.E6,,0.3
+CONM2,4501,1,,10.,-3.,0.,-2.
+EIGRL,1,,,3
+ENDDATA

@@ -347,17 +347,22 @@
 
       SUBROUTINE BD_FORMOM ( CARD, CC_LOAD_FND )
 
-! Processes FORCE, MOMENT Bulk Data Cards. Also, the set ID is written to array FORMOM_SIDS which is checked
-! in subroutine LOADB to make sure that all set ID's requested in Case Control were found in the Bulk Data.
-! A record is written to file LINK1I for each FORCE or MOMENT Bulk Data card with the following data:
+! Processes FORCE, MOMENT, FORCE1, MOMENT1, FORCE2 and MOMENT2 Bulk Data Cards. Also, the set ID is written to array FORMOM_SIDS
+! which is checked in subroutine LOADB to make sure that all set ID's requested in Case Control were found in the Bulk Data.
+! A record is written to file LINK1I for each card with the following data:
 
-!   SETID, GRID_NO, CID, FORMON1, FORMON2, FORMON3, FOR_OR_MOM
+!   SETID, GRID_NO, CID, G1, G2, G3, G4, FORMON1, FORMON2, FORMON3, FOR_OR_MOM
+
+! FORCE/MOMENT: CID and the components FORMON1-3 in CID; G1-G4 = 0.
+! FORCE1/MOMENT1 (SID G F G1 G2, direction G1 to G2): CID = -1, FORMON1 = F, G1 and G2.
+! FORCE2/MOMENT2 (SID G F G1 G2 G3 G4, direction (G2 - G1) x (G4 - G3)): CID = -2, FORMON1 = F, G1 to G4.
+! The direction of FORCE1/2 and MOMENT1/2 is found in FORCE_MOM_PROC, when the grid coordinates are known.
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, L1I
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ECHO, FATAL_ERR, IERRFL, JCARD_LEN, JF, LFORCE, LSUB, NFORCE, NSUB, WARN_ERR
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO
+      USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE PARAMS, ONLY                :  EPSIL, SUPWARN
       USE MODEL_STUF, ONLY            :  FORMOM_SIDS, SUBLOD
 
@@ -374,6 +379,9 @@
       CHARACTER( 1*BYTE),INTENT(INOUT):: CC_LOAD_FND(LSUB,2) ! 'Y' if B.D load/temp card w/ same set ID (SID) as C.C. LOAD = SID
 
       INTEGER(LONG)                   :: CID       = 0       ! Coord ID on the FORCE/MOMENT card
+      INTEGER(LONG)                   :: FORM                ! 0 FORCE/MOMENT, 1 FORCE1/MOMENT1, 2 FORCE2/MOMENT2
+      INTEGER(LONG)                   :: GD(4)               ! G1-G4 of FORCE1/2, MOMENT1/2
+      INTEGER(LONG)                   :: LAST                ! Last data field of the entry
       INTEGER(LONG)                   :: GRID_NO   = 0       ! Grid ID  on the FORCE/MOMENT card
       INTEGER(LONG)                   :: I                   ! DO loop index
       INTEGER(LONG)                   :: JERR      = 0       ! A local error count
@@ -421,6 +429,11 @@
       ELSE IF (JCARD(1)(1:6) == 'MOMENT') THEN
          FOR_OR_MOM = 'MOMENT  '
       ENDIF
+      FORM = 0                                             ! The dispatcher sends only these six names here
+      IF (INDEX(JCARD(1), '1') > 0) FORM = 1
+      IF (INDEX(JCARD(1), '2') > 0) FORM = 2
+      GD   = 0
+      JERR = 0
 
 ! Check for overflow
 
@@ -445,17 +458,42 @@
       ENDIF
 
       CALL I4FLD ( JCARD(3), JF(3), GRID_NO )              ! Read grid that force is at
-      CALL I4FLD ( JCARD(4), JF(4), CID )                  ! Read coord system force is described in
-      CALL R8FLD ( JCARD(5), JF(5), SCALEF )               ! Read force scale factor
-      CALL R8FLD ( JCARD(6), JF(6), V1 )                   ! Read magnitude in 1st direction of coord sys CID
-      CALL R8FLD ( JCARD(7), JF(7), V2 )                   ! Read magnitude in 2nd direction of coord sys CID
-      CALL R8FLD ( JCARD(8), JF(8), V3 )                   ! Read magnitude in 3rd direction of coord sys CID
-
-      CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,0 )     ! Make sure that there are no imbedded blanks in fields 2-8
-      CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,0,0,0,0,9 )   ! Issue warning if field 9 not blank
+      IF (FORM == 0) THEN
+         CALL I4FLD ( JCARD(4), JF(4), CID )               ! Read coord system force is described in
+         CALL R8FLD ( JCARD(5), JF(5), SCALEF )            ! Read force scale factor
+         CALL R8FLD ( JCARD(6), JF(6), V1 )                ! Read magnitude in 1st direction of coord sys CID
+         CALL R8FLD ( JCARD(7), JF(7), V2 )                ! Read magnitude in 2nd direction of coord sys CID
+         CALL R8FLD ( JCARD(8), JF(8), V3 )                ! Read magnitude in 3rd direction of coord sys CID
+         CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,0 )  ! Make sure that there are no imbedded blanks in fields 2-8
+         CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,0,0,0,0,9 )! Issue warning if field 9 not blank
+         LAST = 8
+      ELSE                                                 ! FORCE1/2, MOMENT1/2: F, then the grids that give the direction
+         CID  = -FORM
+         CALL R8FLD ( JCARD(4), JF(4), SCALEF )
+         LAST = 4 + 2*FORM
+         DO I=1,2*FORM
+            CALL I4FLD ( JCARD(4+I), JF(4+I), GD(I) )
+            IF ((IERRFL(4+I) == 'N') .AND. (GD(I) <= 0)) THEN
+               IERRFL(4+I) = 'Y'
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1138) JCARD(1), JCARD(2), 4+I
+               WRITE(F06,1138) JCARD(1), JCARD(2), 4+I
+            ENDIF
+         ENDDO
+         IF (FORM == 1) THEN
+            CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,0,0,0 )
+            CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,0,0,7,8,9 )
+         ELSE
+            CALL BD_IMBEDDED_BLANK ( JCARD,2,3,4,5,6,7,8,0 )
+            CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,0,0,0,0,0,9 )
+         ENDIF
+         V1 = ONE                                          ! The direction is found later (FORCE_MOM_PROC)
+         V2 = ZERO
+         V3 = ZERO
+      ENDIF
       CALL CRDERR ( CARD )                                 ! CRDERR prints errors found when reading fields
 
-      DO I=2,8                                             ! Set JERR if any errors reading above data
+      DO I=2,LAST                                          ! Set JERR if any errors reading above data
          IF (IERRFL(I) == 'Y') THEN
             JERR = JERR + 1
          ENDIF
@@ -483,7 +521,7 @@
             FORMON2 = SCALEF*V2
             FORMON3 = SCALEF*V3
          ENDIF
-         WRITE(L1I) SETID, GRID_NO, CID, FORMON1, FORMON2, FORMON3, FOR_OR_MOM
+         WRITE(L1I) SETID, GRID_NO, CID, (GD(I),I=1,4), FORMON1, FORMON2, FORMON3, FOR_OR_MOM
       ENDIF
 
 
@@ -494,6 +532,8 @@
   101 FORMAT(A)
 
  1137 FORMAT(' *WARNING    : ',A,' ENTRY WITH SET ID = ',A,' HAS ZERO COMPONENTS')
+
+ 1138 FORMAT(' *ERROR  1138: ',A,' ENTRY WITH SET ID = ',A,': FIELD ',I2,' MUST BE A GRID ID > 0')
 
  1163 FORMAT(' *ERROR  1163: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' TOO MANY ',A,' ENTRIES; LIMIT = ',I12)

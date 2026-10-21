@@ -1520,7 +1520,7 @@
                   IF (ECHO == 'NONE  ') THEN
                      WRITE(F06,101) CARD
                   ENDIF
-                  WRITE(F06,1172) PARNAM,'>= 0',I4PARM,POST
+                  WRITE(F06,1172) PARNAM,'-1 or 9999999',I4PARM,POST
                ENDIF
             ENDIF
          ENDIF

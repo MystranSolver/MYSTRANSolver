@@ -1,0 +1,32 @@
+$ Mechanism check (PARAM MAXRATIO, BAILOUT): the square of
+$ mechanism_square_crod.bdf turned 30 degrees in its plane, so that the zero
+$ pivot comes out of round-off as a small nonzero number. Four CRODs, no
+$ diagonal. Grid 1 is held in x and y, grid 2 in y, so the square has no rigid
+$ body motion but can still shear (grids 3 and 4 move in x together with no
+$ stiffness). KLL is singular although no diagonal term is zero, so AUTOSPC
+$ does not remove it. The factorization of KLL should be reported as nearly
+$ singular (ratio of matrix diagonal to factor diagonal > MAXRATIO), and with
+$ the default BAILOUT = 0 the run should stop there.
+SOL 101
+CEND
+TITLE = SQUARE OF FOUR CRODS, NO DIAGONAL, TURNED 30 DEG (A SHEAR MECHANISM)
+DISPLACEMENT = ALL
+SUBCASE 1
+  SPC = 1
+  LOAD = 1
+BEGIN BULK
+GRDSET                                                  3456
+GRID    1               0.0000  0.0000  0.0
+GRID    2               8.6603  5.0000  0.0
+GRID    3               3.6603  13.6603 0.0
+GRID    4               -5.0000 8.6603  0.0
+CROD    1       1       1       2
+CROD    2       1       2       3
+CROD    3       1       3       4
+CROD    4       1       4       1
+PROD    1       1       0.5
+MAT1    1       1.0E7           0.3
+SPC1    1       12      1
+SPC1    1       2       2
+FORCE   1       3               100.0   1.0     0.0     0.0
+ENDDATA

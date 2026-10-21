@@ -401,8 +401,8 @@ i_do: DO I=1,NROW_A                                        ! Matrix multiply loo
       INTEGER(LONG), INTENT(OUT)      :: J_B(NCOLS_A+1)    ! J_B(I+1) - J_B(I) are the number of nonzeros in B col I
       INTEGER(LONG)                   :: I,J,K,L           ! DO loop indices or counters
       INTEGER(LONG)                   :: I2_A(NTERMS_A)    ! Array of row numbers for each term in A
-      INTEGER(LONG)                   :: COL_J_NUM_TERMS   ! Number of terms in col J of output matrix B
       INTEGER(LONG)                   :: ROW_I_NUM_TERMS   ! Number of terms in row I of input  matrix A
+      INTEGER(LONG), ALLOCATABLE      :: NEXT_B(:)         ! Next free index in B for each col of B
 
 
       REAL(DOUBLE) , INTENT(IN)       :: A(NTERMS_A)       ! Real nonzero values in input  matrix A
@@ -448,22 +448,30 @@ i_do: DO I=1,NROW_A                                        ! Matrix multiply loo
          WRITE(COUNTER_TEMPLATE, 12345) MAT_A_NAME, MAT_B_NAME
          CALL COUNTER_INIT(COUNTER_TEMPLATE, NCOLS_A)
       END IF
-      DO J=1,NCOLS_A
-         COL_J_NUM_TERMS = 0
-         DO K=1,NTERMS_A
-            IF (J_A(K) == J) THEN                          ! We found a term that belongs in col J
-               COL_J_NUM_TERMS = COL_J_NUM_TERMS + 1       ! Update the number of terms counted that belong to this column
-               L = L + 1
-               IF (L > NTERMS_A) CALL ARRAY_SIZE_ERROR_1( SUBR_NAME, NTERMS_A, MAT_B_NAME )
-               I_B(L) = I2_A(K)                            ! Array I_B has row numbers of the NTERMS_A terms going into B
-                 B(L) = A(K)
-            ENDIF
-         ENDDO
-         IF (WRT_SCREEN == 'Y') THEN
-            CALL COUNTER_PROGRESS(J)
+      DO K=1,NTERMS_A                                      ! Count the terms in each col of B (counting sort: one pass over A).
+         J = J_A(K)                                        ! Terms in each col are in the order they are in A (by rows), as
+         IF ((J >= 1) .AND. (J <= NCOLS_A)) THEN           ! when each col is collected by a search of all of A
+            J_B(J+1) = J_B(J+1) + 1
          ENDIF
-         J_B(J+1) = J_B(J) + COL_J_NUM_TERMS               ! J_B used to tell how many terms there are in each col of B
       ENDDO
+      DO J=1,NCOLS_A
+         J_B(J+1) = J_B(J) + J_B(J+1)                      ! J_B used to tell how many terms there are in each col of B
+      ENDDO
+      ALLOCATE ( NEXT_B(MAX(NCOLS_A,1)) )
+      IF (NCOLS_A > 0) NEXT_B(1:NCOLS_A) = J_B(1:NCOLS_A)
+      DO K=1,NTERMS_A
+         J = J_A(K)
+         IF ((J >= 1) .AND. (J <= NCOLS_A)) THEN
+            L = NEXT_B(J)
+            NEXT_B(J) = L + 1
+            I_B(L) = I2_A(K)                               ! Array I_B has row numbers of the NTERMS_A terms going into B
+              B(L) = A(K)
+         ENDIF
+      ENDDO
+      DEALLOCATE ( NEXT_B )
+      IF (WRT_SCREEN == 'Y') THEN
+         CALL COUNTER_PROGRESS(NCOLS_A)
+      ENDIF
       WRITE(SC1,*) CR13
 
       IF ((DEBUG(87) == 1) .OR. (DEBUG(87) == 3)) CALL CRS_CCS_DEB ( '2' )

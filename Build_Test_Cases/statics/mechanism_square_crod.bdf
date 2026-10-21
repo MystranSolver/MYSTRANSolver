@@ -1,0 +1,30 @@
+$ Mechanism check (PARAM MAXRATIO, BAILOUT): a square of four CRODs with no
+$ diagonal. Grid 1 is held in x and y, grid 2 in y, so the square has no rigid
+$ body motion but can still shear (grids 3 and 4 move in x together with no
+$ stiffness). KLL is singular although no diagonal term is zero, so AUTOSPC
+$ does not remove it. The factorization of KLL should be reported as nearly
+$ singular (ratio of matrix diagonal to factor diagonal > MAXRATIO), and with
+$ the default BAILOUT = 0 the run should stop there.
+SOL 101
+CEND
+TITLE = SQUARE OF FOUR CRODS WITH NO DIAGONAL (A SHEAR MECHANISM)
+DISPLACEMENT = ALL
+SUBCASE 1
+  SPC = 1
+  LOAD = 1
+BEGIN BULK
+GRDSET                                                  3456
+GRID    1               0.0     0.0     0.0
+GRID    2               10.0    0.0     0.0
+GRID    3               10.0    10.0    0.0
+GRID    4               0.0     10.0    0.0
+CROD    1       1       1       2
+CROD    2       1       2       3
+CROD    3       1       3       4
+CROD    4       1       4       1
+PROD    1       1       0.5
+MAT1    1       1.0E7           0.3
+SPC1    1       12      1
+SPC1    1       2       2
+FORCE   1       3               100.0   1.0     0.0     0.0
+ENDDATA

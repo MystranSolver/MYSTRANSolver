@@ -50,7 +50,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE PARAMS, ONLY                :  SUPWARN
-      USE MODEL_STUF, ONLY            :  CMASS, CONM2, PMASS, RCONM2, RPMASS, GRID, GRID_ID, CORD
+      USE MODEL_STUF, ONLY            :  CMASS, CONM2, PMASS, RCONM2, RPMASS, GRID, GRID_ID, CORD, RGRID
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
 
       USE DOF_ARRAY_INDEXING, ONLY    :  GET_ARRAY_ROW_NUM, GET_GRID_NUM_COMPS
@@ -203,7 +203,13 @@ outer:DO I=1,NCONM2
 
          CORD_FND = 'N'
          ACID = CONM2(I,3)
-         IF (ACID /= 0) THEN
+         IF (ACID == -1) THEN                              ! CID = -1: X1-X3 are the c.g. in basic, the inertias are in basic
+
+            IF (GRID_FND == 'N') CYCLE outer
+            D_0(1:3) = D_CID(1:3) - RGRID(GRID_ID_ROW_NUM,1:3)
+            MOI_M_0  = MOI_M_CID
+
+         ELSE IF (ACID /= 0) THEN
 
 j_loop1:    DO J=1,NCORD
                IF (ACID == CORD(J,2)) THEN
@@ -243,8 +249,10 @@ j_loop1:    DO J=1,NCORD
             NCOLB  = 1
             CALL MATMULT_FFF (T_0_CID, D_CID, NROWA, NCOLA, NCOLB, D_0 )
 
-! Transform MOI's to basic
+! Transform MOI's to basic. RCONM2 holds the products of inertia I21, I31, I32 as on the CONM2 entry (the inertia tensor has
+! -I21, -I31, -I32 off the diagonal), so the tensor is rotated and the products are taken back from it
 
+            CALL POI_TO_TENSOR ( MOI_M_CID )
             NROWA  = 3
             NCOLA  = 3
             NCOLB  = 3
@@ -253,6 +261,7 @@ j_loop1:    DO J=1,NCORD
             NCOLA  = 3
             NCOLB  = 3
             CALL MATMULT_FFF_T ( T_CID_0, DUM33, NROWA, NCOLA, NCOLB, MOI_M_0 )
+            CALL POI_TO_TENSOR ( MOI_M_0 )
          ELSE
             DO J=1,3
                D_0(J) = D_CID(J)
@@ -408,6 +417,28 @@ j_loop1:    DO J=1,NCORD
       END SUBROUTINE CONM2_PROC_1
 
 
+      SUBROUTINE POI_TO_TENSOR ( A )
+
+! Negates the off-diagonal terms of a symmetric 3x3 inertia matrix: products of inertia (as on the CONM2 entry) to inertia tensor
+! terms and back
+
+      USE PENTIUM_II_KIND, ONLY       :  DOUBLE
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE), INTENT(INOUT)     :: A(3,3)
+
+      A(1,2) = -A(1,2)
+      A(2,1) = -A(2,1)
+      A(1,3) = -A(1,3)
+      A(3,1) = -A(3,1)
+      A(2,3) = -A(2,3)
+      A(3,2) = -A(3,2)
+
+      END SUBROUTINE POI_TO_TENSOR
+
+! ##################################################################################################################################
+
       SUBROUTINE CONM2_PROC_2
 
 ! CONM2 Processor #2
@@ -510,9 +541,9 @@ outer:DO I = 1,NCONM2
          IXX_G_0 = IXX_M_0 + MASS*(            DY_0*DY_0 + DZ_0*DZ_0)
          IYY_G_0 = IYY_M_0 + MASS*(DX_0*DX_0 +             DZ_0*DZ_0)
          IZZ_G_0 = IZZ_M_0 + MASS*(DX_0*DX_0 + DY_0*DY_0            )
-         IYX_G_0 = IYX_M_0 - MASS*(DY_0*DX_0)
-         IZX_G_0 = IZX_M_0 - MASS*(DZ_0*DX_0)
-         IZY_G_0 = IZY_M_0 - MASS*(DZ_0*DY_0)
+         IYX_G_0 = IYX_M_0 + MASS*(DY_0*DX_0)              ! Products of inertia (the tensor terms are their negatives)
+         IZX_G_0 = IZX_M_0 + MASS*(DZ_0*DX_0)
+         IZY_G_0 = IZY_M_0 + MASS*(DZ_0*DY_0)
 
 ! Put terms into matrices for use when we use subr MATMULT_FFF
 
@@ -589,8 +620,9 @@ j_loop1:    DO J=1,NCORD
             NCOLB  = 1
             CALL MATMULT_FFF_T ( T_0_G, D_0, NROWA, NCOLA, NCOLB, D_G )
 
-! Transform coordinates from basic to global at GRID_ID_ROW_NUM for MOI_0
+! Transform coordinates from basic to global at GRID_ID_ROW_NUM for MOI_0 (as the inertia tensor, see CONM2_PROC_1)
 
+            CALL POI_TO_TENSOR ( MOI_G_0 )
             NROWA  = 3
             NCOLA  = 3
             NCOLB  = 3
@@ -599,6 +631,7 @@ j_loop1:    DO J=1,NCORD
             NCOLA  = 3
             NCOLB  = 3
             CALL MATMULT_FFF_T ( T_0_G, DUM33, NROWA, NCOLA, NCOLB, MOI_G_G )
+            CALL POI_TO_TENSOR ( MOI_G_G )
 
 ! Rewrite RCONM2 with mass values at the grid in global coords
 

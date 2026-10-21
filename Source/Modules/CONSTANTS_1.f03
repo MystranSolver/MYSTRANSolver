@@ -26,11 +26,17 @@
 
       MODULE CONSTANTS_1
 
-      USE PENTIUM_II_KIND, ONLY       :  DOUBLE, QUAD
+      USE PENTIUM_II_KIND, ONLY       :  DOUBLE, LONG, QUAD
 
       IMPLICIT NONE
 
       SAVE
+
+! Record that follows the NTERM header of a sparse matrix file (LINK1L, the LINK2 files) when the terms are stored as three
+! records (row numbers, column numbers, values) instead of one record per term. A row number is never negative, so a reader
+! that finds this value knows the format (subr READ_MATRIX_1 reads both).
+
+      INTEGER(LONG), PARAMETER        :: MATRIX_FILE_BULK  =   -1
 
 ! Real constants used in various subroutines
 

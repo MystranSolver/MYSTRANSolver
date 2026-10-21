@@ -101,7 +101,7 @@
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE PARAMS, ONLY                :  EPSIL, SUPWARN
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
-      USE MODEL_STUF, ONLY            :  LOAD_SIDS, LOAD_FACS, SYS_LOAD, SUBLOD, GRID, GRID_ID, CORD
+      USE MODEL_STUF, ONLY            :  LOAD_SIDS, LOAD_FACS, SYS_LOAD, SUBLOD, GRID, GRID_ID, CORD, RGRID
 
       USE FILE_LIFECYCLE, ONLY   :  OPNERR, OUTA_HERE
       USE FILE_LIFECYCLE, ONLY        :  FILE_CLOSE, READERR
@@ -121,6 +121,11 @@
       CHARACTER(FILE_NAM_MAXLEN*BYTE) :: SCRFIL            ! File name
 
       INTEGER(LONG)                   :: ACID_L            ! Actual local  coord sys ID on FORCE or MOMENT card
+                                                           ! (-1 FORCE1/MOMENT1, -2 FORCE2/MOMENT2)
+      INTEGER(LONG)                   :: GD(4)             ! G1-G4 of FORCE1/2, MOMENT1/2
+      INTEGER(LONG)                   :: GROW(4)           ! Their rows in GRID_ID
+      REAL(DOUBLE)                    :: DIR(3), A(3), B(3)! Direction of FORCE1/2, MOMENT1/2 in basic, and its two vectors
+      REAL(DOUBLE)                    :: DLEN, SIZE_AB     ! Length of DIR, and of the vectors that make it
       INTEGER(LONG)                   :: ACID_G            ! Actual global coord sys ID for AGRID
       INTEGER(LONG)                   :: AGRID             ! Actual grid number from FORCE or MOMENT card
       INTEGER(LONG)                   :: COMP1, COMP2      ! DOF components (1-6)
@@ -191,7 +196,7 @@
 
 i_do1:DO I=1,NFORCE
                                                            ! (1-a) Read a record from file LINK1I
-         READ(L1I,IOSTAT=IOCHK) SETID,AGRID,ACID_L,(FORMON(J),J=1,3),NAME
+         READ(L1I,IOSTAT=IOCHK) SETID,AGRID,ACID_L,(GD(J),J=1,4),(FORMON(J),J=1,3),NAME
          IF (IOCHK /= 0) THEN
             REC_NO = I
             CALL READERR ( IOCHK, LINK1I, L1I_MSG, REC_NO, OUNT )
@@ -217,7 +222,42 @@ i_do1:DO I=1,NFORCE
 
          CORD_FND = 'N'
          ICID      = -1
-         IF (ACID_L /= 0) THEN                             ! Get local coord sys for this FORCE/MOMENT card
+         IF (ACID_L < 0) THEN                              ! FORCE1/2, MOMENT1/2: magnitude F1(1) along a direction in basic
+            DO J=1,-2*ACID_L
+               CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GD(J), GROW(J) )
+               IF (GROW(J) == -1) THEN
+                  GRID_FND = 'N'
+                  IERROR = IERROR + 1
+                  FATAL_ERR = FATAL_ERR + 1
+                  WRITE(ERR,1822) 'GRID ', GD(J), NAME, SETID
+                  WRITE(F06,1822) 'GRID ', GD(J), NAME, SETID
+               ENDIF
+            ENDDO
+            IF (GRID_FND == 'N') CYCLE i_do1
+            A = RGRID(GROW(2),1:3) - RGRID(GROW(1),1:3)    ! G1 to G2
+            SIZE_AB = SQRT(DOT_PRODUCT(A,A))
+            IF (ACID_L == -1) THEN
+               DIR = A
+            ELSE                                           ! (G2 - G1) x (G4 - G3)
+               B = RGRID(GROW(4),1:3) - RGRID(GROW(3),1:3)
+               SIZE_AB = SIZE_AB*SQRT(DOT_PRODUCT(B,B))
+               DIR(1) = A(2)*B(3) - A(3)*B(2)
+               DIR(2) = A(3)*B(1) - A(1)*B(3)
+               DIR(3) = A(1)*B(2) - A(2)*B(1)
+            ENDIF
+            DLEN = SQRT(DOT_PRODUCT(DIR,DIR))
+            IF ((SIZE_AB == ZERO) .OR. (DLEN <= EPS1*SIZE_AB)) THEN
+               IERROR = IERROR + 1
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1826) NAME, SETID, AGRID, (GD(J),J=1,-2*ACID_L)
+               WRITE(F06,1826) NAME, SETID, AGRID, (GD(J),J=1,-2*ACID_L)
+               CYCLE i_do1
+            ENDIF
+            DO J=1,3
+               F2(J) = F1(1)*DIR(J)/DLEN
+            ENDDO
+
+         ELSE IF (ACID_L /= 0) THEN                        ! Get local coord sys for this FORCE/MOMENT card
 j_do12:     DO J=1,NCORD
                IF (ACID_L == CORD(J,2)) THEN
                   CORD_FND = 'Y'
@@ -416,6 +456,8 @@ k_do222:    DO K = COMP1,COMP2
 
 
  1822 FORMAT(' *ERROR  1822: ',A,I8,' ON ',A,I8,' IS UNDEFINED')
+
+ 1826 FORMAT(' *ERROR  1826: THE DIRECTION OF ',A,' SET ',I8,' AT GRID ',I8,' HAS ZERO LENGTH (GRIDS ',4(I8,1X),')')
 
  1513 FORMAT(' *WARNING    : ',A8,1X,I8,' HAS ALL ZERO COMPONENTS')
 
