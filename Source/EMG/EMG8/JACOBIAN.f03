@@ -190,6 +190,7 @@
       REAL(DOUBLE) , INTENT(OUT)      :: JACI(3,3)         ! 3 x 3 inverse of JAC
       REAL(DOUBLE)                    :: B(3,3)            ! Array used in calculating inverse of JAC
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
+      REAL(DOUBLE)                    :: ROW_NORMS         ! Product of the lengths of the 3 rows of JAC (scale for DETJ)
 
 ! **********************************************************************************************************************************
 ! Initialize outputs
@@ -232,7 +233,12 @@
 
 ! If DETJ is not zero, continue. Else, write error and return:
 
-      IF (DETJ > EPS1) THEN
+! Test DETJ relative to the product of the row lengths of JAC (the scaled Jacobian, which is 1 for an undistorted element and
+! <= 0 for a degenerate or inverted one) so that the test does not depend on the size of the element or on the model units.
+
+      ROW_NORMS = NORM2(JAC(1,:))*NORM2(JAC(2,:))*NORM2(JAC(3,:))
+
+      IF (DETJ > EPS1*ROW_NORMS) THEN
 
          JACI(1,1) =  B(1,1)/DETJ
          JACI(1,2) = -B(2,1)/DETJ
@@ -258,8 +264,8 @@
 
       ELSE
 
-         WRITE(ERR,1928) EID,TYPE,DETJ
-         WRITE(F06,1928) EID,TYPE,DETJ
+         WRITE(ERR,1928) EID,TYPE,DETJ,SSI,SSJ,SSK
+         WRITE(F06,1928) EID,TYPE,DETJ,SSI,SSJ,SSK
          NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
          FATAL_ERR = FATAL_ERR + 1
          RETURN
@@ -271,7 +277,8 @@
       RETURN
 
 ! **********************************************************************************************************************************
- 1928 FORMAT(' *ERROR  1928: ELEMENT ',I8,', TYPE ',A,', HAS JACOBIAN LESS THAN OR EQUAL TO ZERO ( = ',1ES8.1,'). BAD GEOMETRY')
+ 1928 FORMAT(' *ERROR  1928: ELEMENT ',I8,', TYPE ',A,', HAS JACOBIAN LESS THAN OR EQUAL TO ZERO ( = ',1ES8.1,'). BAD GEOMETRY'    &
+                    ,/,14X,' AT ISOPARAMETRIC POINT (',F6.3,',',F6.3,',',F6.3,')')
 
  1101 format(39x,'Outputs from subroutine JAC3D for Gauss point location:',/,39x,'------------------------------------------------'&
                  '-------',/,41x,'SSI = ', F9.6, '   ','SSJ = ', F9.6, '   ', 'SSK = ', F9.6,/)

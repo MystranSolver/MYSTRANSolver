@@ -224,9 +224,10 @@
          ENDDO
       ENDDO
 
-! If VOLUME <= 0, write error and return
+! If VOLUME <= 0, write error and return. det(J) at every Gauss point has already been checked in subr JAC3D relative to the
+! element's own dimensions, so no absolute tolerance (which would depend on the element size and model units) is used here.
 
-      IF (VOLUME < EPS1) THEN
+      IF (VOLUME <= ZERO) THEN
          WRITE(ERR,1925) EID, TYPE, 'VOLUME', VOLUME
          WRITE(F06,1925) EID, TYPE, 'VOLUME', VOLUME
          NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
@@ -1092,7 +1093,6 @@
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_ORDER_TRIA, MAX_ORDER_GAUSS, NTSUB
       USE CONSTANTS_1, ONLY           :  HALF, THIRD, ZERO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
-      USE PARAMS, ONLY                :  EPSIL
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  ALPVEC, BE1, BE2, DT, EID, ELGP, NUM_EMG_FATAL_ERRS, ES, KE, KED, ME, PTE, RHO,           &
                                          SE1, SE2, STE3, STRESS, TREF, TYPE
@@ -1142,7 +1142,6 @@
       REAL(DOUBLE)                    :: DUM5(3*ELGP,3*ELGP)     ! Intermediate matrix used in solving for KE elem matrices
       REAL(DOUBLE)                    :: DUM6(3,3*ELGP)          ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: EALP(6)                 ! Interm var used in calc PTE therm loads & STEi stress coeffs
-      REAL(DOUBLE)                    :: EPS1                    ! A small number to compare to real zero
 
                                                                  ! Array of all DT values at the grids GRID_DT_ARRAY(i,j) = DT(i,j)
       REAL(DOUBLE)                    :: GRID_DT_ARRAY(ELGP,NTSUB)
@@ -1181,7 +1180,6 @@
 
 
 ! **********************************************************************************************************************************
-      EPS1 = EPSIL(1)
 
 ! Calculate volume by Gaussian integration
 
@@ -1202,7 +1200,7 @@
          ENDDO
       ENDDO
 
-      IF (VOLUME < EPS1) THEN                              ! If VOLUME <= 0, write error and return
+      IF (VOLUME <= ZERO) THEN                             ! If VOLUME <= 0, write error and return (det(J) is checked in JAC3D)
          WRITE(ERR,1925) EID, TYPE, 'VOLUME', VOLUME
          WRITE(F06,1925) EID, TYPE, 'VOLUME', VOLUME
          NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
@@ -1674,7 +1672,6 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
       USE CONSTANTS_1, ONLY           :  HALF, QUARTER, ZERO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
-      USE PARAMS, ONLY                :  EPSIL
       USE MODEL_STUF, ONLY            :  ALPVEC, BE1, BE2, DT, EID, ELGP, NUM_EMG_FATAL_ERRS, ES, KE, KED, ME, PTE, RHO,           &
                                          SE1, SE2, STE3, STRESS, TREF, TYPE
 
@@ -1723,7 +1720,6 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
       REAL(DOUBLE)                    :: DUM5(3*ELGP,3*ELGP)     ! Intermediate matrix used in solving for KE elem matrices
       REAL(DOUBLE)                    :: DUM6(3,3*ELGP)          ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: EALP(6)                 ! Intermed var used in calc PTE therm lds & STEi therm stress coeff
-      REAL(DOUBLE)                    :: EPS1                    ! A small number to compare to real zero
                                                                  ! Array of all DT values at the grids GRID_DT_ARRAY(i,j) = DT(i,j)
       REAL(DOUBLE)                    :: GRID_DT_ARRAY(ELGP,NTSUB)
 
@@ -1753,7 +1749,6 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
 
 
 ! **********************************************************************************************************************************
-      EPS1 = EPSIL(1)
 
 ! Calculate volume by Gaussian integration
 
@@ -1767,9 +1762,10 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
          VOLUME = VOLUME + HHH_IJK(I)*DETJ(I)
       ENDDO
 
-! If VOLUME <= 0, write error and return
+! If VOLUME <= 0, write error and return. det(J) at every Gauss point has already been checked in subr JAC3D relative to the
+! element's own dimensions, so no absolute tolerance (which would depend on the element size and model units) is used here.
 
-      IF (VOLUME < EPS1) THEN
+      IF (VOLUME <= ZERO) THEN
          WRITE(ERR,1925) EID, TYPE, 'VOLUME', VOLUME
          WRITE(F06,1925) EID, TYPE, 'VOLUME', VOLUME
          NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
