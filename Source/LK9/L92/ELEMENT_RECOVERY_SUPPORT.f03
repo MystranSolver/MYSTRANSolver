@@ -607,24 +607,15 @@
                   ENDIF
                ENDDO
                CALL GEN_T0L ( BGRID(I), ICID, THETAD, PHID, T0G )
-               IF (I == 1) THEN
-                  DO J=1,3
-                     PEB(J)   = T0G(J,1)*PEG(J)   + T0G(J,2)*PEG(J)   + T0G(J,3)*PEG(J)
-                  ENDDO
-                  DO J=1,3
-                     PEB(J+3) = T0G(J,1)*PEG(J+3) + T0G(J,2)*PEG(J+3) + T0G(J,3)*PEG(J+3)
-                  ENDDO
-               ELSE
-                  DO J=1,3
-                     PEB(J+6) = T0G(J,1)*PEG(J+6) + T0G(J,2)*PEG(J+6) + T0G(J,3)*PEG(J+6)
-                  ENDDO
-                  DO J=1,3
-                     PEB(J+9) = T0G(J,1)*PEG(J+9) + T0G(J,2)*PEG(J+9) + T0G(J,3)*PEG(J+9)
-                  ENDDO
-               ENDIF
-            ELSE                                           ! Global was basic so no transformation of coords needed
-               DO J=1,12
-                  PEB(J) = PEG(J)
+               K = 6*(I-1)                                 ! Forces then moments of this grid: basic = T0G*global
+               DO J=1,3
+                  PEB(K+J)   = T0G(J,1)*PEG(K+1) + T0G(J,2)*PEG(K+2) + T0G(J,3)*PEG(K+3)
+                  PEB(K+J+3) = T0G(J,1)*PEG(K+4) + T0G(J,2)*PEG(K+5) + T0G(J,3)*PEG(K+6)
+               ENDDO
+            ELSE                                           ! Global was basic so no transformation of coords needed (only
+               K = 6*(I-1)                                 ! this grid's terms: the other grid may have been transformed)
+               DO J=1,6
+                  PEB(K+J) = PEG(K+J)
                ENDDO
             ENDIF
          ENDDO
