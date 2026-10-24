@@ -120,7 +120,6 @@
 !                                                                 (contains terms from DPSHX matrices for each grid of the HEXA)
 
       REAL(DOUBLE)                    :: DETJ(IORD*IORD*IORD)   ! Determinant of JAC for all Gauss points
-      REAL(DOUBLE)                    :: DUM_DETJ
       REAL(DOUBLE)                    :: DPSHG(3,ELGP)          ! Output from subr SHP3DH. Derivatives of PSH wrt elem isopar coords
       REAL(DOUBLE)                    :: DPSHX(3,ELGP)          ! Derivatives of PSH wrt elem x, y coords.
       REAL(DOUBLE)                    :: DUM0(3*ELGP)           ! Intermediate matrix used in solving for elem matrices
@@ -460,11 +459,13 @@
 
          DUM2 = ZERO
                                                            ! Calc SE1,2,3
+! The strain-displacement matrix is evaluated directly at the point. A valid element can still have a zero or negative Jacobian
+! at a corner (e.g. a corner of a concave or collapsed hex) where B is undefined; there the strains are extrapolated from the
+! 2x2x2 Gauss sampling points instead.
+
           IORD_MSG = 'for 3-D solid strains,                      = '
           CALL SHP3DH ( 0, 0, 0, ELGP, SUBR_NAME, IORD_MSG, 1, SSI, SSJ, SSK, 'N', PSH, DPSHG )
-          CALL JAC3D ( SSI, SSJ, SSK, DPSHG, 'N', JAC, JACI, DUM_DETJ )
-          DPSHX = MATMUL(JACI, DPSHG)
-          CALL B3D_ISOPARAMETRIC ( DPSHX, 0, 1, 1, 1, 'all strains', 'N', BI )
+          CALL HEXA_EXTRAPOLATED_STRAIN_DISPL ( SSI, SSJ, SSK, BI )
           DUM2 = MATMUL(ES,BI)
 
           DO I=1,3                                         ! Stress-displ matrices
@@ -796,6 +797,72 @@
 ! ##################################################################################################################################
 
       CONTAINS
+
+! ##################################################################################################################################
+
+      SUBROUTINE HEXA_STRAIN_DISPL ( XI, ETA, ZETA, BMAT )
+
+! Strain-displacement matrix used for stress/strain recovery at isoparametric point (XI,ETA,ZETA)
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE), INTENT(IN)        :: XI, ETA, ZETA       ! Isoparametric coordinates of the point
+      REAL(DOUBLE), INTENT(OUT)       :: BMAT(6,3*ELGP)      ! Strain-displacement matrix
+
+      REAL(DOUBLE)                    :: DETJ_PT             ! det(J) at the point
+      REAL(DOUBLE)                    :: DPSHG_PT(3,ELGP)    ! Shape function derivatives w.r.t. xi, eta, zeta
+      REAL(DOUBLE)                    :: DPSHX_PT(3,ELGP)    ! Shape function derivatives w.r.t. x, y, z
+      REAL(DOUBLE)                    :: JAC_PT(3,3)         ! Jacobian at the point
+      REAL(DOUBLE)                    :: JACI_PT(3,3)        ! Inverse Jacobian at the point
+      REAL(DOUBLE)                    :: PSH_PT(ELGP)        ! Shape functions at the point
+
+! **********************************************************************************************************************************
+
+      CALL SHP3DH ( 0, 0, 0, ELGP, SUBR_NAME, IORD_MSG, 1, XI, ETA, ZETA, 'N', PSH_PT, DPSHG_PT )
+      CALL JAC3D ( XI, ETA, ZETA, DPSHG_PT, 'N', JAC_PT, JACI_PT, DETJ_PT )
+      DPSHX_PT = MATMUL(JACI_PT, DPSHG_PT)
+      CALL B3D_ISOPARAMETRIC ( DPSHX_PT, 0, 1, 1, 1, 'all strains', 'N', BMAT )
+
+! **********************************************************************************************************************************
+
+      END SUBROUTINE HEXA_STRAIN_DISPL
+
+! ##################################################################################################################################
+
+      SUBROUTINE HEXA_EXTRAPOLATED_STRAIN_DISPL ( XI, ETA, ZETA, BMAT )
+
+! Strain-displacement matrix at (XI,ETA,ZETA) obtained by trilinear extrapolation of the recovery B from the 2x2x2 Gauss points
+! (xi, eta, zeta = +/- 1/sqrt(3)). Used at points where the Jacobian is not positive. The extrapolation reproduces any trilinear
+! strain field, so constant strain (patch test) and the strain of an affine (parallelepiped) HEXA8 are recovered exactly.
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE), INTENT(IN)        :: XI, ETA, ZETA       ! Isoparametric coordinates of the point
+      REAL(DOUBLE), INTENT(OUT)       :: BMAT(6,3*ELGP)      ! Strain-displacement matrix
+
+      INTEGER(LONG)                   :: IC                  ! Corner (sampling point) index
+
+      REAL(DOUBLE)                    :: BG(6,3*ELGP)        ! Recovery B at one sampling point
+      REAL(DOUBLE)                    :: GSIGN(3)            ! Signs of the sampling point coordinates
+      REAL(DOUBLE)                    :: LG                  ! Trilinear interpolation weight of the sampling point
+      REAL(DOUBLE)                    :: S3                  ! sqrt(3)
+
+! **********************************************************************************************************************************
+
+      S3    = SQRT(3.0_DOUBLE)
+      BMAT  = ZERO
+      DO IC=1,8
+         GSIGN(1) = MERGE( ONE, -ONE, (IC == 2) .OR. (IC == 3) .OR. (IC == 6) .OR. (IC == 7))
+         GSIGN(2) = MERGE( ONE, -ONE, (IC == 3) .OR. (IC == 4) .OR. (IC == 7) .OR. (IC == 8))
+         GSIGN(3) = MERGE( ONE, -ONE, IC >= 5)
+         CALL HEXA_STRAIN_DISPL ( GSIGN(1)/S3, GSIGN(2)/S3, GSIGN(3)/S3, BG )
+         LG    = (ONE + S3*GSIGN(1)*XI)*(ONE + S3*GSIGN(2)*ETA)*(ONE + S3*GSIGN(3)*ZETA)/8.0_DOUBLE
+         BMAT  = BMAT  + LG*BG
+      ENDDO
+
+! **********************************************************************************************************************************
+
+      END SUBROUTINE HEXA_EXTRAPOLATED_STRAIN_DISPL
 
 ! ##################################################################################################################################
 
