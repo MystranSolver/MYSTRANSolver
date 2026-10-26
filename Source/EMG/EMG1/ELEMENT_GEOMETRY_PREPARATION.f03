@@ -1814,6 +1814,8 @@ bcid: IF (BUSH_CID > 0) THEN                               ! Get transformation 
       REAL(DOUBLE)                    :: COS_GAM           ! cos(quad_gamma )
       REAL(DOUBLE)                    :: CTN_TH1           ! cot(theta1)
       REAL(DOUBLE)                    :: CTN_TH2           ! cot(theta2)
+      REAL(DOUBLE)                    :: BLK(3,2)          ! One grid-by-node block of BMEAN
+      INTEGER(LONG)                   :: IG, JN            ! Grid (row block) and flat node (col block) indices
 
 ! **********************************************************************************************************************************
       DO I=1,12
@@ -1889,6 +1891,20 @@ bcid: IF (BUSH_CID > 0) THEN                               ! Get transformation 
       BMEAN(12,6) =  HBAR*COS_TH2/(L34*DELTA1)
       BMEAN(12,7) = -HBAR*(SIN_TH1/L34 - SIN_GAM/L41)/DELTA2
       BMEAN(12,8) =  HBAR*(COS_TH1/L34 + COS_GAM/L41)/DELTA2
+
+! The terms above are in the axes with x along side 1-2 (X12...Y4 from QUAD_GEOM_CHECK, TE_12). With QUADAXIS = 'SPLITD' the
+! membrane matrices BMEANT multiplies are in the final axes TE = CT_QD*TE_12, so rotate BMEAN to them: each 3x2 block becomes
+! CT_QD*block*CT_QD(1:2,1:2)'. Without this a warped quad with QUAD_DELTA /= 0 is not rigid: a rigid rotation about an
+! in-plane axis gives grid forces in proportion to HBAR.
+
+      IF (QUADAXIS == 'SPLITD') THEN
+         DO IG=0,3
+            DO JN=0,3
+               BLK = BMEAN(3*IG+1:3*IG+3,2*JN+1:2*JN+2)
+               BMEAN(3*IG+1:3*IG+3,2*JN+1:2*JN+2) = MATMUL(CT_QD, MATMUL(BLK, TRANSPOSE(CT_QD(1:2,1:2))))
+            ENDDO
+         ENDDO
+      ENDIF
 
       DO I=1,8
          DO J=1,12

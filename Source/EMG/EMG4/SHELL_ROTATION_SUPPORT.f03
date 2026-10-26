@@ -41,8 +41,8 @@
 ! of the element. Adds that to the existing stiffness matrix KE in the element coordinate system.
 
       USE PENTIUM_II_KIND, ONLY       :  LONG, DOUBLE
-      USE MODEL_STUF, ONLY            :  TYPE, ELGP, INTL_MID, XEL, SHELL_A, KE
-      USE PARAMS, ONLY                :  K6ROT
+      USE MODEL_STUF, ONLY            :  TYPE, ELGP, INTL_MID, XEL, SHELL_A, KE, HBAR
+      USE PARAMS, ONLY                :  K6ROT, QUAD4TYP
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE SCONTR, ONLY                :  MAX_ORDER_GAUSS
       USE JACOBIAN, ONLY               :  JAC2D
@@ -58,6 +58,7 @@
       REAL(DOUBLE)                    :: X_NEXT(3)            ! Coordinates of the next grid point (n+1)
       REAL(DOUBLE)                    :: TERM_PREV(3)
       REAL(DOUBLE)                    :: TERM_NEXT(3)
+      REAL(DOUBLE)                    :: ZG(ELGP)             ! Height of each grid point above the element x-y plane
       REAL(DOUBLE)                    :: B(6*ELGP)            ! Strain-displacement matrix for one grid point's K6ROT spring "element"
       REAL(DOUBLE)                    :: STIFFNESS            ! Spring stiffness of one grid point's K6ROT "element"
       REAL(DOUBLE)                    :: AREA                 ! Elem area
@@ -127,6 +128,13 @@
          ! This might be supposed to be the shell normal but it hardly seems to make a difference and this way is simpler.
          N = [ZERO, ZERO, ONE]
 
+         ! Grid heights above the element x-y plane. XEL holds them for MITC4; for MIN4/MIN4T XEL is the mean plane and the
+         ! grids of a warped quad are at -HBAR, +HBAR, -HBAR, +HBAR from it.
+         ZG = XEL(1:ELGP,3)
+         IF ((TYPE(1:5) == 'QUAD4') .AND. (QUAD4TYP(1:4) == 'MIN4')) THEN
+            ZG = [-HBAR, HBAR, -HBAR, HBAR]
+         ENDIF
+
          DO GP=1,ELGP
 
             B = ZERO
@@ -146,8 +154,8 @@
                GP_NEXT = 1
             ENDIF
 
-            X_PREV = XEL(GP_PREV,1:3) - XEL(GP,1:3)
-            X_NEXT = XEL(GP_NEXT,1:3) - XEL(GP,1:3)
+            X_PREV = [XEL(GP_PREV,1:2) - XEL(GP,1:2), ZG(GP_PREV) - ZG(GP)]
+            X_NEXT = [XEL(GP_NEXT,1:2) - XEL(GP,1:2), ZG(GP_NEXT) - ZG(GP)]
 
             !Contribution of previous node's displacement
             !        - n × (x_n-1 - x_n)
@@ -178,9 +186,13 @@
             B((GP - 1) * 6 + 1) = TERM_PREV(1) + TERM_NEXT(1)
             B((GP - 1) * 6 + 2) = TERM_PREV(2) + TERM_NEXT(2)
             B((GP - 1) * 6 + 3) = TERM_PREV(3) + TERM_NEXT(3)
-            B((GP - 1) * 6 + 4) = N(1)
-            B((GP - 1) * 6 + 5) = N(2)
-            B((GP - 1) * 6 + 6) = N(3)
+            !Rotation of node n. On a warped element the edges are not normal to n, and a rigid rotation w about an in-plane axis
+            !moves the next and previous nodes by w x (x - x_n), which the terms above take as a rotation about n of
+            !  sum over the 2 edges of  (n . (x - x_n)) (w . (x - x_n)) / (2 |x - x_n|^2).
+            !Subtracting that through the rotation of node n makes the spring strain zero for every rigid motion (it is n . r_n
+            !alone when the edges lie in the plane).
+            B((GP - 1) * 6 + 4:(GP - 1) * 6 + 6) = N - DOT_PRODUCT(N, X_PREV) * X_PREV / (2 * DOT_PRODUCT(X_PREV, X_PREV))   &
+                                                     - DOT_PRODUCT(N, X_NEXT) * X_NEXT / (2 * DOT_PRODUCT(X_NEXT, X_NEXT))
 
             ! stiffness * B' * B
             CALL MATMULT_FFF_T(B, B, 1, 6*ELGP, 6*ELGP, KROT)
