@@ -294,9 +294,9 @@
 !       - 10 : CONROD
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  OP2, ERR
-      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, OGEL
+      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, MSPRNT, OGEL
       USE, INTRINSIC :: IEEE_ARITHMETIC, ONLY: IEEE_Value, IEEE_QUIET_NAN
-      USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: REAL32
+      USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: REAL32, INT32
       USE OP2_STRESS_OUTPUT, ONLY     :  WRITE_OES3_STATIC
       INTEGER(LONG) :: ANALYSIS_CODE        ! static, time, frequency, modal, etc. flag
       INTEGER(LONG), INTENT(IN) :: ISUBCASE  ! subcase id
@@ -317,9 +317,12 @@
       INTEGER(LONG) :: NTOTAL       ! the number of bytes corresponding to nvalues
       INTEGER(LONG) :: I
       REAL(REAL32)  :: NAN
+      REAL(REAL32)  :: BLANK_MS     ! a blank margin of safety: MSC stores the integer 1
+      REAL(REAL32), ALLOCATABLE :: MS_AXIAL(:), MS_TORSION(:)   ! margins as written to the OP2
       LOGICAL       :: IS_PRINT     ! is this a PRINT result -> F06
 
       NAN = IEEE_VALUE(NAN, IEEE_QUIET_NAN)
+      BLANK_MS = TRANSFER(1_INT32, BLANK_MS)
       ! TODO: assuming PLOT
       DEVICE_CODE = 1
 
@@ -366,13 +369,26 @@
       !        WRITE(OP2) RE1, RE2, RE3, RE4
       !    ENDDO
       !
-!      TODO: figure out what's going on with the shear stress
-!      TODO: calculate axial/torision margin
-        ! write the rod stress/strain data
-        !WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, REAL(OGEL(I,1), 4), REAL(OGEL(I,2), 4), &
-        !                                               REAL(OGEL(I,3), 4), REAL(OGEL(I,4), 4), I=1,NUM)
-        WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, REAL(OGEL(I,1), 4), NAN, &
-                                                       REAL(OGEL(I,2), 4), NAN, I=1,NUM)
+        ! MSC's CROD/CONROD/CTUBE stress record is
+        !   eid_device, axial stress, axial margin, torsional stress, torsional margin
+        ! (the same four OGEL columns the F06 prints). A margin that the F06 leaves blank
+        ! (MSPRNT = '0') is stored as the integer 1, which is how MSC marks a blank margin.
+        ALLOCATE(MS_AXIAL(NUM), MS_TORSION(NUM))
+        DO I=1,NUM
+          IF (MSPRNT(I,1) /= '0') THEN
+            MS_AXIAL(I) = REAL(OGEL(I,2), 4)
+          ELSE
+            MS_AXIAL(I) = BLANK_MS
+          ENDIF
+          IF (MSPRNT(I,2) /= '0') THEN
+            MS_TORSION(I) = REAL(OGEL(I,4), 4)
+          ELSE
+            MS_TORSION(I) = BLANK_MS
+          ENDIF
+        ENDDO
+        WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, REAL(OGEL(I,1), 4), MS_AXIAL(I), &
+                                                       REAL(OGEL(I,3), 4), MS_TORSION(I), I=1,NUM)
+        DEALLOCATE(MS_AXIAL, MS_TORSION)
  102    FORMAT("*DEBUG: WRITE_CROD      ITABLE=",I8," (should be -5, -7,...)")
         WRITE(ERR,102) ITABLE
       ENDIF
@@ -392,6 +408,7 @@
       USE SCONTR, ONLY                :  BARTOR, BLNK_SUB_NAM, MOGEL
       USE CONSTANTS_1, ONLY           :  ZERO
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, MAXREQ, MSPRNT, OGEL
+      USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: REAL32, INT32
 
       USE RESULT_FORMATTING, ONLY     :  WRT_REAL_TO_CHAR_VAR
 
@@ -449,7 +466,10 @@
       INTEGER(LONG)                   :: DEVICE_CODE = 1   ! PLOT; constant
       INTEGER(LONG)                   :: STRESS_CODE
       INTEGER(LONG)                   :: NVALUES           ! number of values in the op2 block
+      REAL(REAL32)                    :: BLANK_MS          ! a blank margin of safety: MSC stores the integer 1
+      REAL(REAL32), ALLOCATABLE       :: MS_T(:), MS_C(:)  ! margins as written to the OP2
       STRESS_CODE = 1
+      BLANK_MS = TRANSFER(1_INT32, BLANK_MS)
 
 
 
@@ -469,11 +489,32 @@
       WRITE(OP2) NVALUES
       !K = 2*I+1
       !
-      ! TODO: this is likely not right, but it should be the right shape...
-      WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE,   &
-                  (REAL(OGEL(2*I-1,J), 4), J=1,8),     & ! s1a-smina; K = 2*I+1
-                  (REAL(OGEL(2*I,  J), 4), J=1,7),     & ! s1b-sminb; K = 2*I
+      ! MSC's CBAR stress record (16 words):
+      !   eid_device,
+      !   s1a s2a s3a s4a axial smaxa smina MS_tension,
+      !   s1b s2b s3b s4b smaxb sminb MS_compression
+      ! OGEL row 2*I-1 is end A and row 2*I end B. Columns 1-8 of end A are in that order. For end B
+      ! column 5 repeats the axial stress (the F06 skips it), so MSC's end B is columns 1-4, 6, 7, 8.
+      ! A margin the F06 leaves blank (MSPRNT = '0') is stored as the integer 1, as MSC does.
+      ALLOCATE(MS_T(NUM), MS_C(NUM))
+      DO I=1,NUM
+        IF (MSPRNT(2*I-1,1) /= '0') THEN
+          MS_T(I) = REAL(OGEL(2*I-1,8), 4)
+        ELSE
+          MS_T(I) = BLANK_MS
+        ENDIF
+        IF (MSPRNT(2*I,2) /= '0') THEN
+          MS_C(I) = REAL(OGEL(2*I,8), 4)
+        ELSE
+          MS_C(I) = BLANK_MS
+        ENDIF
+      ENDDO
+      WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE,                                   &
+                  (REAL(OGEL(2*I-1,J), 4), J=1,7), MS_T(I),                            & ! s1a-smina, MS_T
+                  (REAL(OGEL(2*I,  J), 4), J=1,4), REAL(OGEL(2*I,6), 4),               & ! s1b-s4b, smaxb
+                  REAL(OGEL(2*I,7), 4), MS_C(I),                                       & ! sminb, MS_C
                   I=1,NUM)
+      DEALLOCATE(MS_T, MS_C)
 ! ******************************
       K = 0
       DO I=1,NUM

@@ -30,7 +30,7 @@
 
    PRIVATE
 
-   PUBLIC :: PRINCIPAL_STRESS_2D, PRINCIPAL_STRAIN_2D, PRINCIPAL_3D
+   PUBLIC :: PRINCIPAL_STRESS_2D, PRINCIPAL_STRAIN_2D, PRINCIPAL_3D, PRINCIPAL_3D_DIRECTIONS
 
    CONTAINS
 
@@ -344,5 +344,57 @@
       END SUBROUTINE ROOTS_3D
 
       END SUBROUTINE PRINCIPAL_3D
+
+! ##################################################################################################################################
+
+      SUBROUTINE PRINCIPAL_3D_DIRECTIONS ( STR, DIR_COS )
+
+! Direction cosines of the three principal directions of a 3-D stress or strain tensor, in the axes in which STR is given.
+! Principal 1 is the largest, principal 3 the smallest (same order as PRINCIPAL_3D). DIR_COS(K,1:3) holds the x, y, z components
+! of the unit vector of principal K. These are the A1-A3, B1-B3, C1-C3 words of the OP2 solid stress/strain record.
+! The sign of an eigenvector is arbitrary. If the eigenproblem fails, all cosines are returned as zero.
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG, DOUBLE
+
+      IMPLICIT NONE
+
+      INTEGER(LONG)                   :: I,J                ! DO loop indices
+      INTEGER(LONG)                   :: INFO      = 0      ! Output from LAPACK subr DSYEV
+      INTEGER(LONG), PARAMETER        :: N         = 3      ! Order of the tensor
+      INTEGER(LONG), PARAMETER        :: LWORK     = 3*N-1  ! Size of array WORK
+
+      REAL(DOUBLE), INTENT(IN)        :: STR(6)             ! Stress or strain: xx, yy, zz, xy, yz, zx
+      REAL(DOUBLE), INTENT(OUT)       :: DIR_COS(3,3)       ! Direction cosines of principal 1, 2, 3 (rows)
+      REAL(DOUBLE)                    :: Z(N,N)             ! Tensor on entry to DSYEV, eigenvectors (columns) on exit
+      REAL(DOUBLE)                    :: PSTR(N)            ! Eigenvalues, ascending
+      REAL(DOUBLE)                    :: WORK(LWORK)        ! Workspace
+
+      EXTERNAL                        :: DSYEV
+
+! **********************************************************************************************************************************
+      DIR_COS = 0.0D0
+
+      Z(1,1) = STR(1)
+      Z(2,1) = STR(4)   ;   Z(2,2) = STR(2)
+      Z(3,1) = STR(6)   ;   Z(3,2) = STR(5)   ;   Z(3,3) = STR(3)
+      DO I=1,2
+         DO J=I+1,3
+            Z(I,J) = Z(J,I)
+         ENDDO
+      ENDDO
+
+      CALL DSYEV ( 'V', 'U', N, Z, N, PSTR, WORK, LWORK, INFO )
+
+      IF (INFO == 0) THEN
+         DO I=1,3                                          ! DSYEV returns ascending order; principal 1 is the largest
+            DO J=1,3
+               DIR_COS(I,J) = Z(J,4-I)
+            ENDDO
+         ENDDO
+      ENDIF
+
+      RETURN
+
+      END SUBROUTINE PRINCIPAL_3D_DIRECTIONS
 
    END MODULE PRINCIPAL_VALUES

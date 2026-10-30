@@ -394,7 +394,7 @@ headr:IF (IHDR == 'Y') THEN
           ELSE IF (TYPE == 'QUAD4   ') THEN
               ELEMENT_TYPE = 33  ! todo: verify no ELEMENT_TYPE=144
           ELSE IF (TYPE == 'QUAD8   ') THEN
-              ELEMENT_TYPE = 64
+              ELEMENT_TYPE = 33  ! centre values only (type 64 is MSC's 17-word corner layout, not this 9-word record)
           !ELSE
           !   error
           ENDIF
@@ -402,11 +402,13 @@ headr:IF (IHDR == 'Y') THEN
           !     FX FY FXY           MX MY MXY            QX QY         DO I=1,NUM
           ! [fx, fy, fxy,  mx,  my,  mxy, qx, qy]
           NUM_WIDE = 9
-          NVALUES = NUM * NUM_WIDE
+          ! OGEL holds NUM_PTS rows per element (centre first, then the corners). MSC's type 33/74 record is one
+          ! row per element, so only the centre row is written; writing every row repeated each element NUM_PTS times.
+          NVALUES = (NUM/MAX(1,NUM_PTS)) * NUM_WIDE
           CALL WRITE_OEF3_STATIC(ITABLE, ISUBCASE, DEVICE_CODE, ANALYSIS_CODE, ELEMENT_TYPE, NUM_WIDE, &
                                  TITLEI, STITLEI, LABELI, FIELD5_INT_MODE, FIELD6_EIGENVALUE)
           WRITE(OP2) NVALUES
-          WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, (REAL(OGEL(I,J),4),J=1,8), I=1,NUM)
+          WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, (REAL(OGEL(I,J),4),J=1,8), I=1,NUM,MAX(1,NUM_PTS))
         ENDIF
 
         IF (WRITE_F06)  THEN  ! f06
@@ -853,7 +855,7 @@ headr:IF (IHDR == 'Y') THEN
       USE IOUNT1, ONLY                :  ERR, F06, OP2
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_SC_NUM, MAX_NUM_STR, NDOFR, NUM_CB_DOFS,             &
                                          NVEC, SOL_NAME
-      USE CONSTANTS_1, ONLY           :  ZERO
+      USE CONSTANTS_1, ONLY           :  ZERO, HALF
       USE PARAMS, ONLY                :  STR_CID, POST
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX
@@ -868,7 +870,11 @@ headr:IF (IHDR == 'Y') THEN
       USE TEXT_FIELD_UTILS, ONLY      :  FMT_ES14_6, FMT_I8_RJ
 
       USE OP2_STRESS_OUTPUT, ONLY     :  GET_STRESS_CODE, WRITE_OES3_STATIC
+      USE PRINCIPAL_VALUES, ONLY      :  PRINCIPAL_3D_DIRECTIONS
       IMPLICIT NONE
+
+      REAL(DOUBLE), ALLOCATABLE       :: DCOS3(:,:,:)     ! Principal direction cosines of solid elements (OP2)
+      REAL(DOUBLE)                    :: STRN6(6)         ! Strain tensor (tensor shear) for the principal directions
 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'WRITE_ELEM_STRAINS'
       CHARACTER(LEN=*), INTENT(IN)    :: IHDR              ! Indicator of whether to write an output header
@@ -1239,18 +1245,29 @@ headr:IF (IHDR == 'Y') THEN
             !  Element    Sigma-xx      Sigma-yy      Sigma-zz       Tau-xy        Tau-yz        Tau-zx      von Mises
             !     ID
 
+            ALLOCATE(DCOS3(3,3,NUM))                                      ! Principal directions for the OP2 (MSC layout)
+            DO I=1,NUM
+               STRN6(1:3) = OGEL(I,1:3)                                     ! OGEL holds engineering shear strain; the
+               STRN6(4:6) = HALF*OGEL(I,4:6)                                ! principal directions need tensor shear strain
+               CALL PRINCIPAL_3D_DIRECTIONS ( STRN6, DCOS3(:,:,I) )
+            ENDDO
+
             WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, CID, CEN_WORD, NNODES-1,                      &
                      !grid_id
                      (GID_OUT_ARRAY(I,J),                                                                &
-                     !    oxx                     txy                    s1                 a1  a2  a3
-                     REAL(OGEL(I+J-1,1),4),  REAL(OGEL(I+J-1,4),4), REAL(OGEL(I+J-1,9), 4), 0., 0., 0.,  &
-                     !    p                       ovm
-                     REAL(OGEL(I+J-1,12),4), REAL(OGEL(I+J-1,7),4),                                      &
-                      !   syy                     tyz                    s2                 b1  b2  b3
-                     REAL(OGEL(I+J-1,2),4),  REAL(OGEL(I+J-1,5),4), REAL(OGEL(I+J-1,10),4), 0., 0., 0.,  &
-                      !   szz                     txz                    s3                 c1  c2  c3
-                     REAL(OGEL(I+J-1,3),4),  REAL(OGEL(I+J-1,6),4), REAL(OGEL(I+J-1,11),4), 0., 0., 0.,  &
+                     !    oxx                     txy                    s1       a1 a2 a3 = x cosines of principals 1,2,3
+                     REAL(OGEL(I+J-1,1),4),  REAL(OGEL(I+J-1,4),4), REAL(OGEL(I+J-1,9), 4),                &
+                     REAL(DCOS3(1,1,I+J-1),4), REAL(DCOS3(2,1,I+J-1),4), REAL(DCOS3(3,1,I+J-1),4),            &
+                     !    p (MSC: -(sxx+syy+szz)/3)  ovm
+                     -REAL(OGEL(I+J-1,12),4), REAL(OGEL(I+J-1,7),4),                                     &
+                      !   syy                     tyz                    s2       b1 b2 b3 = y cosines of principals 1,2,3
+                     REAL(OGEL(I+J-1,2),4),  REAL(OGEL(I+J-1,5),4), REAL(OGEL(I+J-1,10),4),                &
+                     REAL(DCOS3(1,2,I+J-1),4), REAL(DCOS3(2,2,I+J-1),4), REAL(DCOS3(3,2,I+J-1),4),            &
+                      !   szz                     txz                    s3       c1 c2 c3 = z cosines of principals 1,2,3
+                     REAL(OGEL(I+J-1,3),4),  REAL(OGEL(I+J-1,6),4), REAL(OGEL(I+J-1,11),4),                &
+                     REAL(DCOS3(1,3,I+J-1),4), REAL(DCOS3(2,3,I+J-1),4), REAL(DCOS3(3,3,I+J-1),4),            &
                      J=1,NNODES), I=1,NUM,NNODES)
+            DEALLOCATE(DCOS3)
 
          ENDIF  ! end of op2
 
@@ -1878,7 +1895,10 @@ headr:IF (IHDR == 'Y') THEN
       USE TEXT_FIELD_UTILS, ONLY      :  FMT_ES14_6, FMT_I8_RJ
 
       USE OP2_STRESS_OUTPUT, ONLY     :  GET_STRESS_CODE, WRITE_OES3_STATIC
+      USE PRINCIPAL_VALUES, ONLY      :  PRINCIPAL_3D_DIRECTIONS
       IMPLICIT NONE
+
+      REAL(DOUBLE), ALLOCATABLE       :: DCOS3(:,:,:)     ! Principal direction cosines of solid elements (OP2)
 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'WRITE_ELEM_STRESSES'
       CHARACTER(LEN=*), INTENT(IN)    :: IHEADER           ! Indicator of whether to write an output header
@@ -2256,18 +2276,27 @@ headr:IF (IHDR == 'Y') THEN
             !  Element    Sigma-xx      Sigma-yy      Sigma-zz       Tau-xy        Tau-yz        Tau-zx      von Mises
             !     ID
 
+            ALLOCATE(DCOS3(3,3,NUM))                                      ! Principal directions for the OP2 (MSC layout)
+            DO I=1,NUM
+               CALL PRINCIPAL_3D_DIRECTIONS ( OGEL(I,1:6), DCOS3(:,:,I) )
+            ENDDO
+
             WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, CID, CEN_WORD, NNODES-1,                      &
                      !grid_id
                      (GID_OUT_ARRAY(I,J),                                                                &
-                     !    oxx                     txy                    s1                 a1  a2  a3
-                     REAL(OGEL(I+J-1,1),4),  REAL(OGEL(I+J-1,4),4), REAL(OGEL(I+J-1,9), 4), 0., 0., 0.,  &
-                     !    p                       ovm
-                     REAL(OGEL(I+J-1,12),4), REAL(OGEL(I+J-1,7),4),                                      &
-                      !   syy                     tyz                    s2                 b1  b2  b3
-                     REAL(OGEL(I+J-1,2),4),  REAL(OGEL(I+J-1,5),4), REAL(OGEL(I+J-1,10),4), 0., 0., 0.,  &
-                      !   szz                     txz                    s3                 c1  c2  c3
-                     REAL(OGEL(I+J-1,3),4),  REAL(OGEL(I+J-1,6),4), REAL(OGEL(I+J-1,11),4), 0., 0., 0.,  &
+                     !    oxx                     txy                    s1       a1 a2 a3 = x cosines of principals 1,2,3
+                     REAL(OGEL(I+J-1,1),4),  REAL(OGEL(I+J-1,4),4), REAL(OGEL(I+J-1,9), 4),                &
+                     REAL(DCOS3(1,1,I+J-1),4), REAL(DCOS3(2,1,I+J-1),4), REAL(DCOS3(3,1,I+J-1),4),            &
+                     !    p (MSC: -(sxx+syy+szz)/3)  ovm
+                     -REAL(OGEL(I+J-1,12),4), REAL(OGEL(I+J-1,7),4),                                     &
+                      !   syy                     tyz                    s2       b1 b2 b3 = y cosines of principals 1,2,3
+                     REAL(OGEL(I+J-1,2),4),  REAL(OGEL(I+J-1,5),4), REAL(OGEL(I+J-1,10),4),                &
+                     REAL(DCOS3(1,2,I+J-1),4), REAL(DCOS3(2,2,I+J-1),4), REAL(DCOS3(3,2,I+J-1),4),            &
+                      !   szz                     txz                    s3       c1 c2 c3 = z cosines of principals 1,2,3
+                     REAL(OGEL(I+J-1,3),4),  REAL(OGEL(I+J-1,6),4), REAL(OGEL(I+J-1,11),4),                &
+                     REAL(DCOS3(1,3,I+J-1),4), REAL(DCOS3(2,3,I+J-1),4), REAL(DCOS3(3,3,I+J-1),4),            &
                      J=1,NNODES), I=1,NUM,NNODES)
+            DEALLOCATE(DCOS3)
 
          ENDIF  ! end of op2
 
