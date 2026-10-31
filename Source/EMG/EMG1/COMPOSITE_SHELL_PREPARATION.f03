@@ -53,7 +53,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO, THIRD, HALF, THREE, TWELVE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
-      USE PARAMS, ONLY                :  EPSIL, IORQ1M, QUAD4TYP, PCOMPEQ, PCMPTSTM, SHRFXFAC, SUPWARN, TSTM_DEF
+      USE PARAMS, ONLY                :  EPSIL, IORQ1M, QUAD4TYP, TRIA3TYP, PCOMPEQ, PCMPTSTM, SHRFXFAC, SUPWARN, TSTM_DEF
 
       USE MODEL_STUF, ONLY            :  ALPVEC, EB, EBM, EM, ET, EDAT, EID, EMAT, EPNT, EPROP, ETYPE, FAILURE_THEORY, FCONV,      &
                                          INTL_MID, INTL_PID, MASS_PER_UNIT_AREA, MATL, MEPROP, MTRL_TYPE,                          &
@@ -192,8 +192,10 @@ pcom0:IF (PCOMP_PROPS == 'N') THEN                         ! Element is not a co
          SHELL_MB_COUPLING = 'N'
          IF ((TYPE /= 'SHEAR   ') .AND. (INTL_MID(4) /= 0)) THEN
             SHELL_MB_COUPLING = 'Y'
-                                                           ! Only the MITC4/MITC4+ QUAD4 includes the PSHELL MID4 coupling
-            IF (.NOT. ((TYPE == 'QUAD4   ') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+')))) THEN
+                                                           ! Only the MITC4/MITC4+ QUAD4 and the MITC3+ TRIA3 include the PSHELL
+                                                           ! MID4 coupling (they build KE from SHELL_B whenever it is nonzero)
+            IF (.NOT. (((TYPE == 'QUAD4   ') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+'))) .OR.                      &
+                       ((TYPE == 'TRIA3   ') .AND. (TRIA3TYP == 'MITC3+')))) THEN
                NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
                FATAL_ERR = FATAL_ERR + 1
                WRITE(ERR,1966) TYPE, EID
@@ -545,8 +547,8 @@ ply_do:  DO K=1,NUM_PLIES_TO_PROC
       RETURN
 
 ! **********************************************************************************************************************************
- 1966 FORMAT(' *ERROR  1966: PSHELL MID4 (MEMBRANE-BENDING COUPLING) IS ONLY SUPPORTED FOR CQUAD4 WITH PARAM QUAD4TYP MITC4+.'  &
-                    ,/,14X,' IT IS USED BY ',A,' ELEMENT ',I8)
+ 1966 FORMAT(' *ERROR  1966: PSHELL MID4 (MEMBRANE-BENDING COUPLING) IS ONLY SUPPORTED FOR CQUAD4 WITH PARAM QUAD4TYP MITC4+'   &
+                    ,/,14X,' AND FOR CTRIA3 WITH PARAM TRIA3TYP MITC3+. IT IS USED BY ',A,' ELEMENT ',I8)
 
  1946 FORMAT(' *ERROR  1946: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' ELEMENT TYPE ',A,' IS NOT ONE OF THE ELEMENT TYPES PROCESSED IN SUBR ',A)

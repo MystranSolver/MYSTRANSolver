@@ -72,6 +72,7 @@
                                          PRTSTIFD        , PRTSTIFF        , PRTUO0          ,                                     &
                                          PRTYS           , PRTQSYS         ,                                                       &
                                          Q4SURFIT        , QUADAXIS        , QUAD4TYP        , RCONDK          , RELINK3         , &
+                                         TRIA3TYP        ,                                                                         &
                                          SEQPRT          , SEQQUIT         , SETLKTM         , SETLKTK         , SHRFXFAC        , &
                                          SKIPMGG         , SOLLIB          , SPARSE_FLAVOR   , SPARSTOR        ,                   &
                                          SPC1QUIT        , SORT_MAX        , SPC1SID         , STR_CID                           , &
@@ -2405,6 +2406,34 @@
          CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,4,5,6,7,8,9 )! Issue warning if fields 4-9 not blank
          CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
 
+
+! TRIA3TYP tells which element to use for the MYSTRAN TRIA3 element
+
+      ELSE IF (JCARD(2)(1:8) == 'TRIA3TYP') THEN
+         PARNAM = 'TRIA3TYP'
+         CALL CHAR_FLD ( JCARD(3), JF(3), CHRPARM )
+         IF (IERRFL(3) == 'N') THEN
+            CALL LEFT_ADJ_BDFLD ( CHRPARM )
+            IF      (CHRPARM == 'MIN3    ') THEN
+               TRIA3TYP = 'MIN3  '
+            ELSE IF (CHRPARM == 'MITC3+  ') THEN
+               TRIA3TYP = 'MITC3+'
+            ELSE
+               WARN_ERR = WARN_ERR + 1
+               WRITE(ERR,101) CARD
+               WRITE(ERR,1189) PARNAM,'MIN3 or MITC3+',CHRPARM,TRIA3TYP
+               IF (SUPWARN == 'N') THEN
+                  IF (ECHO == 'NONE  ') THEN
+                     WRITE(F06,101) CARD
+                  ENDIF
+                  WRITE(F06,1189) PARNAM,'MIN3 or MITC3+',CHRPARM,TRIA3TYP
+               ENDIF
+            ENDIF
+         ENDIF
+
+         CALL BD_IMBEDDED_BLANK   ( JCARD,0,3,0,0,0,0,0,0 )! Make sure that there are no imbedded blanks in field 3
+         CALL CARD_FLDS_NOT_BLANK ( JCARD,0,0,4,5,6,7,8,9 )! Issue warning if fields 4-9 not blank
+         CALL CRDERR ( CARD )                              ! CRDERR prints errors found when reading fields
 
       ! RCONDK = 'Y' executes LAPACK code in LINK3 to calc the recriprocal of the condition number, RCOND, of a matrix to be decomposed
       ELSE IF (JCARD(2)(1:8) == 'RCONDK  ') THEN

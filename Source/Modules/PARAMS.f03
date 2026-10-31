@@ -390,6 +390,11 @@
 !                                                              'MITC4+': Use Ko/Bathe's 2nd MITC4+ (Nov 2016)
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
+      CHARACTER(  6*BYTE)      :: TRIA3TYP       =  'MIN3  ' ! Which element to use in MYSTRAN as the TRIA3 element
+!                                                              'MIN3  ': Use Tessler's MIN3 plate + constant strain membrane (TPLT2/TMEM1)
+!                                                              'MITC3+': Use Lee/Lee/Bathe's MITC3+ (2014) degenerated shell
+
+! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  1*BYTE)      :: RELINK3        =    'N'    ! 'Y', 'N' indicator to redo LINK3,5 on a restart
 
 ! ----------------------------------------------------------------------------------------------------------------------------------

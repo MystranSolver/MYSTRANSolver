@@ -57,7 +57,7 @@
                                          TREF, TYPE, UEL, UEB, SE1, SE2, SE3, STE1, STE2, STE3, ELGP, ISOLID,                      &
                                          FCONV, PCOMP_PROPS, SHELL_B, SHELL_BALP, SHELL_MB_COUPLING
       USE DEBUG_PARAMETERS
-      USE PARAMS, ONLY                :  STR_CID, QUAD4TYP
+      USE PARAMS, ONLY                :  STR_CID, QUAD4TYP, TRIA3TYP
       USE MITC_STUF, ONLY             :  THERM_KAPPA, MSTRPT
 
 
@@ -220,9 +220,13 @@
            ALPTM(1) = ALPVEC(1  ,1)*(TBAR - TREF(1))
            ALPTM(2) = ALPVEC(2  ,1)*(TBAR - TREF(1))
            ALPTM(3) = ALPVEC(4  ,1)*(TBAR - TREF(1))
-           ALPTB(1) = ALPVEC(1  ,2)*DT(5,JTSUB)            ! Bending: rows xx, yy, xy (= 4) of ALPVEC, as for ALPTM
-           ALPTB(2) = ALPVEC(2  ,2)*DT(5,JTSUB)
-           ALPTB(3) = ALPVEC(4  ,2)*DT(5,JTSUB)
+                                                           ! Through-thickness gradient TPRIME (TEMPP1) is stored by subr ELMDAT2 in
+                                                           ! DT(ELGP+1,J): row 5 for the QUAD4 but row 4 for the TRIA3. Reading row 5
+                                                           ! for every shell left the TRIA3 with no thermal curvature in recovery, so
+                                                           ! a free strip under TPRIME reported M = -D*alpha*TPRIME instead of zero.
+           ALPTB(1) = ALPVEC(1  ,2)*DT(ELGP+1,JTSUB)       ! Bending: rows xx, yy, xy (= 4) of ALPVEC, as for ALPTM
+           ALPTB(2) = ALPVEC(2  ,2)*DT(ELGP+1,JTSUB)
+           ALPTB(3) = ALPVEC(4  ,2)*DT(ELGP+1,JTSUB)
            DO I=1,3
              ALPTT(I) = ALPVEC(I+3,3)*(TBAR - TREF(1))
            ENDDO
@@ -236,7 +240,9 @@
                                                            ! stress point ordering matches the BEi third index that subr MITC4
                                                            ! filled, and THERM_KAPPA is zero for a flat element whose director is
                                                            ! normal to it, so flat plates are unchanged.
-           IF ((TYPE(1:5) == 'QUAD4') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+'))) THEN
+                                                           ! The MITC3+ TRIA3 does the same (THERM_KAPPA(:,1) at its centroid).
+           IF (((TYPE(1:5) == 'QUAD4') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+'))) .OR.                            &
+               ((TYPE == 'TRIA3   ') .AND. (TRIA3TYP == 'MITC3+'))) THEN
              IF ((STR_PT_NUM >= 1) .AND. (STR_PT_NUM <= MSTRPT)) THEN
                DO I=1,3
                  ALPTB(I) = ALPTB(I) + THERM_KAPPA(I,STR_PT_NUM)*(TBAR - TREF(1))
