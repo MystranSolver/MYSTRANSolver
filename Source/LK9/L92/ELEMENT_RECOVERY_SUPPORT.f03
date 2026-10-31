@@ -227,7 +227,7 @@
              ALPTT(I) = ALPVEC(I+3,3)*(TBAR - TREF(1))
            ENDDO
 
-                                                           ! MITC4/MITC4+ on a curved reference surface also has a free thermal
+                                                           ! MITC4+ on a curved reference surface also has a free thermal
                                                            ! curvature from uniform mid-surface scaling, the same term subr MITC4
                                                            ! puts in the thermal load vector. It has to come out of the recovered
                                                            ! curvature here as well, or a free uniformly heated curved shell -
@@ -236,7 +236,7 @@
                                                            ! stress point ordering matches the BEi third index that subr MITC4
                                                            ! filled, and THERM_KAPPA is zero for a flat element whose director is
                                                            ! normal to it, so flat plates are unchanged.
-           IF ((TYPE(1:5) == 'QUAD4') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+'))) THEN
+           IF ((TYPE(1:5) == 'QUAD4') .AND. (QUAD4TYP == 'MITC4+')) THEN
              IF ((STR_PT_NUM >= 1) .AND. (STR_PT_NUM <= MSTRPT)) THEN
                DO I=1,3
                  ALPTB(I) = ALPTB(I) + THERM_KAPPA(I,STR_PT_NUM)*(TBAR - TREF(1))
@@ -912,7 +912,6 @@
                                                            ! For the MIN4/MITC4+ QUAD4 and QUAD8. XEP parametric coords
                                                            ! are the Gauss point coords
          IF ((QUAD4TYP == 'MIN4  ') .OR.                                                                                           &
-             (QUAD4TYP == 'MITC4 ') .OR.                                                                                           &
              (QUAD4TYP == 'MITC4+') .OR.                                                                                           &
              (TYPE(1:6) == 'QUAD4K') .OR.                                                                                          &
              (TYPE(1:5) == 'QUAD8')) THEN

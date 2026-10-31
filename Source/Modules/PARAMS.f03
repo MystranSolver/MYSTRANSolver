@@ -386,7 +386,6 @@
       CHARACTER(  6*BYTE)      :: QUAD4TYP       =  'MIN4  ' ! Which element to use in MYSTRAN as the QUAD4 element
 !                                                              'MIN4T ': Use Tessler's MIN4T element made up of 4 MIN3 triangles
 !                                                              'MIN4  ': Use Tessler's MIN4 element
-!                                                              'MITC4 ': Use Bathe's MITC4 (1983)
 !                                                              'MITC4+': Use Ko/Bathe's 2nd MITC4+ (Nov 2016)
 
 ! ----------------------------------------------------------------------------------------------------------------------------------

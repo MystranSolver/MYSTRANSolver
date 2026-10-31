@@ -263,7 +263,7 @@
 ! MITC8 paper "A FORMULATION OF GENERAL SHELL ELEMENTS-THE USE OF MIXED INTERPOLATION OF TENSORIAL COMPONENTS"
 !   by Dvorkin and Bathe, 1986
 !
-! Assembled the same way as the MITC4/MITC4+ QUAD4 (see subr MITC4), using the A/B/D/T (classical-lamination-theory idealized)
+! Assembled the same way as the MITC4+ QUAD4 (see subr MITC4), using the A/B/D/T (classical-lamination-theory idealized)
 ! section matrices from SHELL_ABD_MATRICES and integrating over the mid-surface area only:
 !
 !    KE = int over mid-surface area of:
@@ -726,7 +726,7 @@
       SUBROUTINE MITC8_BMBS ( R, S, BM, BB, BS )
 
 ! Mid-surface membrane, curvature and transverse shear strain-displacement operators for MITC8 at one point, in the cartesian local
-! basis. Same construction as MITC4_BMBS for the MITC4/MITC4+ QUAD4:
+! basis. Same construction as MITC4_BMBS for the MITC4+ QUAD4:
 !
 !   BM = membrane strain at the mid-surface (T = 0)
 !   BB = (bending strain at the top - bending strain at the bottom) / thickness
