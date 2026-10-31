@@ -398,7 +398,7 @@
 ! SHELL_ABD_MATRICES (called once from EMG.f03 before this routine is reached), summed over
 ! PCOMP plies via classical lamination theory where applicable. Using them here (rather than
 ! re-deriving a homogeneous elasticity tensor and volume-integrating through T) is what removes
-! the PCOMP restriction on MITC4/MITC4+: see the MITC4/MITC4+ ABD conversion plan.
+! the PCOMP restriction on MITC4+: see the MITC4+ ABD conversion plan.
 !
 !    KE = int over mid-surface area of:
 !       [Bm]' [A] [Bm]  +  [Bm]' [B] [Bb] + [Bb]' [B]' [Bm]  +  [Bb]' [D] [Bb]  +  [Bs]' [T] [Bs]  dA
@@ -817,7 +817,7 @@
       SUBROUTINE MITC4_B ( R, S, T, MEMBRANE, BENDING, SHEAR, B )
 
 ! Calculates the strain-displacement matrix in the cartesian local coordinate system
-! for MITC4 shell at one point in isoparametric coordinates.
+! for the MITC4+ shell at one point in isoparametric coordinates.
 !
 ! Reference [1]:
 !  "A new MITC4+ shell element" by Ko, Lee, Bathe, 2016
@@ -830,7 +830,6 @@
       USE PENTIUM_II_KIND, ONLY       :  LONG, DOUBLE
       USE MODEL_STUF, ONLY            :  ELGP, XEL
       USE CONSTANTS_1, ONLY           :  ZERO, HALF, ONE, QUARTER, TWO, FOUR
-      USE PARAMS, ONLY                :  QUAD4TYP
       USE MITC_STUF, ONLY             :  GP_RS
 
       USE VECTOR_GEOMETRY, ONLY       :  CROSS
@@ -853,7 +852,6 @@
       REAL(DOUBLE)                    :: BM_C(6, 6*ELGP)
       REAL(DOUBLE)                    :: BM_D(6, 6*ELGP)
       REAL(DOUBLE)                    :: BM_E(6, 6*ELGP)
-      REAL(DOUBLE)                    :: E(6, 6*ELGP)      ! Strain-displacement matrix directly interpolated
       REAL(DOUBLE)                    :: BS_A(6, 6*ELGP)
       REAL(DOUBLE)                    :: BS_B(6, 6*ELGP)
       REAL(DOUBLE)                    :: BS_C(6, 6*ELGP)
@@ -891,109 +889,76 @@
       ENDDO
 
 
-      IF(QUAD4TYP == 'MITC4+') THEN
                                                            ! MITC4+ according to ref [1]
 
-         IF(MEMBRANE) THEN
+      IF(MEMBRANE) THEN
                                                            ! BM at each membrane strain tying point.
-            !
-            !Membrane strain tying points A,B,C,D,E
-            ! 2     A     1
-            !  +----o----+
-            !  |    ^s   |
-            !  |    |    |
-            !D o    +->r o C
-            !  |   E     |
-            !  |         |
-            !  +----o----+
-            ! 3     B     4
-            !
-            CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ZERO,  ONE , T, X_R, X_S, X_D, .TRUE., .FALSE., 1, 1, BM_A )
-            CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ZERO, -ONE , T, X_R, X_S, X_D, .TRUE., .FALSE., 1, 1, BM_B )
-            CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ONE ,  ZERO, T, X_R, X_S, X_D, .TRUE., .FALSE., 2, 2, BM_C )
-            CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION(-ONE ,  ZERO, T, X_R, X_S, X_D, .TRUE., .FALSE., 2, 2, BM_D )
-            CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ZERO,  ZERO, T, X_R, X_S, X_D, .TRUE., .FALSE., 4, 4, BM_E )
+         !
+         !Membrane strain tying points A,B,C,D,E
+         ! 2     A     1
+         !  +----o----+
+         !  |    ^s   |
+         !  |    |    |
+         !D o    +->r o C
+         !  |   E     |
+         !  |         |
+         !  +----o----+
+         ! 3     B     4
+         !
+         CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ZERO,  ONE , T, X_R, X_S, X_D, .TRUE., .FALSE., 1, 1, BM_A )
+         CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ZERO, -ONE , T, X_R, X_S, X_D, .TRUE., .FALSE., 1, 1, BM_B )
+         CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ONE ,  ZERO, T, X_R, X_S, X_D, .TRUE., .FALSE., 2, 2, BM_C )
+         CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION(-ONE ,  ZERO, T, X_R, X_S, X_D, .TRUE., .FALSE., 2, 2, BM_D )
+         CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( ZERO,  ZERO, T, X_R, X_S, X_D, .TRUE., .FALSE., 4, 4, BM_E )
 
                                                            ! Dual basis vectors m^r and m^s to the characteristic
                                                            ! geometry vectors x_r and x_s. From eqn (11) in ref [1].
-            CALL CROSS(X_R, X_S, XRxXS)
-            CALL CROSS(X_S, XRxXS, DUM1)
-            MR = DUM1 / DOT_PRODUCT(X_R, DUM1)
-            CALL CROSS(XRxXS, X_R, DUM1)
-            MS = DUM1 / DOT_PRODUCT(X_S, DUM1)
+         CALL CROSS(X_R, X_S, XRxXS)
+         CALL CROSS(X_S, XRxXS, DUM1)
+         MR = DUM1 / DOT_PRODUCT(X_R, DUM1)
+         CALL CROSS(XRxXS, X_R, DUM1)
+         MS = DUM1 / DOT_PRODUCT(X_S, DUM1)
 
                                                            ! c_r, c_s, d from eqn (24) in ref [1].
-            c_r = DOT_PRODUCT(X_D, MR)
-            c_s = DOT_PRODUCT(X_D, MS)
-            d = c_r * c_r + c_s * c_s - ONE
+         c_r = DOT_PRODUCT(X_D, MR)
+         c_s = DOT_PRODUCT(X_D, MS)
+         d = c_r * c_r + c_s * c_s - ONE
 
-            a_A = c_r * (c_r - 1) / (TWO * d)
-            a_B = c_r * (c_r + 1) / (TWO * d)
-            a_C = c_s * (c_s - 1) / (TWO * d)
-            a_D = c_s * (c_s + 1) / (TWO * d)
-            a_E = 2 * c_r * c_s / d
+         a_A = c_r * (c_r - 1) / (TWO * d)
+         a_B = c_r * (c_r + 1) / (TWO * d)
+         a_C = c_s * (c_s - 1) / (TWO * d)
+         a_D = c_s * (c_s + 1) / (TWO * d)
+         a_E = 2 * c_r * c_s / d
 
                                                            ! Eqn (27a) in ref [1]
-            BM(1,:) = HALF * (ONE - TWO * a_A + S + 2 * a_A * S*S ) * BM_A(1,:)                                                    &
-                    + HALF * (ONE - TWO * a_B - S + 2 * a_B * S*S ) * BM_B(1,:)                                                    &
-                    + a_C * (-ONE + S*S) * BM_C(2,:)                                                                               &
-                    + a_D * (-ONE + S*S) * BM_D(2,:)                                                                               &
-                    + a_E * (-ONE + S*S) * BM_E(4,:)
+         BM(1,:) = HALF * (ONE - TWO * a_A + S + 2 * a_A * S*S ) * BM_A(1,:)                                                    &
+                 + HALF * (ONE - TWO * a_B - S + 2 * a_B * S*S ) * BM_B(1,:)                                                    &
+                 + a_C * (-ONE + S*S) * BM_C(2,:)                                                                               &
+                 + a_D * (-ONE + S*S) * BM_D(2,:)                                                                               &
+                 + a_E * (-ONE + S*S) * BM_E(4,:)
                                                            ! Eqn (27b) in ref [1]
-            BM(2,:) = a_A * (-ONE + R*R) * BM_A(1,:)                                                                               &
-                    + a_B * (-ONE + R*R) * BM_B(1,:)                                                                               &
-                    + HALF * (ONE - TWO * a_C + R + 2 * a_C * R*R ) * BM_C(2,:)                                                    &
-                    + HALF * (ONE - TWO * a_D - R + 2 * a_D * R*R ) * BM_D(2,:)                                                    &
-                    + a_E * (-ONE + R*R) * BM_E(4,:)
+         BM(2,:) = a_A * (-ONE + R*R) * BM_A(1,:)                                                                               &
+                 + a_B * (-ONE + R*R) * BM_B(1,:)                                                                               &
+                 + HALF * (ONE - TWO * a_C + R + 2 * a_C * R*R ) * BM_C(2,:)                                                    &
+                 + HALF * (ONE - TWO * a_D - R + 2 * a_D * R*R ) * BM_D(2,:)                                                    &
+                 + a_E * (-ONE + R*R) * BM_E(4,:)
 
-            BM(3,:) = ZERO
+         BM(3,:) = ZERO
                                                            ! Eqn (27c) in ref [1]
-            BM(4,:) = QUARTER * ( R + FOUR * a_A * R * S) * BM_A(1,:)                                                              &
-                    + QUARTER * (-R + FOUR * a_B * R * S) * BM_B(1,:)                                                              &
-                    + QUARTER * ( S + FOUR * a_C * R * S) * BM_C(2,:)                                                              &
-                    + QUARTER * (-S + FOUR * a_D * R * S) * BM_D(2,:)                                                              &
-                    + (1 + a_E * R * S) * BM_E(4,:)
+         BM(4,:) = QUARTER * ( R + FOUR * a_A * R * S) * BM_A(1,:)                                                              &
+                 + QUARTER * (-R + FOUR * a_B * R * S) * BM_B(1,:)                                                              &
+                 + QUARTER * ( S + FOUR * a_C * R * S) * BM_C(2,:)                                                              &
+                 + QUARTER * (-S + FOUR * a_D * R * S) * BM_D(2,:)                                                              &
+                 + (1 + a_E * R * S) * BM_E(4,:)
 
-            B(1:4,:) = B(1:4,:) + BM(1:4,:)
+         B(1:4,:) = B(1:4,:) + BM(1:4,:)
 
-         ENDIF
+      ENDIF
 
-         IF(BENDING) THEN
-                                                          ! Bending is the same as the MITC4+ form of MITC4
-            CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( R, S, T, X_R, X_S, X_D, .FALSE., .TRUE., 1, 4, BB )
-            B(1:4,:) = B(1:4,:) + BB(1:4,:)
-         ENDIF
-
-      ELSEIF(QUAD4TYP == 'MITC4 ') THEN
-
-         IF(.TRUE.) THEN
-
-            IF(MEMBRANE) THEN
-                                                           ! MITC4+ form of MITC4 according to ref [1]
-               CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( R, S, T, X_R, X_S, X_D, .TRUE., .FALSE., 1, 4, BM )
-               B(1:4,:) = B(1:4,:) + BM(1:4,:)
-            ENDIF
-
-            IF(BENDING) THEN
-               CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( R, S, T, X_R, X_S, X_D, .FALSE., .TRUE., 1, 4, BB )
-               B(1:4,:) = B(1:4,:) + BB(1:4,:)
-            ENDIF
-
-         ELSE
-
-                                                           ! MITC4 according to ref [2]
-                                                           ! Equivalent to the MITC4+ form of MITC4
-                                                           ! but can't separate membrane and bending.
-                                                           ! Could be removed and this branch is never reached.
-            IF(MEMBRANE .AND. BENDING) THEN
-
-               CALL MITC_COVARIANT_STRAIN_DIRECT_INTERPOLATION( R, S, T, 1, 4, E )
-               B(1:4,:) = B(1:4,:) + E(1:4,:)
-
-            ENDIF
-
-         ENDIF
-
+      IF(BENDING) THEN
+                                                          ! Bending: direct interpolation of covariant strains
+         CALL MITC4_COVARIANT_STRAIN_DIRECT_INTERPOLATION( R, S, T, X_R, X_S, X_D, .FALSE., .TRUE., 1, 4, BB )
+         B(1:4,:) = B(1:4,:) + BB(1:4,:)
       ENDIF
 
 
@@ -1004,7 +969,6 @@
       IF(SHEAR) THEN
 
          ! According to ref [2]. Tying point labels are different from ref [1] but it's otherwise equivalent.
-         ! The same in MITC4 and MITC4+.
 
          !
          !Tying points A,B,C,D are the same as in Bathe wrt R and S (Bathe's r_1 and r_2) and same node numbering:
