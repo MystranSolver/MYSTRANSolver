@@ -48,7 +48,7 @@
                                          MEDAT_CQUAD, NCQUAD4K, NCQUAD4, NEDAT, NELE, NMATANGLE, NPLATEOFF, NPLATETHICK
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
-      USE MODEL_STUF, ONLY            :  EDAT, ETYPE, MATANGLE, PLATEOFF, PLATETHICK
+      USE MODEL_STUF, ONLY            :  EDAT, ETYPE, MATANGLE, PLATEOFF, PLATETHICK, PLATETHICK_BLANK
 
       USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD, NEXTC, NEXTC2
       USE BDF_SET_SYNTAX, ONLY        :  TOKCHK
@@ -238,21 +238,29 @@
 
          IF (CARD(1:) /= ' ') THEN                         ! Only process continuation entries if 1st one is not totally blank
 
-            EDAT(NEDAT) = NPLATETHICK + 1
+            IF (ANY(JCARD(4:7) /= ' ')) THEN               ! Grid thicknesses only if one of T1-T4 is given; a blank one is the
+                                                           ! PSHELL T (PLATETHICK_BLANK, replaced in ELMDAT1)
+               EDAT(NEDAT) = NPLATETHICK + 1
 
-            DO J=4,7                                       ! Read 4 thicknesses
-               NPLATETHICK = NPLATETHICK + 1
-               IF (NPLATETHICK > LPLATETHICK) THEN
-                  FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,1144) SUBR_NAME,' TOO MANY PLATE THICKNESSES. LIMIT IS NPLATETHICK = ',LPLATETHICK
-                  WRITE(F06,1144) SUBR_NAME,' TOO MANY PLATE THICKNESSES. LIMIT IS NPLATETHICK = ',LPLATETHICK
-                  CALL OUTA_HERE ( 'Y' )
-               ENDIF
-               CALL R8FLD ( JCARD(J), JF(J), R8INP )
-               IF (IERRFL(J) == 'N') THEN
-                  PLATETHICK(NPLATETHICK) = R8INP
-               ENDIF
-            ENDDO
+               DO J=4,7                                    ! Read 4 thicknesses
+                  NPLATETHICK = NPLATETHICK + 1
+                  IF (NPLATETHICK > LPLATETHICK) THEN
+                     FATAL_ERR = FATAL_ERR + 1
+                     WRITE(ERR,1144) SUBR_NAME,' TOO MANY PLATE THICKNESSES. LIMIT IS NPLATETHICK = ',LPLATETHICK
+                     WRITE(F06,1144) SUBR_NAME,' TOO MANY PLATE THICKNESSES. LIMIT IS NPLATETHICK = ',LPLATETHICK
+                     CALL OUTA_HERE ( 'Y' )
+                  ENDIF
+                  IF (JCARD(J) == ' ') THEN
+                     PLATETHICK(NPLATETHICK) = PLATETHICK_BLANK
+                  ELSE
+                     CALL R8FLD ( JCARD(J), JF(J), R8INP )
+                     IF (IERRFL(J) == 'N') THEN
+                        PLATETHICK(NPLATETHICK) = R8INP
+                     ENDIF
+                  ENDIF
+               ENDDO
+
+            ENDIF
 
             CALL BD_IMBEDDED_BLANK ( JCARD,0,0,4,5,6,7,0,0 )
             CALL CARD_FLDS_NOT_BLANK ( JCARD,2,3,0,0,0,0,8,9 )
@@ -361,7 +369,7 @@
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, IERRFL, FATAL_ERR, JCARD_LEN, JF, LMATANGLE, LPLATEOFF, LPLATETHICK,        &
                                          MEDAT_CQUAD8, NCQUAD8, NEDAT, NELE, NMATANGLE, NPLATEOFF, NPLATETHICK
       USE CONSTANTS_1, ONLY           :  ZERO
-      USE MODEL_STUF, ONLY            :  EDAT, ETYPE, MATANGLE, PLATEOFF, PLATETHICK
+      USE MODEL_STUF, ONLY            :  EDAT, ETYPE, MATANGLE, PLATEOFF, PLATETHICK, PLATETHICK_BLANK
 
       USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD, NEXTC, NEXTC2
       USE BDF_SET_SYNTAX, ONLY        :  TOKCHK
@@ -579,9 +587,13 @@
                   WRITE(F06,1144) SUBR_NAME,' TOO MANY PLATE THICKNESSES. LIMIT IS LPLATETHICK = ',LPLATETHICK
                   CALL OUTA_HERE ( 'Y' )
                ENDIF
-               CALL R8FLD ( JCARD(J), JF(J), R8INP )
-               IF (IERRFL(J) == 'N') THEN
-                  PLATETHICK(NPLATETHICK) = R8INP
+               IF (JCARD(J) == ' ') THEN                    ! A blank Ti is the PSHELL T (replaced in ELMDAT1)
+                  PLATETHICK(NPLATETHICK) = PLATETHICK_BLANK
+               ELSE
+                  CALL R8FLD ( JCARD(J), JF(J), R8INP )
+                  IF (IERRFL(J) == 'N') THEN
+                     PLATETHICK(NPLATETHICK) = R8INP
+                  ENDIF
                ENDIF
             ENDDO
 
