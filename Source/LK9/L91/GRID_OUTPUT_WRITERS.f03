@@ -600,7 +600,7 @@
       SUBROUTINE GET_ANALYSIS_CODE_FIELD5_FIELD6(JSUB, ANALYSIS_CODE, MODE, EIGENVALUE, ISUBCASE_INDEX)
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR
-      USE SCONTR, ONLY                :  SOL_NAME
+      USE SCONTR, ONLY                :  SOL_NAME, INT_SC_NUM, INT_EIG_NUM
       USE EIGEN_MATRICES_1 , ONLY     :  EIGEN_VAL
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
 
@@ -615,7 +615,12 @@
       IF (SOL_NAME(1:7) == 'STATICS') THEN
         ISUBCASE_INDEX = JSUB
         ANALYSIS_CODE = 1  ! statics
-      ELSE IF((SOL_NAME(1:5) == 'MODES') .OR. (SOL_NAME(1:12) == 'GEN CB MODEL')) THEN
+      ELSE IF (SOL_NAME(1:5) == 'MODES') THEN
+        ISUBCASE_INDEX = MAX(1,INT_SC_NUM)  ! subcase that owns this mode (LINK9 sets INT_SC_NUM from MODE_SUBCASE)
+        ANALYSIS_CODE = 2 ! eigenvectors
+        EIGENVALUE = EIGEN_VAL(JSUB)
+        MODE = INT_EIG_NUM                  ! mode number within its subcase, as the F06 prints it
+      ELSE IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN
         ISUBCASE_INDEX = 1
         ANALYSIS_CODE = 2 ! eigenvectors
         EIGENVALUE = EIGEN_VAL(JSUB)
@@ -626,7 +631,7 @@
 
       ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
         ISUBCASE_INDEX = 2
-        ANALYSIS_CODE = 7 ! pre-buckling
+        ANALYSIS_CODE = 8 ! buckling eigenvectors (MSC: 7 = pre-buckling, 8 = buckling)
         EIGENVALUE = EIGEN_VAL(JSUB)
         MODE = JSUB
 !      ELSE IF ???

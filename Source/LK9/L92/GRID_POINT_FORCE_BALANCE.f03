@@ -42,8 +42,9 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06, OP2, SC1
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, GROUT_GPFO_BIT, IBIT, INT_SC_NUM, JTSUB, NDOFG, NDOFM, MELDOF, NDOFO, NDOFR,&
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, GROUT_GPFO_BIT, IBIT, INT_EIG_NUM, INT_SC_NUM, JTSUB, NDOFG, NDOFM, MELDOF, NDOFO, NDOFR,&
                                          NELE, NGRID, NUM_CB_DOFS, NVEC, SOL_NAME, MODE_SUBCASE
+      USE EIGEN_MATRICES_1, ONLY      :  EIGEN_VAL
       USE CONSTANTS_1, ONLY           :  ZERO, ONE_HUNDRED
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
@@ -116,7 +117,8 @@
       INTEGER(LONG)                   :: NROWS, NCOLS, NNODE_GPFORCE, INODE_GPFORCE, IERR  ! GPFORCE table helper
 
       LOGICAL                         :: WRITE_F06, WRITE_OP2, IS_GPFORCE_SUMMARY_INFO  ! flags
-      LOGICAL                         :: IS_MODES, IS_THERMAL, IS_APP, IS_SPC, IS_MPC
+      LOGICAL                         :: IS_MODES, IS_THERMAL, IS_APP, IS_SPC, IS_MPC, IS_APPNET
+      REAL(DOUBLE)                    :: APPNET(6)         ! Applied load net of the equivalent thermal load (the OP2 APP-LOAD row)
 
       INTEGER(LONG)                   :: ISUBCASE_INDEX         ! helper to get the title/subcase
       INTEGER(LONG)                   :: ISUBCASE               ! the correct subcase id
@@ -192,9 +194,10 @@
 
          ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
 
-            ISUBCASE_INDEX = 1  ! modes
-            ANALYSIS_CODE = 2
+            ISUBCASE_INDEX = 2  ! buckling subcase, as for the grid and element tables
+            ANALYSIS_CODE = 2   ! MSC writes the grid point forces of buckling modes with the modal code (2), not 8
             FIELD5_INT_MODE = JVEC
+            FIELD6_EIGENVALUE = EIGEN_VAL(JVEC)            ! buckling load factor of this mode
 
          ELSE IF (SOL_NAME(1:5) == 'MODES') THEN
             ! Per-mode subcase attribution (LINK4 populates MODE_SUBCASE). Falls back to 1 for legacy single-METHOD paths.
@@ -203,7 +206,8 @@
                IF (JVEC <= SIZE(MODE_SUBCASE)) ISUBCASE_INDEX = MODE_SUBCASE(JVEC)
             ENDIF
             ANALYSIS_CODE = 2
-            FIELD5_INT_MODE = JVEC
+            FIELD5_INT_MODE = INT_EIG_NUM                  ! mode number within its subcase, as the F06 prints it
+            FIELD6_EIGENVALUE = EIGEN_VAL(JVEC)            ! eigenvalue of this mode
 
          ELSE IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN  ! Write info on what CB DOF the output is for
             ISUBCASE_INDEX = 1  ! modes
@@ -444,37 +448,33 @@ i_do1:   DO I=1,NGRID                                      ! (2) Set initial val
             ENDDO
 
             IS_APP = IS_ABS_POSITIVE(PG1)
+            ! OP2: MSC has no THERMAL row; its APP-LOAD row is the applied load net of the equivalent thermal load, and is
+            ! absent when they cancel (pyNastran also rejects a THERMAL row). Round-off in the difference is not a load.
+            IS_APPNET = .FALSE.
+            DO J=1,6
+               APPNET(J) = PG1(J) - PTET(J)
+               IF (DABS(APPNET(J)) <= 1.0D-12*MAX(DABS(PG1(J)),DABS(PTET(J)))) APPNET(J) = ZERO
+               IF (DABS(APPNET(J)) > ZERO) IS_APPNET = .TRUE.
+            ENDDO
             IS_SPC = IS_ABS_POSITIVE(QGs1)
             IS_MPC = IS_ABS_POSITIVE(QGm1)
 
             IF(WRITE_OP2) THEN
-                IF(IS_APP) THEN
+                IF(IS_APPNET) THEN
                     GPFORCE_NID_EID(INODE_GPFORCE,1) = GRID_NUM
                     GPFORCE_NID_EID(INODE_GPFORCE,2) = 0
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,1) = PG1(1)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,2) = PG1(2)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,3) = PG1(3)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,4) = PG1(4)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,5) = PG1(5)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,6) = PG1(6)
+                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,1) = APPNET(1)
+                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,2) = APPNET(2)
+                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,3) = APPNET(3)
+                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,4) = APPNET(4)
+                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,5) = APPNET(5)
+                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,6) = APPNET(6)
                     GPFORCE_ETYPE(INODE_GPFORCE) = 'APP-LOAD'
-                    INODE_GPFORCE = INODE_GPFORCE + 1
-                ENDIF
-                IF(IS_THERMAL) THEN
-                    GPFORCE_NID_EID(INODE_GPFORCE,1) = GRID_NUM
-                    GPFORCE_NID_EID(INODE_GPFORCE,2) = EID
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,1) = -PTET(1)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,2) = -PTET(2)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,3) = -PTET(3)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,4) = -PTET(4)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,5) = -PTET(5)
-                    GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,6) = -PTET(6)
-                    GPFORCE_ETYPE(INODE_GPFORCE) = 'THERMAL'
                     INODE_GPFORCE = INODE_GPFORCE + 1
                 ENDIF
                 IF(IS_SPC) THEN
                     GPFORCE_NID_EID(INODE_GPFORCE,1) = GRID_NUM
-                    GPFORCE_NID_EID(INODE_GPFORCE,2) = EID
+                    GPFORCE_NID_EID(INODE_GPFORCE,2) = 0  ! not an element row (MSC writes 0)
                     GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,1) = QGs1(1)
                     GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,2) = QGs1(2)
                     GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,3) = QGs1(3)
@@ -486,7 +486,7 @@ i_do1:   DO I=1,NGRID                                      ! (2) Set initial val
                 ENDIF
                 IF(IS_MPC) THEN
                     GPFORCE_NID_EID(INODE_GPFORCE,1) = GRID_NUM
-                    GPFORCE_NID_EID(INODE_GPFORCE,2) = EID
+                    GPFORCE_NID_EID(INODE_GPFORCE,2) = 0  ! not an element row (MSC writes 0)
                     GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,1) = QGm1(1)
                     GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,2) = QGm1(2)
                     GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,3) = QGm1(3)
@@ -497,8 +497,7 @@ i_do1:   DO I=1,NGRID                                      ! (2) Set initial val
                     INODE_GPFORCE = INODE_GPFORCE + 1
                 ENDIF
             ELSE
-                IF(IS_APP) INODE_GPFORCE = INODE_GPFORCE + 1
-                IF(IS_THERMAL) INODE_GPFORCE = INODE_GPFORCE + 1
+                IF(IS_APPNET) INODE_GPFORCE = INODE_GPFORCE + 1
                 IF(IS_SPC) INODE_GPFORCE = INODE_GPFORCE + 1
                 IF(IS_MPC) INODE_GPFORCE = INODE_GPFORCE + 1
             ENDIF
@@ -557,13 +556,18 @@ i_do1:   DO I=1,NGRID                                      ! (2) Set initial val
                      IF(WRITE_OP2) THEN
                        GPFORCE_NID_EID(INODE_GPFORCE,1) = GRID_NUM
                        GPFORCE_NID_EID(INODE_GPFORCE,2) = EID
-                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,1) = PEG1(1)
-                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,2) = PEG1(2)
-                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,3) = PEG1(3)
-                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,4) = PEG1(4)
-                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,5) = PEG1(5)
-                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,6) = PEG1(6)
+                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,1) = -PEG1(1)   ! the F06 prints -PEG1; MSC's OP2 has the same sign
+                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,2) = -PEG1(2)   ! the F06 prints -PEG1; MSC's OP2 has the same sign
+                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,3) = -PEG1(3)   ! the F06 prints -PEG1; MSC's OP2 has the same sign
+                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,4) = -PEG1(4)   ! the F06 prints -PEG1; MSC's OP2 has the same sign
+                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,5) = -PEG1(5)   ! the F06 prints -PEG1; MSC's OP2 has the same sign
+                       GPFORCE_FXYZ_MXYZ(INODE_GPFORCE,6) = -PEG1(6)   ! the F06 prints -PEG1; MSC's OP2 has the same sign
                        GPFORCE_ETYPE(INODE_GPFORCE) = TYPE
+                       ! MSC and pyNastran name solids HEXA, PENTA, TETRA; MYSTRAN's TYPE carries the node count (HEXA8, PENTA15, ...)
+                       IF      (TYPE(1:4) == 'HEXA' ) THEN;  GPFORCE_ETYPE(INODE_GPFORCE) = 'HEXA    '
+                       ELSE IF (TYPE(1:5) == 'PENTA') THEN;  GPFORCE_ETYPE(INODE_GPFORCE) = 'PENTA   '
+                       ELSE IF (TYPE(1:5) == 'TETRA') THEN;  GPFORCE_ETYPE(INODE_GPFORCE) = 'TETRA   '
+                       ENDIF
                      ENDIF
                      INODE_GPFORCE = INODE_GPFORCE + 1
                      IF (WRITE_F06) WRITE(F06,9209) TYPE, EID, (-PEG1(L),L=1,6)  ! element forces

@@ -178,9 +178,13 @@
             B((GP - 1) * 6 + 1) = TERM_PREV(1) + TERM_NEXT(1)
             B((GP - 1) * 6 + 2) = TERM_PREV(2) + TERM_NEXT(2)
             B((GP - 1) * 6 + 3) = TERM_PREV(3) + TERM_NEXT(3)
-            B((GP - 1) * 6 + 4) = N(1)
-            B((GP - 1) * 6 + 5) = N(2)
-            B((GP - 1) * 6 + 6) = N(3)
+            !Rotation of node n. On a warped element the edges are not normal to n, and a rigid rotation w about an in-plane axis
+            !moves the next and previous nodes by w x (x - x_n), which the terms above take as a rotation about n of
+            !  sum over the 2 edges of  (n . (x - x_n)) (w . (x - x_n)) / (2 |x - x_n|^2).
+            !Subtracting that through the rotation of node n makes the spring strain zero for every rigid motion (it is n . r_n
+            !alone when the edges lie in the plane).
+            B((GP - 1) * 6 + 4:(GP - 1) * 6 + 6) = N - DOT_PRODUCT(N, X_PREV) * X_PREV / (2 * DOT_PRODUCT(X_PREV, X_PREV))   &
+                                                     - DOT_PRODUCT(N, X_NEXT) * X_NEXT / (2 * DOT_PRODUCT(X_NEXT, X_NEXT))
 
             ! stiffness * B' * B
             CALL MATMULT_FFF_T(B, B, 1, 6*ELGP, 6*ELGP, KROT)

@@ -235,7 +235,17 @@ loop1:   DO
 
                IFD = IFD+1
                JCT = 0
-               IF (IFD > 10) EXIT loop1
+               IF (IFD > 10) THEN                          ! Data after field 10 would be dropped: one line holds fields 1-10
+                  IF (VERIFY(CARD(I+1:BD_ENTRY_LEN), ' ,'//ACHAR(9)) > 0) THEN
+                     WRITE(ERR,1003)
+                     WRITE(F06,1003)
+                     WRITE(ERR,129) CARD
+                     WRITE(F06,129) CARD
+                     IERR = 1
+                     FATAL_ERR = FATAL_ERR + 1
+                  ENDIF
+                  EXIT loop1
+               ENDIF
 
             ENDIF
 
@@ -271,6 +281,9 @@ loop1:   DO
 ! **********************************************************************************************************************************
  1002 FORMAT(' *ERROR  1002: TOO LONG AN ENTRY (MORE THAN 16 CHARS) ON THE FOLLOWING ENTRY (MAYBE A COMMA WAS FOUND WHERE ONE',    &
                            ' SHOULD NOT BE):')
+
+ 1003 FORMAT(' *ERROR  1003: MORE THAN 10 FIELDS ON ONE FREE-FIELD LINE; PUT FIELDS AFTER THE 10TH (THE CONTINUATION FIELD) ON A',&
+                           ' CONTINUATION LINE:')
 
   129 FORMAT(A)
 

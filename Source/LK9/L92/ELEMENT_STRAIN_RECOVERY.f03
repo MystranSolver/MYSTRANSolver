@@ -613,7 +613,7 @@
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO
+      USE CONSTANTS_1, ONLY           :  ZERO, HALF
       USE MODEL_STUF, ONLY            :  STRAIN, TYPE
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRN_OPT
       USE LINK9_STUFF, ONLY           :  OGEL
@@ -636,6 +636,7 @@
 
 
       REAL(DOUBLE)                    :: MEAN               ! Mean strains
+      REAL(DOUBLE)                    :: STRAIN_T(6)        ! Strain with tensor shear (engineering shear / 2) for the principal values
       REAL(DOUBLE)                    :: PRINCIPAL_STRAIN(3)! Principal strains
       REAL(DOUBLE)                    :: SIG_OCT            ! Octrahedral normal strain
       REAL(DOUBLE)                    :: TAU_OCT            ! Octrahedral shear  strain
@@ -651,7 +652,9 @@
 ! Calc engineering strains from array STRAIN and put into array OGEL
 
       IF ((TYPE(1:4) == 'HEXA') .OR. (TYPE(1:5) == 'PENTA') .OR. (TYPE(1:5) == 'TETRA')) THEN
-         CALL PRINCIPAL_3D ( STRAIN, PRINCIPAL_STRAIN, MEAN, VONMISES, SIG_OCT, TAU_OCT )
+         STRAIN_T(1:3) = STRAIN(1:3)                         ! STRAIN holds engineering shear strain (gamma = 2*tensor shear), which is what is
+         STRAIN_T(4:6) = HALF*STRAIN(4:6)                    ! printed and stored in OGEL; principal values need the tensor shear strain
+         CALL PRINCIPAL_3D ( STRAIN_T, PRINCIPAL_STRAIN, MEAN, VONMISES, SIG_OCT, TAU_OCT )
          IF (WRITE_OGEL == 'Y') THEN
             NUM1 = NUM1 + 1
             IF (NUM1 > SIZE_ALLOCATED) THEN

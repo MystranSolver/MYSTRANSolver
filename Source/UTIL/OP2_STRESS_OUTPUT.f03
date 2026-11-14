@@ -174,6 +174,8 @@
 !         1 : strain???
 !
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE SCONTR, ONLY                :  SOL_NAME
+      USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       IMPLICIT NONE
       INTEGER(LONG), INTENT(INOUT) :: ITABLE               ! an OP2 subtable counter
       INTEGER(LONG), INTENT(IN) :: ISUBCASE                ! the subcase ID
@@ -187,8 +189,16 @@
       INTEGER(LONG), INTENT(IN)      :: FIELD5_INT_MODE
       REAL(DOUBLE), INTENT(IN)       :: FIELD6_EIGENVALUE
       INTEGER(LONG)                  :: FORMAT_CODE, ANALYSIS_CODE
-!      we assumed static
+!      The analysis code follows the solution type (as for the grid, force and grid point force tables); it used to be
+!      1 (static) for every solution, which labelled modal, buckling and nonlinear element results as static.
       ANALYSIS_CODE = 1
+      IF      (SOL_NAME(1:5) == 'MODES') THEN
+         ANALYSIS_CODE = 2                                  ! real eigenvalues
+      ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
+         ANALYSIS_CODE = 8                                  ! buckling eigenvectors (the preload pass is static)
+      ELSE IF (SOL_NAME(1:8) == 'NLSTATIC') THEN
+         ANALYSIS_CODE = 10                                 ! nonlinear statics
+      ENDIF
 
       ! LSDVMN
       !FIELD5 = 0

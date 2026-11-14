@@ -194,7 +194,7 @@ pcom0:IF (PCOMP_PROPS == 'N') THEN                         ! Element is not a co
             SHELL_MB_COUPLING = 'Y'
                                                            ! Only the MITC4/MITC4+ QUAD4 and the MITC3+ TRIA3 include the PSHELL
                                                            ! MID4 coupling (they build KE from SHELL_B whenever it is nonzero)
-            IF (.NOT. (((TYPE == 'QUAD4   ') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+'))) .OR.                      &
+            IF (.NOT. (((TYPE == 'QUAD4   ') .AND. (QUAD4TYP == 'MITC4+')) .OR.                      &
                        ((TYPE == 'TRIA3   ') .AND. (TRIA3TYP == 'MITC3+')))) THEN
                NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
                FATAL_ERR = FATAL_ERR + 1

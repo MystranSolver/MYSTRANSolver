@@ -41,7 +41,8 @@
       ! enumerated below fin the IF(TYPE == ???)
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, OP2
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, INT_SC_NUM, NDOFR, NUM_CB_DOFS, NVEC, SOL_NAME
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, INT_EIG_NUM, INT_SC_NUM, NDOFR, NUM_CB_DOFS, NVEC, SOL_NAME
+      USE EIGEN_MATRICES_1, ONLY      :  EIGEN_VAL
       USE TIMDAT, ONLY                :  TSEC
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
@@ -63,6 +64,7 @@
 
       INTEGER(LONG), INTENT(IN)       :: JSUB              ! Solution vector number
       INTEGER(LONG), INTENT(IN)       :: NUM               ! The number of rows of OGEL to write out
+      CHARACTER(4*BYTE)               :: CEN_WORD          ! the word "CEN/" (marks the CQUAD4-144 record)
       INTEGER(LONG), INTENT(IN)       :: NUM_PTS           ! Num diff stress points for one element
       INTEGER(LONG), INTENT(INOUT)    :: ITABLE            ! the current op2 subtable, should be -3, -5, ...
       INTEGER(LONG)                   :: BDY_COMP          ! Component (1-6) for a boundary DOF in CB analyses
@@ -142,13 +144,15 @@ headr:IF (IHDR == 'Y') THEN
 
          ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
             ISUBCASE_INDEX = 2
-            ANALYSIS_CODE = 7
+            ANALYSIS_CODE = 8  ! buckling eigenvectors (MSC: 7 = pre-buckling, 8 = buckling)
             FIELD5_INT_MODE = JSUB
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! buckling load factor of this mode
 
          ELSE IF (SOL_NAME(1:5) == 'MODES') THEN
-            ISUBCASE_INDEX = 1
+            ISUBCASE_INDEX = MAX(1,INT_SC_NUM)  ! subcase that owns this mode (LINK9 sets INT_SC_NUM from MODE_SUBCASE)
             ANALYSIS_CODE = 2
-            FIELD5_INT_MODE = JSUB
+            FIELD5_INT_MODE = INT_EIG_NUM  ! mode number within its subcase, as the F06 prints it
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! eigenvalue of this mode (MSC writes it in every table)
 
          ELSE IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN
             ! Write info on what CB DOF the output is for
@@ -401,6 +405,22 @@ headr:IF (IHDR == 'Y') THEN
           ! -MEMBRANE FORCES-   -BENDING MOMENTS- -TRANSVERSE SHEAR FORCES -
           !     FX FY FXY           MX MY MXY            QX QY         DO I=1,NUM
           ! [fx, fy, fxy,  mx,  my,  mxy, qx, qy]
+          IF ((TYPE == 'QUAD4   ') .AND. (NUM_PTS > 1)) THEN
+            ! QUAD4 with corner output: MSC's CQUAD4-144 force record, 2 + 9*(1+4) = 47 words per element:
+            !   eid_device, "CEN/", number of corners, FX FY FXY MX MY MXY QX QY (centre),
+            !   then for each corner: grid id, FX FY FXY MX MY MXY QX QY
+            ! OGEL holds the centre row first and then the corner rows of each element (as the F06 code below reads it).
+            ELEMENT_TYPE = 144
+            CEN_WORD = "CEN/"
+            NUM_WIDE = 2 + 9*NUM_PTS
+            NVALUES = (NUM/NUM_PTS) * NUM_WIDE
+            CALL WRITE_OEF3_STATIC(ITABLE, ISUBCASE, DEVICE_CODE, ANALYSIS_CODE, ELEMENT_TYPE, NUM_WIDE, &
+                                   TITLEI, STITLEI, LABELI, FIELD5_INT_MODE, FIELD6_EIGENVALUE)
+            WRITE(OP2) NVALUES
+            WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, CEN_WORD, NUM_PTS-1, (REAL(OGEL(I,J),4),J=1,8),            &
+                        (GID_OUT_ARRAY(I,L), (REAL(OGEL(I+L-1,J),4),J=1,8), L=2,NUM_PTS),                              &
+                        I=1,NUM,NUM_PTS)
+          ELSE
           NUM_WIDE = 9
           ! OGEL holds NUM_PTS rows per element (centre first, then the corners). MSC's type 33/74 record is one
           ! row per element, so only the centre row is written; writing every row repeated each element NUM_PTS times.
@@ -409,6 +429,7 @@ headr:IF (IHDR == 'Y') THEN
                                  TITLEI, STITLEI, LABELI, FIELD5_INT_MODE, FIELD6_EIGENVALUE)
           WRITE(OP2) NVALUES
           WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, (REAL(OGEL(I,J),4),J=1,8), I=1,NUM,MAX(1,NUM_PTS))
+          ENDIF
         ENDIF
 
         IF (WRITE_F06)  THEN  ! f06
@@ -853,8 +874,9 @@ headr:IF (IHDR == 'Y') THEN
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06, OP2
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_SC_NUM, MAX_NUM_STR, NDOFR, NUM_CB_DOFS,             &
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_EIG_NUM, INT_SC_NUM, MAX_NUM_STR, NDOFR, NUM_CB_DOFS,             &
                                          NVEC, SOL_NAME
+      USE EIGEN_MATRICES_1, ONLY      :  EIGEN_VAL
       USE CONSTANTS_1, ONLY           :  ZERO, HALF
       USE PARAMS, ONLY                :  STR_CID, POST
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
@@ -1000,13 +1022,15 @@ headr:IF (IHDR == 'Y') THEN
 
          ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
             ISUBCASE_INDEX = 2  ! modes
-            ANALYSIS_CODE = 7
+            ANALYSIS_CODE = 8  ! buckling eigenvectors (MSC: 7 = pre-buckling, 8 = buckling)
             FIELD5_INT_MODE = JSUB
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! buckling load factor of this mode
 
          ELSE IF (SOL_NAME(1:5) == 'MODES') THEN
-            ISUBCASE_INDEX = 1  ! modes
+            ISUBCASE_INDEX = MAX(1,INT_SC_NUM)  ! subcase that owns this mode (LINK9 sets INT_SC_NUM from MODE_SUBCASE)
             ANALYSIS_CODE = 2
-            FIELD5_INT_MODE = JSUB
+            FIELD5_INT_MODE = INT_EIG_NUM  ! mode number within its subcase, as the F06 prints it
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! eigenvalue of this mode (MSC writes it in every table)
 
          ELSE IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN
             ISUBCASE_INDEX = 1  ! modes
@@ -1877,8 +1901,9 @@ headr:IF (IHDR == 'Y') THEN
       ! all 1-D, 2-D, 3-D elements.
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06, OP2
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_SC_NUM, MAX_NUM_STR, NDOFR, NUM_CB_DOFS,             &
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_EIG_NUM, INT_SC_NUM, MAX_NUM_STR, NDOFR, NUM_CB_DOFS,             &
                                          NVEC, SOL_NAME
+      USE EIGEN_MATRICES_1, ONLY      :  EIGEN_VAL
       USE CONSTANTS_1, ONLY           :  ZERO
       USE PARAMS, ONLY                :  STR_CID, POST
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
@@ -2020,13 +2045,15 @@ headr:IF (IHDR == 'Y') THEN
 
          ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
             ISUBCASE_INDEX = 2  ! modes
-            ANALYSIS_CODE = 7
+            ANALYSIS_CODE = 8  ! buckling eigenvectors (MSC: 7 = pre-buckling, 8 = buckling)
             FIELD5_INT_MODE = JSUB
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! buckling load factor of this mode
 
          ELSE IF (SOL_NAME(1:5) == 'MODES') THEN
-            ISUBCASE_INDEX = 1  ! modes
+            ISUBCASE_INDEX = MAX(1,INT_SC_NUM)  ! subcase that owns this mode (LINK9 sets INT_SC_NUM from MODE_SUBCASE)
             ANALYSIS_CODE = 2
-            FIELD5_INT_MODE = JSUB
+            FIELD5_INT_MODE = INT_EIG_NUM  ! mode number within its subcase, as the F06 prints it
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! eigenvalue of this mode (MSC writes it in every table)
 
          ELSE IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN
             ISUBCASE_INDEX = 1  ! modes

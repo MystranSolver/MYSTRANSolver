@@ -344,9 +344,9 @@ userin:        IF ((WHICH(1:8) == 'OA MODEL') .OR. (WHICH(1:6) == 'USERIN')) THE
          MOI1(1,1) = MOI1(1,1) + RCONM2(I, 5) + M0*(Y2 + Z2)
          MOI1(2,2) = MOI1(2,2) + RCONM2(I, 7) + M0*(X2 + Z2)
          MOI1(3,3) = MOI1(3,3) + RCONM2(I,10) + M0*(X2 + Y2)
-         MOI1(2,1) = MOI1(2,1) + RCONM2(I, 6) - M0*XY
-         MOI1(3,1) = MOI1(3,1) + RCONM2(I, 8) - M0*XZ
-         MOI1(3,2) = MOI1(3,2) + RCONM2(I, 9) - M0*YZ
+         MOI1(2,1) = MOI1(2,1) - RCONM2(I, 6) - M0*XY      ! RCONM2 has the products of inertia I21, I31, I32 of the CONM2
+         MOI1(3,1) = MOI1(3,1) - RCONM2(I, 8) - M0*XZ      ! entry; the tensor terms are their negatives
+         MOI1(3,2) = MOI1(3,2) - RCONM2(I, 9) - M0*YZ
 
       ENDDO
 

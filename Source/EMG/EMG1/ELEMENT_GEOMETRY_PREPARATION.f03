@@ -1283,7 +1283,7 @@ bcid: IF (BUSH_CID > 0) THEN                               ! Get transformation 
       XEL(1,3) = ZERO
 
       IF ((TYPE == 'QUAD8   ') .OR.                                                                                                &
-         ((TYPE == 'QUAD4   ') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+')))) THEN
+         ((TYPE == 'QUAD4   ') .AND. (QUAD4TYP == 'MITC4+'))) THEN
 
                                                            ! The z coordinate of grid points in the
                                                            ! XEL element coordinate system can be non-zero if it's warped.
@@ -1419,7 +1419,7 @@ bcid: IF (BUSH_CID > 0) THEN                               ! Get transformation 
       XEL(1,3) = ZERO
 
       IF ((TYPE == 'QUAD8   ') .OR.                                                                                                &
-         ((TYPE == 'QUAD4   ') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+')))) THEN
+         ((TYPE == 'QUAD4   ') .AND. (QUAD4TYP == 'MITC4+'))) THEN
 
                                                            ! The z coordinate of grid points in the
                                                            ! XEL element coordinate system can be non-zero if it's warped.

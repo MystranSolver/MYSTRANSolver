@@ -40,8 +40,9 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, OP2
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_SC_NUM, LPCOMP_PLIES, NDOFR, NUM_CB_DOFS,            &
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_EIG_NUM, INT_SC_NUM, LPCOMP_PLIES, NDOFR, NUM_CB_DOFS,            &
                                          NVEC, SOL_NAME
+      USE EIGEN_MATRICES_1, ONLY      :  EIGEN_VAL
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
@@ -145,13 +146,15 @@
 
          ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
             ISUBCASE_INDEX = 2
-            ANALYSIS_CODE = 7
+            ANALYSIS_CODE = 8  ! buckling eigenvectors (MSC: 7 = pre-buckling, 8 = buckling)
             FIELD5_INT_MODE = JSUB
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! buckling load factor of this mode
 
          ELSE IF (SOL_NAME(1:5) == 'MODES') THEN
-            ISUBCASE_INDEX = 1
+            ISUBCASE_INDEX = MAX(1,INT_SC_NUM)  ! subcase that owns this mode (LINK9 sets INT_SC_NUM from MODE_SUBCASE)
             ANALYSIS_CODE = 2
-            FIELD5_INT_MODE = JSUB
+            FIELD5_INT_MODE = INT_EIG_NUM  ! mode number within its subcase, as the F06 prints it
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! eigenvalue of this mode (MSC writes it in every table)
 
          ELSE IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN   ! Write info on what CB DOF the output is for
             ISUBCASE_INDEX = 1
@@ -374,8 +377,9 @@
       ! element type for elements with PCOMP properties.
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, OP2
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_SC_NUM, LPCOMP_PLIES, NDOFR, NUM_CB_DOFS,            &
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, BARTOR, INT_EIG_NUM, INT_SC_NUM, LPCOMP_PLIES, NDOFR, NUM_CB_DOFS,            &
                                          SOL_NAME
+      USE EIGEN_MATRICES_1, ONLY      :  EIGEN_VAL
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
@@ -483,13 +487,15 @@
 
          ELSE IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
             ISUBCASE_INDEX = 2
-            ANALYSIS_CODE = 7
+            ANALYSIS_CODE = 8  ! buckling eigenvectors (MSC: 7 = pre-buckling, 8 = buckling)
             FIELD5_INT_MODE = JSUB
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! buckling load factor of this mode
 
          ELSE IF (SOL_NAME(1:5) == 'MODES') THEN
-            ISUBCASE_INDEX = 1
+            ISUBCASE_INDEX = MAX(1,INT_SC_NUM)  ! subcase that owns this mode (LINK9 sets INT_SC_NUM from MODE_SUBCASE)
             ANALYSIS_CODE = 2
-            FIELD5_INT_MODE = JSUB
+            FIELD5_INT_MODE = INT_EIG_NUM  ! mode number within its subcase, as the F06 prints it
+            FIELD6_EIGENVALUE = EIGEN_VAL(JSUB)       ! eigenvalue of this mode (MSC writes it in every table)
 
          ELSE IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN   ! Write info on what CB DOF the output is for
             ISUBCASE_INDEX = 1

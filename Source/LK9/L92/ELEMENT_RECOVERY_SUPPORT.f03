@@ -231,7 +231,7 @@
              ALPTT(I) = ALPVEC(I+3,3)*(TBAR - TREF(1))
            ENDDO
 
-                                                           ! MITC4/MITC4+ on a curved reference surface also has a free thermal
+                                                           ! MITC4+ on a curved reference surface also has a free thermal
                                                            ! curvature from uniform mid-surface scaling, the same term subr MITC4
                                                            ! puts in the thermal load vector. It has to come out of the recovered
                                                            ! curvature here as well, or a free uniformly heated curved shell -
@@ -241,7 +241,7 @@
                                                            ! filled, and THERM_KAPPA is zero for a flat element whose director is
                                                            ! normal to it, so flat plates are unchanged.
                                                            ! The MITC3+ TRIA3 does the same (THERM_KAPPA(:,1) at its centroid).
-           IF (((TYPE(1:5) == 'QUAD4') .AND. ((QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+'))) .OR.                            &
+           IF (((TYPE(1:5) == 'QUAD4') .AND. (QUAD4TYP == 'MITC4+')) .OR.                            &
                ((TYPE == 'TRIA3   ') .AND. (TRIA3TYP == 'MITC3+'))) THEN
              IF ((STR_PT_NUM >= 1) .AND. (STR_PT_NUM <= MSTRPT)) THEN
                DO I=1,3
@@ -644,24 +644,15 @@
                   ENDIF
                ENDDO
                CALL GEN_T0L ( BGRID(I), ICID, THETAD, PHID, T0G )
-               IF (I == 1) THEN
-                  DO J=1,3
-                     PEB(J)   = T0G(J,1)*PEG(J)   + T0G(J,2)*PEG(J)   + T0G(J,3)*PEG(J)
-                  ENDDO
-                  DO J=1,3
-                     PEB(J+3) = T0G(J,1)*PEG(J+3) + T0G(J,2)*PEG(J+3) + T0G(J,3)*PEG(J+3)
-                  ENDDO
-               ELSE
-                  DO J=1,3
-                     PEB(J+6) = T0G(J,1)*PEG(J+6) + T0G(J,2)*PEG(J+6) + T0G(J,3)*PEG(J+6)
-                  ENDDO
-                  DO J=1,3
-                     PEB(J+9) = T0G(J,1)*PEG(J+9) + T0G(J,2)*PEG(J+9) + T0G(J,3)*PEG(J+9)
-                  ENDDO
-               ENDIF
-            ELSE                                           ! Global was basic so no transformation of coords needed
-               DO J=1,12
-                  PEB(J) = PEG(J)
+               K = 6*(I-1)                                 ! Forces then moments of this grid: basic = T0G*global
+               DO J=1,3
+                  PEB(K+J)   = T0G(J,1)*PEG(K+1) + T0G(J,2)*PEG(K+2) + T0G(J,3)*PEG(K+3)
+                  PEB(K+J+3) = T0G(J,1)*PEG(K+4) + T0G(J,2)*PEG(K+5) + T0G(J,3)*PEG(K+6)
+               ENDDO
+            ELSE                                           ! Global was basic so no transformation of coords needed (only
+               K = 6*(I-1)                                 ! this grid's terms: the other grid may have been transformed)
+               DO J=1,6
+                  PEB(K+J) = PEG(K+J)
                ENDDO
             ENDIF
          ENDDO
@@ -927,7 +918,6 @@
                                                            ! For the MIN4/MITC4+ QUAD4 and QUAD8. XEP parametric coords
                                                            ! are the Gauss point coords
          IF ((QUAD4TYP == 'MIN4  ') .OR.                                                                                           &
-             (QUAD4TYP == 'MITC4 ') .OR.                                                                                           &
              (QUAD4TYP == 'MITC4+') .OR.                                                                                           &
              (TYPE(1:6) == 'QUAD4K') .OR.                                                                                          &
              (TYPE(1:5) == 'QUAD8')) THEN

@@ -200,7 +200,7 @@
         FIELD7 = SQRT(ABS(FIELD6))  ! SQRT(ABS(EIGN))
 
         !FIELD7 = MODE_CYCLE_FREQ  ! float; radians
-      ELSE IF(ANALYSIS_CODE == 7) THEN
+      ELSE IF((ANALYSIS_CODE == 7) .OR. (ANALYSIS_CODE == 8)) THEN
 !       pre-buckling????
 !        op2.lsdvmn = op2.add_data_parameter(data, 'lsdvmn', b'i', 5)
         !FIELD5 = 1
