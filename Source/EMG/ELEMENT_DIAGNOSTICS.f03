@@ -576,7 +576,7 @@
                                          MEMATR, MEMATC, MEPROP, MPRESS, NSUB, NTSUB, SOL_NAME
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  CONV_RAD_DEG, ZERO
-      USE PARAMS, ONLY                :  CBMIN3, CBMIN4, ELFORCEN, QUADAXIS, QUAD4TYP
+      USE PARAMS, ONLY                :  CBMIN3, CBMIN4, ELFORCEN, QUADAXIS, QUAD4TYP, TRIA3TYP
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  AGRID, BGRID, BE1, BE2, BE3, BENSUM, BMEANT, CAN_ELEM_TYPE_OFFSET, DOFPIN, DT, ELAS_COMP, &
                                          EID, EB, EM, ES, ET, ELEM_LEN_AB, ELDOF, ELMTYP, ELGP, EMAT, EPROP, FCONV, HBAR, KE, KED, &
@@ -642,6 +642,11 @@
 
          IF ((TYPE == 'QDPLT2   ') .OR. (TYPE == 'QUAD4   ')) THEN
             WRITE(BUG,*) '  Bending portion of QUAD4 is based on QUAD4TYP formulation = ',QUAD4TYP
+            WRITE(BUG,*)
+         ENDIF
+
+         IF (TYPE == 'TRIA3   ') THEN
+            WRITE(BUG,*) '  TRIA3 is based on TRIA3TYP formulation = ',TRIA3TYP
             WRITE(BUG,*)
          ENDIF
 

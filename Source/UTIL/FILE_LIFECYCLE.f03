@@ -1808,7 +1808,7 @@
       USE SCONTR
       USE TIMDAT, ONLY                :  STIME, TSEC
       USE PARAMS, ONLY                :  CBMIN3, CBMIN4, ELFORCEN, HEXAXIS, IORQ1B, IORQ1M, IORQ1S, IORQ2B, IORQ2T,&
-                                         MATSPARS, MIN4TRED, QUAD4TYP, QUADAXIS, SPARSTOR
+                                         MATSPARS, MIN4TRED, QUAD4TYP, QUADAXIS, SPARSTOR, TRIA3TYP
 
       USE DATE_TIME_UTILS, ONLY       :  OURTIM
 
@@ -2257,6 +2257,7 @@
       WRITE(L1A,192) IORQ2T  , 'PARAM IORQ2T   (needed for restart)'
       WRITE(L1A,193) CBMIN3  , 'PARAM CBMIN3   (needed for restart)'
       WRITE(L1A,193) CBMIN4  , 'PARAM CBMIN4   (needed for restart)'
+      WRITE(L1A,191) TRIA3TYP, 'PARAM TRIA3TYP (needed for restart)'
 
 ! Write COMM
 

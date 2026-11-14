@@ -50,12 +50,20 @@
                                                            ! R and S coordinates of each element node
       REAL(DOUBLE)                    :: GP_RS(2,MELGP)
 
-                                                           ! Number of stress recovery points MITC4 fills (centre + 4 Gauss pts)
+                                                           ! MITC3+ only: V1 and V2 vectors (orthogonal to the director) at the
+                                                           ! internal bubble node, whose 2 rotation DOF are alpha4 (about V1) and
+                                                           ! beta4 (about V2). The bubble node's director and thickness are stored
+                                                           ! in DIRECTOR(:,4), DIR_THICKNESS(4) by subr MITC3_INITIALIZE.
+      REAL(DOUBLE)                    :: BUB_V1(3)
+      REAL(DOUBLE)                    :: BUB_V2(3)
+
+                                                           ! Number of stress recovery points MITC4 fills (centre + 4 Gauss pts).
+                                                           ! MITC3+ fills only point 1 (the centroid).
       INTEGER(LONG), PARAMETER        :: MSTRPT = 5
 
                                                            ! Free thermal curvature per unit temperature at each stress recovery
                                                            ! point, in element coordinates, (kxx, kyy, kxy engineering). Set by
-                                                           ! subr MITC4 alongside BE1/BE2/BE3 and consumed by subr
+                                                           ! subr MITC4 (or MITC3) alongside BE1/BE2/BE3 and consumed by subr
                                                            ! ELEM_STRE_STRN_ARRAYS, which subtracts it from the recovered
                                                            ! curvature so the reported bending stress is mechanical only. Zero
                                                            ! for a flat element whose director is normal to it.
