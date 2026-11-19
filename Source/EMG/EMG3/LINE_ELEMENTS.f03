@@ -54,14 +54,18 @@
       USE CONSTANTS_1, ONLY           :  TWO
       USE PARAMS, ONLY                :  EPSIL
       USE DEBUG_PARAMETERS
-      USE MODEL_STUF, ONLY            :  EID, ELEM_LEN_AB, EMAT, NUM_EMG_FATAL_ERRS, EPROP, FCONV, ME, ULT_STRE, ULT_STRN, &
-                                         TYPE, ZS
+      USE MODEL_STUF, ONLY            :  DOFPIN, EID, ELEM_LEN_AB, EMAT, NUM_EMG_FATAL_ERRS, EPROP, FCONV, ME, ULT_STRE,      &
+                                         ULT_STRN, TYPE, ZS
 
       IMPLICIT NONE
 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'BREL1'
       CHARACTER(1*BYTE), INTENT(IN)   :: OPT(6)            ! 'Y'/'N' flags for whether to calc certain elem matrices
       CHARACTER(LEN=*), INTENT(IN)    :: WRITE_WARN        ! If 'Y" write warning messages, otherwise do not
+      CHARACTER(1*BYTE)               :: CALC_BAR          ! 'Y' if the BAR stiffness routine needs to be called
+
+      INTEGER(LONG)                   :: I                 ! DO loop index
+      INTEGER(LONG)                   :: NUM_PFLAG_DOFS    ! The number of pin flagged DOF's for this element (from BAR1/BART)
 
 
 
@@ -81,6 +85,7 @@
       REAL(DOUBLE)                    :: NSM               ! Nonstructural mass
       REAL(DOUBLE)                    :: RHO               ! Material density
       REAL(DOUBLE)                    :: TREF              ! Element reference temperature
+      REAL(DOUBLE)                    :: TPIN(12,12)       ! Pin flag transformation from BAR1/BART
 
 
 
@@ -148,7 +153,23 @@
       ENDIF
 
 ! **********************************************************************************************************************************
-! Call routines to calc element matrices (stiffness, etc.)
+! Call routines to calc element matrices (stiffness, etc.).
+! For BAR's with pin flags the stiffness routine is also called when only ME is requested, since the pin flag transformation, TPIN,
+! is generated from the linear stiffness matrix and must also be applied to ME
+
+      NUM_PFLAG_DOFS = 0
+
+      CALC_BAR = 'N'
+      IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(5) == 'Y') .OR. (OPT(6) == 'Y')) THEN
+         CALC_BAR = 'Y'
+      ELSE IF ((OPT(1) == 'Y') .AND. (TYPE == 'BAR     ')) THEN
+         DO I=1,12
+            IF (DOFPIN(I) > 0) THEN
+               CALC_BAR = 'Y'
+               EXIT
+            ENDIF
+         ENDDO
+      ENDIF
 
       IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(5) == 'Y') .OR. (OPT(6) == 'Y')) THEN
 
@@ -156,27 +177,35 @@
 
             CALL ROD1 ( OPT, ELEM_LEN_AB, AREA, JTOR, ZS(1), E, G, ALPHA, TREF )
 
-         ELSE IF (TYPE == 'BAR     ') THEN                 ! Bernoulli-Euler prismatic beam
-
-            IF (DEBUG(249) == 0) THEN
-
-               CALL BAR1 ( OPT, ELEM_LEN_AB, AREA, I1, I2, JTOR, ZS(9), K1, K2, I12, E, G, ALPHA, TREF )
-
-            ELSE
-               IF (DABS(I12) < EPS1) THEN
-                  CALL BART ( OPT, ELEM_LEN_AB, AREA, I1, I2, JTOR, ZS(9), K1, K2, I12, E, G, ALPHA, TREF )
-               ELSE
-                  WRITE(ERR,1963) EID
-                  WRITE(F06,1963) EID
-                  RETURN
-               ENDIF
-
-            ENDIF
-
          ELSE IF (TYPE == 'BEAM    ') THEN                 ! General beam
 
             CALL BEAM
 
+         ENDIF
+
+      ENDIF
+
+      IF ((CALC_BAR == 'Y') .AND. (TYPE == 'BAR     ')) THEN ! Bernoulli-Euler prismatic beam
+
+         IF (DEBUG(249) == 0) THEN
+
+            CALL BAR1 ( OPT, ELEM_LEN_AB, AREA, I1, I2, JTOR, ZS(9), K1, K2, I12, E, G, ALPHA, TREF, NUM_PFLAG_DOFS, TPIN )
+
+         ELSE
+            IF (DABS(I12) < EPS1) THEN
+               CALL BART ( OPT, ELEM_LEN_AB, AREA, I1, I2, JTOR, ZS(9), K1, K2, I12, E, G, ALPHA, TREF, NUM_PFLAG_DOFS, TPIN )
+            ELSE
+               WRITE(ERR,1963) EID
+               WRITE(F06,1963) EID
+               RETURN
+            ENDIF
+
+         ENDIF
+
+! Apply the pin flag condensation to the mass matrix
+
+         IF ((OPT(1) == 'Y') .AND. (NUM_PFLAG_DOFS > 0)) THEN
+            CALL APPLY_PINFLG ( TPIN, ME(1:12,1:12), 12 )
          ENDIF
 
       ENDIF
@@ -305,7 +334,7 @@
       END SUBROUTINE ROD1
 
 
-      SUBROUTINE BAR1 ( OPT, L, AREA, I1, I2, JTOR, SCOEFF, K1, K2, I12, E, G, ALPHA, TREF )
+      SUBROUTINE BAR1 ( OPT, L, AREA, I1, I2, JTOR, SCOEFF, K1, K2, I12, E, G, ALPHA, TREF, NUM_PFLAG_DOFS, TPIN )
 
 ! Calculates, for 1-D BAR element
 
@@ -313,6 +342,7 @@
 !  2) SEi, STEi = element stress data recovery matrices, if OPT(3) = 'Y'
 !  3) KE        = element linear stiffness matrix      , if OPT(6) = 'N' (i.e. always calc KE linear unless OPT(6) = 'Y')
 !  4) KED       = element differen stiff matrix        , if OPT(6) = 'Y'
+!  5) NUM_PFLAG_DOFS, TPIN = number of pin flagged DOF's and the pin flag transformation (TPIN is only defined if NUM_PFLAG_DOFS > 0)
 
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
@@ -338,7 +368,7 @@
 
       INTEGER(LONG)                   :: I,J               ! DO loop induces
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
-      INTEGER(LONG)                   :: NUM_PFLAG_DOFS    ! The number of pin flagged DOF's for this element
+      INTEGER(LONG), INTENT(OUT)      :: NUM_PFLAG_DOFS    ! The number of pin flagged DOF's for this element
 
 
       REAL(DOUBLE) , INTENT(IN)       :: ALPHA             ! Coefficient of thermal expansion
@@ -375,6 +405,8 @@
       REAL(DOUBLE)                    :: G1                ! Intermediate variable used in calc terms for the stiff matrix, KE
       REAL(DOUBLE)                    :: G2                ! Intermediate variable used in calc terms for the stiff matrix, KE
       REAL(DOUBLE)                    :: KAA(6,6)          ! Upper left  6 x 6 partition of KE
+      REAL(DOUBLE) , INTENT(OUT)      :: TPIN(12,12)       ! Pin flag transformation, u = TPIN*u_r (from PINFLG_TRANSFORM).
+                                                           ! Returned so the caller can apply it to other elem matrices (e.g. ME)
       REAL(DOUBLE)                    :: KBA(6,6)          ! Lower left  6 x 6 partition of KE
       REAL(DOUBLE)                    :: KAB(6,6)          ! Upper right 6 x 6 partition of KE
       REAL(DOUBLE)                    :: K11               ! Intermediate variable used in calc terms for the stiff matrix, KE
@@ -546,7 +578,8 @@
       ENDDO
 
 ! Process Pin Flags. NUM_PFLAG_DOFS is a count of the total number of DOF pin flagged. DOFPIN(i) generated in ELMDAT is an
-! integer array of the DOF numbers of the pin flagged DOF.
+! integer array of the DOF numbers of the pin flagged DOF. TPIN is generated from the linear KE and then applied to KE here, and
+! to any other element matrix (e.g. KED below) that must have the same pin flag condensation.
 
       NUM_PFLAG_DOFS = 0
       DO I=1,12
@@ -555,7 +588,8 @@
          ENDIF
       ENDDO
       IF (NUM_PFLAG_DOFS /= 0) THEN
-         CALL PINFLG ( NUM_PFLAG_DOFS )
+         CALL PINFLG_TRANSFORM ( NUM_PFLAG_DOFS, TPIN )
+         CALL APPLY_PINFLG ( TPIN, KE(1:12,1:12), 12 )
       ENDIF
 
       DO I=1,6                                             ! Upper left partition of KE is KAA. Need this for calc'ing PTE, SEi
@@ -804,6 +838,12 @@
                KED(I,J) = KED(J,I)
             ENDDO
          ENDDO
+
+! Apply the same pin flag condensation to KED that was applied to KE
+
+         IF (NUM_PFLAG_DOFS /= 0) THEN
+            CALL APPLY_PINFLG ( TPIN, KED(1:12,1:12), 12 )
+         ENDIF
 
          IF (DEBUG(178) >= 1) THEN
             WRITE(F06,2001) TRIM(SUBR_NAME), OPT(6), LOAD_ISTEP, TYPE, EID
@@ -940,7 +980,7 @@
       END SUBROUTINE BAR1
 
 
-      SUBROUTINE BART ( OPT, L, AREA, I1, I2, JTOR, SCOEFF, K1, K2, I12, E, G, ALPHA, TREF )
+      SUBROUTINE BART ( OPT, L, AREA, I1, I2, JTOR, SCOEFF, K1, K2, I12, E, G, ALPHA, TREF, NUM_PFLAG_DOFS, TPIN )
 
 ! Calculates, for 1-D Timoshenko beam element
 
@@ -948,6 +988,7 @@
 !  2) SEi, STEi = element stress data recovery matrices, if OPT(3) = 'Y'
 !  3) KE        = element linear stiffness matrix      , if OPT(6) = 'N' (i.e. always calc KE linear unless OPT(6) = 'Y')
 !  4) KED       = element differen stiff matrix        , if OPT(6) = 'Y'
+!  5) NUM_PFLAG_DOFS, TPIN = number of pin flagged DOF's and the pin flag transformation (TPIN is only defined if NUM_PFLAG_DOFS > 0)
 
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
@@ -972,7 +1013,7 @@
 
       INTEGER(LONG)                   :: I,J               ! DO loop induces
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
-      INTEGER(LONG)                   :: NUM_PFLAG_DOFS    ! The number of pin flagged DOF's for this element
+      INTEGER(LONG), INTENT(OUT)      :: NUM_PFLAG_DOFS    ! The number of pin flagged DOF's for this element
 
 
       REAL(DOUBLE) , INTENT(IN)       :: ALPHA             ! Coefficient of thermal expansion
@@ -1007,6 +1048,8 @@
       REAL(DOUBLE)                    :: G2                ! Intermediate variable used in calc terms for the stiff matrix, KE
       REAL(DOUBLE)                    :: C1,C2,C3,C4,C5,C6,C7,C8,C9
       REAL(DOUBLE)                    :: KAA(6,6)          ! Upper left  6 x 6 partition of KE
+      REAL(DOUBLE) , INTENT(OUT)      :: TPIN(12,12)       ! Pin flag transformation, u = TPIN*u_r (from PINFLG_TRANSFORM).
+                                                           ! Returned so the caller can apply it to other elem matrices (e.g. ME)
       REAL(DOUBLE)                    :: KBA(6,6)          ! Lower left  6 x 6 partition of KE
       REAL(DOUBLE)                    :: KAB(6,6)          ! Upper right 6 x 6 partition of KE
       REAL(DOUBLE)                    :: PTA(6,NTSUB)      ! Thermal loads at end a of BAR (rows 1- 6 of PTE)
@@ -1117,7 +1160,8 @@
       ENDDO
 
 ! Process Pin Flags. NUM_PFLAG_DOFS is a count of the total number of DOF pin flagged. DOFPIN(i) generated in ELMDAT is an
-! integer array of the DOF numbers of the pin flagged DOF.
+! integer array of the DOF numbers of the pin flagged DOF. TPIN is generated from the linear KE and then applied to KE here, and
+! to any other element matrix (e.g. KED below) that must have the same pin flag condensation.
 
       NUM_PFLAG_DOFS = 0
       DO I=1,12
@@ -1126,7 +1170,8 @@
          ENDIF
       ENDDO
       IF (NUM_PFLAG_DOFS /= 0) THEN
-         CALL PINFLG ( NUM_PFLAG_DOFS )
+         CALL PINFLG_TRANSFORM ( NUM_PFLAG_DOFS, TPIN )
+         CALL APPLY_PINFLG ( TPIN, KE(1:12,1:12), 12 )
       ENDIF
 
       DO I=1,6                                             ! Upper left partition of KE is KAA. Need this for calc'ing PTE, SEi
@@ -1375,6 +1420,12 @@
                KED(I,J) = KED(J,I)
             ENDDO
          ENDDO
+
+! Apply the same pin flag condensation to KED that was applied to KE
+
+         IF (NUM_PFLAG_DOFS /= 0) THEN
+            CALL APPLY_PINFLG ( TPIN, KED(1:12,1:12), 12 )
+         ENDIF
 
          IF (DEBUG(178) >= 1) THEN
             WRITE(F06,2001) TRIM(SUBR_NAME), OPT(6), LOAD_ISTEP, TYPE, EID
@@ -1530,46 +1581,65 @@
       END SUBROUTINE BEAM
 
 
-      SUBROUTINE PINFLG ( NUM_PFLAG_DOFS )
+      SUBROUTINE PINFLG_TRANSFORM ( NUM_PFLAG_DOFS, TPIN )
 
-! Processes element pin flags to modify stiffness matrix
+! Generates the transformation, TPIN, that statically condenses the pin flagged DOF's out of the element linear stiffness matrix KE.
+! With the elem DOF's partitioned into retained (r) and pin flagged (p) sets:
+
+!     u = TPIN*u_r     where     u_p = -Kpp^-1 * Kpr * u_r
+
+! TPIN is ELDOF x ELDOF: identity for the retained DOF's, rows p hold -Kpp^-1*Kpr and columns p are zero. An element matrix X is
+! condensed with X = TPIN'*X*TPIN (subr APPLY_PINFLG), which gives zero rows/cols for the pin flagged DOF's. For KE this is the
+! usual static condensation. KE is not modified here. If the pin flags cannot be applied TPIN is returned as identity.
+
+! Kpp is factored with Cholesky. The squared diagonal terms of the factor are the same pivots that would be obtained by condensing
+! the pin flagged DOF's out of KE one at a time, so they are checked against EPSIL(1) to detect a pin flagged DOF that has lost all
+! of its stiffness due to the other pin flags (e.g. torsion released at both ends).
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
+      USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, WARN_ERR
-      USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO
+      USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE PARAMS, ONLY                :  EPSIL, SUPWARN
       USE MODEL_STUF, ONLY            :  EID, ELDOF, NUM_EMG_FATAL_ERRS, KE, DOFPIN, TYPE
 
       IMPLICIT NONE
 
-      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'PINFLG'
+      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'PINFLG_TRANSFORM'
 
       INTEGER(LONG), INTENT(IN)       :: NUM_PFLAG_DOFS    ! The number of pin flagged DOF's for this element
-
-                                                           ! Indicator if a DOF to be pinned has zero stiffness
-      CHARACTER( 1*BYTE)              :: ZERO_STIFF(NUM_PFLAG_DOFS)
-
       INTEGER(LONG)                   :: I,J,K             ! DO loop indices
       INTEGER(LONG)                   :: IERROR            ! Count of errors. Error occurs if a diag KE for a pinflaged DOF is zero
+      INTEGER(LONG)                   :: INFO              ! Output from LAPACK DPOTRF/DPOTRS
       INTEGER(LONG)                   :: PDOF              ! A DOF component number (1 digit) from array DOFPIN
 
+      LOGICAL                         :: PINNED(ELDOF)     ! .TRUE. for elem DOF's that are pin flagged
 
+      REAL(DOUBLE) , INTENT(OUT)      :: TPIN(ELDOF,ELDOF) ! Transformation from retained to all elem DOF's due to pin flags
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare for real zero
+                                                           ! Partition of KE for the pin flagged DOF's (Cholesky factor after DPOTRF)
+      REAL(DOUBLE)                    :: KPP(NUM_PFLAG_DOFS,NUM_PFLAG_DOFS)
+                                                           ! Rows of KE for pin flagged DOF's with cols of pin flagged DOF's zero.
+      REAL(DOUBLE)                    :: KPR(NUM_PFLAG_DOFS,ELDOF)          ! Kpp^-1*Kpr after DPOTRS
 
       INTRINSIC DABS
 
-
-
 ! **********************************************************************************************************************************
       EPS1 = EPSIL(1)
+
+! Initialize TPIN to identity (no condensation)
+
+      DO J=1,ELDOF
+         DO K=1,ELDOF
+            TPIN(J,K) = ZERO
+         ENDDO
+         TPIN(J,J) = ONE
+      ENDDO
 
 ! Check to make sure that the diagonal stiffness for the pin flagged DOF's are not zero
 
       IERROR = 0
       DO I=1,NUM_PFLAG_DOFS
-         ZERO_STIFF(I) = 'N'
          PDOF = DOFPIN(I)
          IF (DABS(KE(PDOF,PDOF)) <= EPS1) THEN
             IERROR = IERROR + 1
@@ -1578,50 +1648,68 @@
             IF (SUPWARN == 'N') THEN
                WRITE(F06,1921) PDOF, TYPE, EID
             ENDIF
-!xx         NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
-!xx         FATAL_ERR = FATAL_ERR + 1
-            ZERO_STIFF(I) = 'Y'
          ENDIF
       ENDDO
       IF (IERROR > 0) THEN
          RETURN
       ENDIF
 
-! Process pin flags in KE
+! Partition KE into Kpp and Kpr
 
-i_do: DO I = 1,NUM_PFLAG_DOFS
-         IF (ZERO_STIFF(I) == 'N') THEN
-            PDOF = DOFPIN(I)
-            DO J=1,ELDOF
-               IF (J /= PDOF) THEN
-                  DO K=1,ELDOF
-                     IF (K /= PDOF) THEN
-                        IF (DABS(KE(PDOF,PDOF)) > EPS1) THEN
-                           KE(J,K) = KE(J,K) - KE(PDOF,K)*KE(J,PDOF)/KE(PDOF,PDOF)
-                        ELSE
-                           WRITE(ERR,1937) TYPE, EID, PDOF
-                           WRITE(F06,1937) TYPE, EID, PDOF
-                           NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
-                           FATAL_ERR = FATAL_ERR + 1
-                           CYCLE i_do
-                        ENDIF
-                     ENDIF
-                  ENDDO
-               ENDIF
-            ENDDO
+      DO K=1,ELDOF
+         PINNED(K) = .FALSE.
+      ENDDO
+      DO I=1,NUM_PFLAG_DOFS
+         PINNED(DOFPIN(I)) = .TRUE.
+      ENDDO
 
-! Set row and column PDOF (pin flagged) to zero
+      DO I=1,NUM_PFLAG_DOFS
+         DO J=1,NUM_PFLAG_DOFS
+            KPP(I,J) = KE(DOFPIN(I),DOFPIN(J))
+         ENDDO
+         DO K=1,ELDOF
+            IF (PINNED(K)) THEN
+               KPR(I,K) = ZERO
+            ELSE
+               KPR(I,K) = KE(DOFPIN(I),K)
+            ENDIF
+         ENDDO
+      ENDDO
 
-            DO J=1,ELDOF
-               KE(PDOF,J) = ZERO
-               KE(J,PDOF) = ZERO
-            ENDDO
+! Factor Kpp and check pivots
 
+      CALL DPOTRF ( 'U', NUM_PFLAG_DOFS, KPP, NUM_PFLAG_DOFS, INFO )
+      IF (INFO == 0) THEN
+         DO I=1,NUM_PFLAG_DOFS
+            IF (KPP(I,I)*KPP(I,I) <= EPS1) THEN
+               INFO = I
+               EXIT
+            ENDIF
+         ENDDO
+      ENDIF
+      IF (INFO /= 0) THEN
+         IF (INFO > 0) THEN
+            PDOF = DOFPIN(INFO)
+         ELSE
+            PDOF = 0
          ENDIF
+         WRITE(ERR,1937) TYPE, EID, PDOF
+         WRITE(F06,1937) TYPE, EID, PDOF
+         NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
+         FATAL_ERR = FATAL_ERR + 1
+         RETURN
+      ENDIF
 
-      ENDDO i_do
+! Solve Kpp*X = Kpr (DPOTRS only fails for invalid arguments, which cannot occur here) and put -X in rows p of TPIN. The cols of
+! X for the pin flagged DOF's are zero, so this also zeros the diagonal terms of TPIN for the pin flagged DOF's
 
+      CALL DPOTRS ( 'U', NUM_PFLAG_DOFS, ELDOF, KPP, NUM_PFLAG_DOFS, KPR, NUM_PFLAG_DOFS, INFO )
 
+      DO I=1,NUM_PFLAG_DOFS
+         DO K=1,ELDOF
+            TPIN(DOFPIN(I),K) = -KPR(I,K)
+         ENDDO
+      ENDDO
 
       RETURN
 
@@ -1631,10 +1719,46 @@ i_do: DO I = 1,NUM_PFLAG_DOFS
  1937 FORMAT(' *ERROR  1937: DURING THE PROCESS OF APPLYING PIN FLAGS ON ',A,' ELEMENT ',I8,' THE DIAGONAL STIFFNESS FOR DISPL '   &
                     ,/,14X,' COMPONENT ',I2,' HAS BECOME ZERO. CANNOT PIN FLAG THIS COMPONENT')
 
-
-
 ! **********************************************************************************************************************************
 
-      END SUBROUTINE PINFLG
+      END SUBROUTINE PINFLG_TRANSFORM
+
+! ##################################################################################################################################
+
+      SUBROUTINE APPLY_PINFLG ( TPIN, X, N )
+
+! Applies the pin flag transformation generated in subr PINFLG_TRANSFORM to element matrix X: X = TPIN'*X*TPIN.
+! X is symmetrized afterwards to remove round-off asymmetry from the triple product.
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG, DOUBLE
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM
+      USE CONSTANTS_1, ONLY           :  HALF
+      USE FULL_MATRIX_ALGEBRA, ONLY   :  MATMULT_FFF, MATMULT_FFF_T
+
+      IMPLICIT NONE
+
+      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'APPLY_PINFLG'
+
+      INTEGER(LONG), INTENT(IN)       :: N                 ! Row/col size of TPIN and X
+      INTEGER(LONG)                   :: I,J               ! DO loop indices
+
+      REAL(DOUBLE) , INTENT(IN)       :: TPIN(N,N)         ! Pin flag transformation from subr PINFLG_TRANSFORM
+      REAL(DOUBLE) , INTENT(INOUT)    :: X(N,N)            ! Element matrix to transform
+      REAL(DOUBLE)                    :: XT(N,N)           ! Intermediate matrix X*TPIN
+
+! **********************************************************************************************************************************
+      CALL MATMULT_FFF   ( X, TPIN, N, N, N, XT )
+      CALL MATMULT_FFF_T ( TPIN, XT, N, N, N, X )
+
+      DO I=2,N
+         DO J=1,I-1
+            X(I,J) = HALF*(X(I,J) + X(J,I))
+            X(J,I) = X(I,J)
+         ENDDO
+      ENDDO
+
+      RETURN
+
+      END SUBROUTINE APPLY_PINFLG
 
    END MODULE LINE_ELEMENTS
