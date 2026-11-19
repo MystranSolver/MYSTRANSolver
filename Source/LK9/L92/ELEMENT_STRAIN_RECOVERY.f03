@@ -613,7 +613,7 @@
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO, HALF
+      USE CONSTANTS_1, ONLY           :  ZERO, HALF, TWO, THREE
       USE MODEL_STUF, ONLY            :  STRAIN, TYPE
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRN_OPT
       USE LINK9_STUFF, ONLY           :  OGEL
@@ -655,6 +655,8 @@
          STRAIN_T(1:3) = STRAIN(1:3)                         ! STRAIN holds engineering shear strain (gamma = 2*tensor shear), which is what is
          STRAIN_T(4:6) = HALF*STRAIN(4:6)                    ! printed and stored in OGEL; principal values need the tensor shear strain
          CALL PRINCIPAL_3D ( STRAIN_T, PRINCIPAL_STRAIN, MEAN, VONMISES, SIG_OCT, TAU_OCT )
+         VONMISES = TWO*VONMISES/THREE                       ! PRINCIPAL_3D returns the stress form sqrt(3*J2). von Mises strain is 2/3 of it
+                                                             ! (as MSC writes it, and as PRINCIPAL_STRAIN_2D already does for plates)
          IF (WRITE_OGEL == 'Y') THEN
             NUM1 = NUM1 + 1
             IF (NUM1 > SIZE_ALLOCATED) THEN
