@@ -768,6 +768,7 @@
       REAL(DOUBLE)                    :: BCOV(6,NDOFB)     ! Covariant (tensor) strain components: rr, ss, tt, rs, st, rt
       REAL(DOUBLE)                    :: ERT_A(NDOFB), EST_A(NDOFB), ERT_B(NDOFB), EST_B(NDOFB), ERT_C(NDOFB), EST_C(NDOFB)
       REAL(DOUBLE)                    :: ERT_D(NDOFB), ERT_F(NDOFB), EST_E(NDOFB), EST_F(NDOFB), CHAT(NDOFB)
+      REAL(DOUBLE)                    :: BROW(NDOFB)       ! Contiguous buffer for one row of BCOV (avoids array temporaries)
       REAL(DOUBLE)                    :: G(3,3), GCON(3,3)
 
       INTEGER(LONG)                   :: ROW, K, L, I, J
@@ -780,9 +781,9 @@
       BCOV(:,:) = ZERO
 
       IF (MEMBRANE .OR. BENDING) THEN
-         CALL MITC3_COVARIANT_STRAIN_ROW ( R, S, T, 1, 1, MEMBRANE, BENDING, BCOV(1,:) )
-         CALL MITC3_COVARIANT_STRAIN_ROW ( R, S, T, 2, 2, MEMBRANE, BENDING, BCOV(2,:) )
-         CALL MITC3_COVARIANT_STRAIN_ROW ( R, S, T, 1, 2, MEMBRANE, BENDING, BCOV(4,:) )
+         CALL MITC3_COVARIANT_STRAIN_ROW ( R, S, T, 1, 1, MEMBRANE, BENDING, BROW )  ;  BCOV(1,:) = BROW
+         CALL MITC3_COVARIANT_STRAIN_ROW ( R, S, T, 2, 2, MEMBRANE, BENDING, BROW )  ;  BCOV(2,:) = BROW
+         CALL MITC3_COVARIANT_STRAIN_ROW ( R, S, T, 1, 2, MEMBRANE, BENDING, BROW )  ;  BCOV(4,:) = BROW
       ENDIF
 
       IF (SHEAR) THEN

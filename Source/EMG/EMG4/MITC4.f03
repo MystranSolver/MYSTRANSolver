@@ -373,7 +373,10 @@
                                                            ! strain-displacement operators at this (R,S), via the shared
                                                            ! top/bottom extraction in MITC4_BMBS (see that routine for the
                                                            ! rationale and the caveat about warped-element local bases).
-               CALL MITC4_BMBS( R, S, BE1(1:3,1:6*ELGP,STR_PT_NUM), BE2(1:3,1:6*ELGP,STR_PT_NUM), BE3(1:2,1:6*ELGP,STR_PT_NUM) )
+                                                           ! BE3 has 3 rows, so BE3(1:2,:,k) is not contiguous; go through
+                                                           ! BSI2 to avoid an array temporary for the BS argument.
+               CALL MITC4_BMBS( R, S, BE1(1:3,1:6*ELGP,STR_PT_NUM), BE2(1:3,1:6*ELGP,STR_PT_NUM), BSI2 )
+               BE3(1:2,1:6*ELGP,STR_PT_NUM) = BSI2
 
                IF (STR_PT_NUM <= MSTRPT) THEN
                   CALL THERM_CURV_AT_RS ( R, S, THERM_KAPPA(1:3,STR_PT_NUM) )
