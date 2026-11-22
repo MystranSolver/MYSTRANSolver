@@ -395,10 +395,12 @@
       REAL(DOUBLE)                    :: C01               ! Intermediate variable used in calc terms for the stiff matrix, KE
       REAL(DOUBLE)                    :: C02               ! Intermediate variable used in calc terms for the stiff matrix, KE
       REAL(DOUBLE)                    :: C03               ! Intermediate variable used in calc terms for the stiff matrix, KE
-      REAL(DOUBLE)                    :: DELTA1            ! I2/DEN
-      REAL(DOUBLE)                    :: DELTA2            ! I1/DEN
-      REAL(DOUBLE)                    :: DELTA12           ! I12/DEN
-      REAL(DOUBLE)                    :: DEN               ! I1*I2 - I12**2. If DEN = 0 cannot calc stress rec matrices (SEi, STEi)
+      REAL(DOUBLE)                    :: DELTA1            ! I2/DEN (1/I1, or 0 if I1 = 0, when DEN = 0)
+      REAL(DOUBLE)                    :: DELTA2            ! I1/DEN (1/I2, or 0 if I2 = 0, when DEN = 0)
+      REAL(DOUBLE)                    :: DELTA12           ! I12/DEN (0 when DEN = 0)
+      REAL(DOUBLE)                    :: D1I1, D2I2        ! DELTA1*I1, DELTA2*I2 (1 when DEN = 0)
+      REAL(DOUBLE)                    :: D12I1, D12I2      ! DELTA12*I1, DELTA12*I2 (0 when DEN = 0)
+      REAL(DOUBLE)                    :: DEN               ! I1*I2 - I12**2. Only zero if I12 = 0 and I1 and/or I2 = 0
       REAL(DOUBLE)                    :: DUM1(3,NTSUB)     ! Intermediate matrix
       REAL(DOUBLE)                    :: DUM2(3,NTSUB)     ! Intermediate matrix
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare for real zero
@@ -506,9 +508,7 @@
 
 ! Calc intermediate variables
 
-      DELTA1 = I2/DEN
-      DELTA2 = I1/DEN
-      DELTA12= I12/DEN
+      CALL BAR_INERTIA_FACTORS ( I1, I2, I12, DELTA1, DELTA2, DELTA12, D1I1, D2I2, D12I1, D12I2 )
       RA     = AREA*E/L
       RG     = JTOR*G/L
       K11    = L*L*R1/FOUR
@@ -642,22 +642,22 @@
             ENDDO
 
             ABAR(1,1) =  ONE
-            ABAR(2,2) =  DELTA1*I1*L/SIX
-            ABAR(2,3) =  DELTA1*I1*L/THREE
-            ABAR(2,4) = -DELTA12*I2*L/SIX
-            ABAR(2,5) = -DELTA12*I2*L/THREE
-            ABAR(3,2) = -DELTA12*I1*L/SIX
-            ABAR(3,3) = -DELTA12*I1*L/THREE
-            ABAR(3,4) =  DELTA2*I2*L/SIX
-            ABAR(3,5) =  DELTA2*I2*L/THREE
-            ABAR(5,2) = -DELTA12*I1/TWO
-            ABAR(5,3) = -DELTA12*I1/TWO
-            ABAR(5,4) =  DELTA2*I2/TWO
-            ABAR(5,5) =  DELTA2*I2/TWO
-            ABAR(6,2) = -DELTA1*I1/TWO
-            ABAR(6,3) = -DELTA1*I1/TWO
-            ABAR(6,4) =  DELTA12*I2/TWO
-            ABAR(6,5) =  DELTA12*I2/TWO
+            ABAR(2,2) =  D1I1*L/SIX
+            ABAR(2,3) =  D1I1*L/THREE
+            ABAR(2,4) = -D12I2*L/SIX
+            ABAR(2,5) = -D12I2*L/THREE
+            ABAR(3,2) = -D12I1*L/SIX
+            ABAR(3,3) = -D12I1*L/THREE
+            ABAR(3,4) =  D2I2*L/SIX
+            ABAR(3,5) =  D2I2*L/THREE
+            ABAR(5,2) = -D12I1/TWO
+            ABAR(5,3) = -D12I1/TWO
+            ABAR(5,4) =  D2I2/TWO
+            ABAR(5,5) =  D2I2/TWO
+            ABAR(6,2) = -D1I1/TWO
+            ABAR(6,3) = -D1I1/TWO
+            ABAR(6,4) =  D12I2/TWO
+            ABAR(6,5) =  D12I2/TWO
 
             DO I=1,6
                DO J=1,5
@@ -1037,10 +1037,12 @@
       REAL(DOUBLE)                    :: BTA(6,5)          ! = KAA*ABAR. Each col gives thermal loads at end a per unit TPRIME value
       REAL(DOUBLE)                    :: BTB(6,5)          ! = KBA*ABAR. Each col gives thermal loads at end a per unit TPRIME value
       REAL(DOUBLE)                    :: C01               ! Intermediate variable used in calc terms for the stiff matrix, KE
-      REAL(DOUBLE)                    :: DELTA1            ! I2/DEN
-      REAL(DOUBLE)                    :: DELTA2            ! I1/DEN
-      REAL(DOUBLE)                    :: DELTA12           ! I12/DEN
-      REAL(DOUBLE)                    :: DEN               ! I1*I2 - I12**2. If DEN = 0 cannot calc stress rec matrices (SEi, STEi)
+      REAL(DOUBLE)                    :: DELTA1            ! I2/DEN (1/I1, or 0 if I1 = 0, when DEN = 0)
+      REAL(DOUBLE)                    :: DELTA2            ! I1/DEN (1/I2, or 0 if I2 = 0, when DEN = 0)
+      REAL(DOUBLE)                    :: DELTA12           ! I12/DEN (0 when DEN = 0)
+      REAL(DOUBLE)                    :: D1I1, D2I2        ! DELTA1*I1, DELTA2*I2 (1 when DEN = 0)
+      REAL(DOUBLE)                    :: D12I1, D12I2      ! DELTA12*I1, DELTA12*I2 (0 when DEN = 0)
+      REAL(DOUBLE)                    :: DEN               ! I1*I2 - I12**2. Only zero if I12 = 0 and I1 and/or I2 = 0
       REAL(DOUBLE)                    :: DUM1(3,NTSUB)     ! Intermediate matrix
       REAL(DOUBLE)                    :: DUM2(3,NTSUB)     ! Intermediate matrix
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare for real zero
@@ -1107,9 +1109,7 @@
       RG =  G*JTOR/L
 
       DEN    = I1*I2 - I12*I12                             ! I1*I2 > I12^2 was checked when PBAR's were read in subr LOADB
-      DELTA1 = I2/DEN
-      DELTA2 = I1/DEN
-      DELTA12= 0.D0
+      CALL BAR_INERTIA_FACTORS ( I1, I2, ZERO, DELTA1, DELTA2, DELTA12, D1I1, D2I2, D12I1, D12I2 )   ! I12 = 0 for BART
 
       IF (DEBUG(203) > 0) CALL DEBUG_BART ( 1 )
 
@@ -1224,22 +1224,22 @@
             ENDDO
 
             ABAR(1,1) =  ONE
-            ABAR(2,2) =  DELTA1*I1*L/SIX
-            ABAR(2,3) =  DELTA1*I1*L/THREE
-            ABAR(2,4) = -DELTA12*I2*L/SIX
-            ABAR(2,5) = -DELTA12*I2*L/THREE
-            ABAR(3,2) = -DELTA12*I1*L/SIX
-            ABAR(3,3) = -DELTA12*I1*L/THREE
-            ABAR(3,4) =  DELTA2*I2*L/SIX
-            ABAR(3,5) =  DELTA2*I2*L/THREE
-            ABAR(5,2) = -DELTA12*I1/TWO
-            ABAR(5,3) = -DELTA12*I1/TWO
-            ABAR(5,4) =  DELTA2*I2/TWO
-            ABAR(5,5) =  DELTA2*I2/TWO
-            ABAR(6,2) = -DELTA1*I1/TWO
-            ABAR(6,3) = -DELTA1*I1/TWO
-            ABAR(6,4) =  DELTA12*I2/TWO
-            ABAR(6,5) =  DELTA12*I2/TWO
+            ABAR(2,2) =  D1I1*L/SIX
+            ABAR(2,3) =  D1I1*L/THREE
+            ABAR(2,4) = -D12I2*L/SIX
+            ABAR(2,5) = -D12I2*L/THREE
+            ABAR(3,2) = -D12I1*L/SIX
+            ABAR(3,3) = -D12I1*L/THREE
+            ABAR(3,4) =  D2I2*L/SIX
+            ABAR(3,5) =  D2I2*L/THREE
+            ABAR(5,2) = -D12I1/TWO
+            ABAR(5,3) = -D12I1/TWO
+            ABAR(5,4) =  D2I2/TWO
+            ABAR(5,5) =  D2I2/TWO
+            ABAR(6,2) = -D1I1/TWO
+            ABAR(6,3) = -D1I1/TWO
+            ABAR(6,4) =  D12I2/TWO
+            ABAR(6,5) =  D12I2/TWO
 
             DO I=1,6
                DO J=1,5
@@ -1581,6 +1581,70 @@
       END SUBROUTINE BEAM
 
 
+! ##################################################################################################################################
+
+      SUBROUTINE BAR_INERTIA_FACTORS ( I1, I2, I12, DELTA1, DELTA2, DELTA12, D1I1, D2I2, D12I1, D12I2 )
+
+! Calculates the terms of the inverse of the BAR section inertia matrix used for stress recovery, and their products with I1 and I2
+! used for thermal loads. With DEN = I1*I2 - I12^2:
+!     DELTA1 = I2/DEN, DELTA2 = I1/DEN, DELTA12 = I12/DEN,
+!     D1I1 = DELTA1*I1, D2I2 = DELTA2*I2, D12I1 = DELTA12*I1, D12I2 = DELTA12*I2
+! DEN can only be zero when I12 = 0 and I1 and/or I2 = 0, since subr CHECK_BAR_MOIs requires I12^2 < I1*I2 when I12 is not zero.
+! A zero I1 or I2 means the BAR has no bending stiffness in that plane, so it carries no bending moment and has no bending stress
+! there, and the DELTA for that plane is set to zero. The products are given their I12 = 0 values (D1I1 = D2I2 = 1,
+! D12I1 = D12I2 = 0) rather than 0*(1/0). The thermal load and thermal stress terms they multiply are zero for the plane with no
+! bending stiffness.
+
+      USE PENTIUM_II_KIND, ONLY       :  DOUBLE
+      USE CONSTANTS_1, ONLY           :  ZERO, ONE
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE) , INTENT(IN)       :: I1                ! Bending inertia in plane 1
+      REAL(DOUBLE) , INTENT(IN)       :: I2                ! Bending inertia in plane 2
+      REAL(DOUBLE) , INTENT(IN)       :: I12               ! Product of inertia
+      REAL(DOUBLE) , INTENT(OUT)      :: DELTA1            ! I2/DEN
+      REAL(DOUBLE) , INTENT(OUT)      :: DELTA2            ! I1/DEN
+      REAL(DOUBLE) , INTENT(OUT)      :: DELTA12           ! I12/DEN
+      REAL(DOUBLE) , INTENT(OUT)      :: D1I1              ! DELTA1*I1
+      REAL(DOUBLE) , INTENT(OUT)      :: D2I2              ! DELTA2*I2
+      REAL(DOUBLE) , INTENT(OUT)      :: D12I1             ! DELTA12*I1
+      REAL(DOUBLE) , INTENT(OUT)      :: D12I2             ! DELTA12*I2
+      REAL(DOUBLE)                    :: DEN               ! I1*I2 - I12^2
+
+! **********************************************************************************************************************************
+      DEN = I1*I2 - I12*I12
+
+      IF (DEN /= ZERO) THEN
+
+         DELTA1  = I2/DEN
+         DELTA2  = I1/DEN
+         DELTA12 = I12/DEN
+         D1I1    = DELTA1*I1
+         D2I2    = DELTA2*I2
+         D12I1   = DELTA12*I1
+         D12I2   = DELTA12*I2
+
+      ELSE                                                 ! I12 = 0 and I1 and/or I2 = 0
+
+         DELTA1 = ZERO
+         IF (I1 /= ZERO) DELTA1 = ONE/I1
+         DELTA2 = ZERO
+         IF (I2 /= ZERO) DELTA2 = ONE/I2
+         DELTA12 = ZERO
+         D1I1    = ONE
+         D2I2    = ONE
+         D12I1   = ZERO
+         D12I2   = ZERO
+
+      ENDIF
+
+      RETURN
+
+      END SUBROUTINE BAR_INERTIA_FACTORS
+
+! ##################################################################################################################################
+
       SUBROUTINE PINFLG_TRANSFORM ( NUM_PFLAG_DOFS, TPIN )
 
 ! Generates the transformation, TPIN, that statically condenses the pin flagged DOF's out of the element linear stiffness matrix KE.
@@ -1598,9 +1662,9 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, WARN_ERR
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
-      USE PARAMS, ONLY                :  EPSIL, SUPWARN
+      USE PARAMS, ONLY                :  EPSIL
       USE MODEL_STUF, ONLY            :  EID, ELDOF, NUM_EMG_FATAL_ERRS, KE, DOFPIN, TYPE
 
       IMPLICIT NONE
@@ -1643,11 +1707,10 @@
          PDOF = DOFPIN(I)
          IF (DABS(KE(PDOF,PDOF)) <= EPS1) THEN
             IERROR = IERROR + 1
-            WARN_ERR = WARN_ERR + 1
             WRITE(ERR,1921) PDOF, TYPE, EID
-            IF (SUPWARN == 'N') THEN
-               WRITE(F06,1921) PDOF, TYPE, EID
-            ENDIF
+            WRITE(F06,1921) PDOF, TYPE, EID
+            NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
+            FATAL_ERR = FATAL_ERR + 1
          ENDIF
       ENDDO
       IF (IERROR > 0) THEN
@@ -1714,7 +1777,7 @@
       RETURN
 
 ! **********************************************************************************************************************************
- 1921 FORMAT(' *WARNING    : DISPL COMPONENT ',I3,' ON ',A,' ELEMENT ',I8,' HAS NO STIFFNESS AND CANNOT BE PIN FLAGGED')
+ 1921 FORMAT(' *ERROR  1921: DISPL COMPONENT ',I3,' ON ',A,' ELEMENT ',I8,' HAS NO STIFFNESS AND CANNOT BE PIN FLAGGED')
 
  1937 FORMAT(' *ERROR  1937: DURING THE PROCESS OF APPLYING PIN FLAGS ON ',A,' ELEMENT ',I8,' THE DIAGONAL STIFFNESS FOR DISPL '   &
                     ,/,14X,' COMPONENT ',I2,' HAS BECOME ZERO. CANNOT PIN FLAG THIS COMPONENT')
