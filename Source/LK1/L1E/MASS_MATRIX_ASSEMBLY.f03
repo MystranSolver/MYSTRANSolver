@@ -42,10 +42,13 @@
    INTEGER(LONG), PARAMETER        :: MASS_DOF_SCALAR  = 3 ! Scalar point DOF
    INTEGER(LONG), PARAMETER        :: MASS_DOF_NTYPES  = 3 ! Number of DOF types
 
-! Terms in element and CONM2 mass matrices smaller than MASS_FILTER_FAC*EPSIL(1) relative to their diagonal terms are treated as
-! roundoff (see subr FILTER_MASS_MATRIX). The factor allows for several ulps of roundoff from coordinate transformations.
+! Terms in element and CONM2 mass matrices smaller than MASS_FILTER_TOL relative to their diagonal terms are treated as roundoff
+! (see subr FILTER_MASS_MATRIX). The factor allows for several ulps of roundoff from coordinate transformations.
+! The machine precision is used directly (EPSILON(1.0D0) is the same as LAPACK DLAMCH('P'), the default for EPSIL(1)) rather than
+! EPSIL(1), so that a small PARAM EPSIL 1 (used to keep tiny terms elsewhere) does not disable this filter.
 
    REAL(DOUBLE), PARAMETER         :: MASS_FILTER_FAC  = 100.0D0
+   REAL(DOUBLE), PARAMETER         :: MASS_FILTER_TOL  = MASS_FILTER_FAC*EPSILON(1.0D0)
 
    CONTAINS
 
@@ -1589,10 +1592,9 @@ j_do3:      DO J = 1,NUM
 !       |A(i,j)| < TOL*SQRT(|A(i,i)|*|A(j,j)|). A valid (positive semi-definite) mass matrix has |A(i,j)| <= SQRT(A(i,i)*A(j,j)),
 !       and a zero diagonal term requires the whole row and column to be zero, so any term remaining there is roundoff.
 
-! TOL = MASS_FILTER_FAC*EPSIL(1)
+! TOL = MASS_FILTER_TOL (a multiple of the machine precision, independent of PARAM EPSIL)
 
       USE CONSTANTS_1, ONLY           :  ZERO
-      USE PARAMS, ONLY                :  EPSIL
 
       IMPLICIT NONE
 
@@ -1609,7 +1611,7 @@ j_do3:      DO J = 1,NUM
       INTRINSIC                       :: DABS, DSQRT, MAX
 
 ! **********************************************************************************************************************************
-      TOL = MASS_FILTER_FAC*EPSIL(1)
+      TOL = MASS_FILTER_TOL
 
 ! Test 1: diagonal terms, relative to the largest diagonal term of the same DOF type
 
