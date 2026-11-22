@@ -27,12 +27,25 @@
    MODULE MASS_MATRIX_ASSEMBLY
 
    USE ELEMENT_TRANSFORMATIONS, ONLY:  ELEM_TRANSFORM_LBG
+   USE PENTIUM_II_KIND, ONLY       :  LONG, DOUBLE
 
    IMPLICIT NONE
 
    PRIVATE
 
    PUBLIC :: EMP0, EMP, MGGC_MASS_MATRIX, SPARSE_MGG
+
+! DOF types used by subr FILTER_MASS_MATRIX. Each type has its own scale for the diagonal test since the types have different units.
+
+   INTEGER(LONG), PARAMETER        :: MASS_DOF_TRAN    = 1 ! Translational DOF (components 1-3 of a physical grid)
+   INTEGER(LONG), PARAMETER        :: MASS_DOF_ROT     = 2 ! Rotational DOF (components 4-6 of a physical grid)
+   INTEGER(LONG), PARAMETER        :: MASS_DOF_SCALAR  = 3 ! Scalar point DOF
+   INTEGER(LONG), PARAMETER        :: MASS_DOF_NTYPES  = 3 ! Number of DOF types
+
+! Terms in element and CONM2 mass matrices smaller than MASS_FILTER_FAC*EPSIL(1) relative to their diagonal terms are treated as
+! roundoff (see subr FILTER_MASS_MATRIX). The factor allows for several ulps of roundoff from coordinate transformations.
+
+   REAL(DOUBLE), PARAMETER         :: MASS_FILTER_FAC  = 100.0D0
 
    CONTAINS
 
@@ -165,7 +178,7 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, LTERM_MGGE, MELDOF, NELE, NSUB
-      USE PARAMS, ONLY                :  EPSIL, SETLKTM, SPARSTOR, SUPINFO
+      USE PARAMS, ONLY                :  SETLKTM, SPARSTOR, SUPINFO
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE MODEL_STUF, ONLY            :  ELDOF, NUM_EMG_FATAL_ERRS, ME, PLY_NUM, TYPE
@@ -181,16 +194,11 @@
 
 
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
-      REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
-
-      INTRINSIC                       :: DABS
 
 
 
 ! **********************************************************************************************************************************
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages
-
-      EPS1 = EPSIL(1)
 
 ! Null dummy array DQE used in call to ELEM_TRANSFORM_LBG
 
@@ -230,7 +238,9 @@ elems:DO I=1,NELE
             CALL ELEM_TRANSFORM_LBG ( 'ME', ME, DQE )
          ENDIF
 
-! Count nonzero terms in transformed ME
+! Remove roundoff-level terms (must be the same as in subr EMP) and count nonzero terms in transformed ME
+
+         CALL FILTER_ELEM_MASS_MATRIX
 
          DO J=1,ELDOF
             IF (SPARSTOR == 'SYM') THEN
@@ -239,7 +249,7 @@ elems:DO I=1,NELE
                KSTART = 1
             ENDIF
             DO K=KSTART,ELDOF
-               IF (DABS(ME(J,K)) < EPS1) THEN
+               IF (ME(J,K) == ZERO) THEN
                   CYCLE
                ELSE
                   LTERM_MGGE = LTERM_MGGE + 2
@@ -296,7 +306,7 @@ elems:DO I=1,NELE
       USE TIMDAT, ONLY                :  TSEC
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE CONSTANTS_1, ONLY           :  ZERO
-      USE PARAMS, ONLY                :  EPSIL, SPARSTOR
+      USE PARAMS, ONLY                :  SPARSTOR
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  AGRID, ELDT, ELDOF, ELGP, GRID_ID, NUM_EMG_FATAL_ERRS, ME, OELDT, PLY_NUM, TYPE
       USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
@@ -339,15 +349,12 @@ elems:DO I=1,NELE
 
 
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
-      REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
 
-      INTRINSIC                       :: DABS, IAND
+      INTRINSIC                       :: IAND
 
 
 
 ! **********************************************************************************************************************************
-      EPS1 = EPSIL(1)
-
 ! Make units for writing errors the error file and output file
 
       OUNT(1) = ERR
@@ -435,6 +442,10 @@ elems:DO I=1,NELE
 
          ENDIF
 
+! Remove roundoff-level terms from ME (must be the same as in subr EMP0_3)
+
+         CALL FILTER_ELEM_MASS_MATRIX
+
 ! Put the element mass matrix, ME, into EMS array. J ranges over rows, K over cols of elem mass matrix, ME
 
 mgg_rows:DO J = 1,ELDOF
@@ -452,7 +463,7 @@ mgg_rows:DO J = 1,ELDOF
 mgg_cols:   DO K = KSTART,ELDOF
                MGG_ROW  = MGG_ROWJ                         ! Make sure we have correct row num. It may have been flipped w/ col
                MGG_COL  = EDOF(K)
-               IF (DABS(ME(J,K)) < EPS1) THEN
+               IF (ME(J,K) == ZERO) THEN
                   CYCLE mgg_cols
                ENDIF
 
@@ -683,7 +694,7 @@ emspnt0:          DO                                       ! so, run this loop u
       USE IOUNT1, ONLY                :  ERR, F06, SC1, WRT_ERR
       USE SCONTR, ONLY                :  NGRID, NTERM_MGGC, BLNK_SUB_NAM
       USE CONSTANTS_1, ONLY           :  ZERO
-      USE PARAMS, ONLY                :  EPSIL, SPARSTOR, WTMASS
+      USE PARAMS, ONLY                :  ART_MASS, ART_ROT_MASS, ART_TRAN_MASS, SPARSTOR, WTMASS
       USE TIMDAT, ONLY                :  TSEC
       USE MODEL_STUF, ONLY            :  AGRID, GRID_ID, INV_GRID_SEQ
       USE SPARSE_MATRICES, ONLY       :  I_MGGC, J_MGGC, MGGC
@@ -708,18 +719,16 @@ emspnt0:          DO                                       ! so, run this loop u
       INTEGER(LONG)                   :: KSTART            ! Used in deciding whether to process all elem mass terms or only
 !                                                            the ones on and above the diagonal (controlled by param SPARSTOR)
       INTEGER(LONG)                   :: MGGC_COL_NUM      ! A calculated col number for a nonzero term in MGG arrays
+      INTEGER(LONG), PARAMETER        :: CONM2_DOF_TYPE(6) = (/ MASS_DOF_TRAN, MASS_DOF_TRAN, MASS_DOF_TRAN,                      &
+                                                                MASS_DOF_ROT , MASS_DOF_ROT , MASS_DOF_ROT  /)
+!                                                            DOF types of the rows of MGG_CONM2, for subr FILTER_MASS_MATRIX
 
 
-      REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
       REAL(DOUBLE)                    :: MGG_CONM2(6,6)    ! 6 X 6 mass matrix in global coords for one CONM2
-
-      INTRINSIC                       :: DABS
 
 
 
 ! **********************************************************************************************************************************
-      EPS1 = EPSIL(1)
-
 ! Initialize
 
       NTERM_MGGC = 36*NGRID                                ! Max possible NTERM_MGGC. Will be set to actual later by count nonzeros
@@ -734,6 +743,23 @@ i_do1:DO I=1,NGRID
          CALL MGG_CONM2_PROC ( I, GRID_NUM, MGG_CONM2, MGG_CONM2_NONZERO )
          CALL GET_GRID_NUM_COMPS ( I, NUM_COMPS, SUBR_NAME )
 
+! Filter the CONM2 terms (which may contain roundoff from coordinate transformations), then add the artificial mass terms
+! (PARAM ART_MASS). Artificial mass is user-specified and not transformed, so it is only subject to the exact zero test below.
+
+         IF (MGG_CONM2_NONZERO == 'Y') THEN
+            CALL FILTER_MASS_MATRIX ( INT(6,LONG), CONM2_DOF_TYPE, MGG_CONM2 )
+         ENDIF
+
+         IF (ART_MASS == 'Y') THEN
+            DO J=1,3
+               MGG_CONM2(J,J) = MGG_CONM2(J,J) + ART_TRAN_MASS
+            ENDDO
+            DO J=4,6
+               MGG_CONM2(J,J) = MGG_CONM2(J,J) + ART_ROT_MASS
+            ENDDO
+            MGG_CONM2_NONZERO = 'Y'
+         ENDIF
+
          IF (MGG_CONM2_NONZERO == 'Y') THEN
             DO J=1,NUM_COMPS
                DELTA_KTERM_MGGC = 0
@@ -744,7 +770,7 @@ i_do1:DO I=1,NGRID
                   KSTART = 1                               ! Process all of MGG_CONM2
                ENDIF
                DO K=KSTART,NUM_COMPS
-                  IF (DABS(MGG_CONM2(J,K)) >= EPS1) THEN
+                  IF (MGG_CONM2(J,K) /= ZERO) THEN
                      MGGC_COL_NUM       = IROW_START + K - 1
                      KTERM_MGGC         = KTERM_MGGC + 1
                      DELTA_KTERM_MGGC   = DELTA_KTERM_MGGC + 1
@@ -795,7 +821,6 @@ i_do1:DO I=1,NGRID
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE MODEL_STUF, ONLY            :  CONM2, RCONM2
-      USE PARAMS, ONLY                :  ART_MASS, ART_ROT_MASS, ART_TRAN_MASS
 
       IMPLICIT NONE
 
@@ -823,21 +848,8 @@ i_do1:DO I=1,NGRID
          ENDDO
       ENDDO
 
-! Add artificial mass terms to the grid, if requested
-
-      IF (ART_MASS == 'Y') THEN
-
-         DO I=1,3
-            MGG_CONM2(I,I) = ART_TRAN_MASS
-         ENDDO
-         MGG_CONM2_NONZERO = 'Y'
-
-         DO I=4,6
-            MGG_CONM2(I,I) = ART_ROT_MASS
-         ENDDO
-         MGG_CONM2_NONZERO = 'Y'
-
-      ENDIF
+! Artificial mass (PARAM ART_MASS) is not added here. It is added by the caller after the CONM2 terms have been filtered, so that
+! the user-specified artificial mass values are never removed by the filter.
 
 ! Process CONM2's for this grid
 
@@ -1135,7 +1147,7 @@ j_do2:   DO J=1,NCMASS
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE DOF_TABLES,ONLY             :  TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  GRID_ID
-      USE PARAMS, ONLY                :  EPSIL, PRTMASS, SUPINFO, WTMASS
+      USE PARAMS, ONLY                :  PRTMASS, SUPINFO, WTMASS
       USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
       USE SPARSE_MATRICES, ONLY       :  I2_MGG, I_MGG, J_MGG, MGG, I_MGGC, J_MGGC, MGGC, I_MGGE, J_MGGE, MGGE,                    &
                                          I_MGGS, J_MGGS, MGGS,  SYM_MGGC, SYM_MGGE, SYM_MGGS
@@ -1178,7 +1190,6 @@ j_do2:   DO J=1,NCMASS
       INTEGER(LONG)                   :: ROW_NUM_START     ! DOF number where TDOF data begins for a grid
 
 
-      REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
       REAL(DOUBLE)                    :: GRID_MGG(6,6)     ! 6 x 6 mass matrix for a grid
       REAL(DOUBLE)                    :: REMS(NDOFG)       ! 1D array of the terms from EMS(I) pertaining to one row of the G-set
 !                                                            mass matrix. Initially, the cols are not in increasing global DOF
@@ -1190,8 +1201,9 @@ j_do2:   DO J=1,NCMASS
 
 
 ! **********************************************************************************************************************************
-      EPS1 = EPSIL(1)
 ! Pass # 1: Determine final NTERM_MGGE (may be less due to zero terms)
+! Terms in EMS were already filtered at the element level (subr EMP), so only exact zeros (e.g. from cancellation of element
+! contributions) are removed here. Pass # 2 must use the same test.
 
       NZERO = 0
 i_do0:DO I = 1,NDOFG                                       ! Start conversion.
@@ -1201,7 +1213,7 @@ i_do0:DO I = 1,NDOFG                                       ! Start conversion.
 
          NUM   = 0                                         ! Count zero terms so we can debit NTERM_MGGE before writing it to file
 j_do0:   DO J = 1,NDOFG
-            IF (DABS(EMS(IS)) < EPS1) THEN
+            IF (EMS(IS) == ZERO) THEN
                NZERO = NZERO + 1
             ELSE
                NUM = NUM + 1
@@ -1260,7 +1272,7 @@ k_do:    DO K=1,NUM_COMPS
 
             NUM = 0
 j_do1:      DO J=1,NDOFG
-               IF (DABS(EMS(IS)) >= EPS1) THEN
+               IF (EMS(IS) /= ZERO) THEN
                   NUM = NUM + 1
                   REMS(NUM) = EMS(IS)
                   RJ(NUM)   = EMSCOL(IS)
@@ -1490,5 +1502,144 @@ j_do3:      DO J = 1,NUM
 ! **********************************************************************************************************************************
 
       END SUBROUTINE SPARSE_MGG
+
+! ##################################################################################################################################
+
+      SUBROUTINE FILTER_ELEM_MASS_MATRIX
+
+! Removes roundoff-level terms from the current element mass matrix ME (after it has been transformed to global coords) using subr
+! FILTER_MASS_MATRIX. This must be called identically by subr EMP0_3 (which estimates the number of mass terms) and subr EMP (which
+! stores them), so that the estimate is consistent with the terms actually stored.
+
+! ELAS and USERIN elements are not transformed, and USERIN mass is user-supplied, so their ME is not filtered here (callers only
+! skip exact zeros).
+
+      USE MODEL_STUF, ONLY            :  ELDOF, ME, TYPE
+      USE SCONTR, ONLY                :  MELDOF
+
+      IMPLICIT NONE
+
+      INTEGER(LONG)                   :: DOF_TYPE(MELDOF)  ! DOF type of each row of ME
+
+! **********************************************************************************************************************************
+      IF ((TYPE(1:4) == 'ELAS') .OR. (TYPE == 'USERIN  ')) THEN
+         RETURN
+      ENDIF
+
+      CALL GET_ELEM_MASS_DOF_TYPES ( DOF_TYPE )
+      CALL FILTER_MASS_MATRIX ( ELDOF, DOF_TYPE, ME )
+
+      RETURN
+
+      END SUBROUTINE FILTER_ELEM_MASS_MATRIX
+
+! ##################################################################################################################################
+
+      SUBROUTINE GET_ELEM_MASS_DOF_TYPES ( DOF_TYPE )
+
+! Sets the DOF type (translational, rotational or scalar) of each of the ELDOF DOF's of the current element, in the same order as
+! the rows of ME. Uses the number of components of each of the element's grids, in the same way that ELDOF itself is calculated (see
+! EMG/EMG1/ELEMENT_DATA_GATHERING.f03).
+
+      USE MODEL_STUF, ONLY            :  BGRID, ELGP
+      USE DOF_ARRAY_INDEXING, ONLY    :  GET_GRID_NUM_COMPS
+
+      IMPLICIT NONE
+
+      CHARACTER(LEN=*), PARAMETER     :: SUBR_NAME = 'GET_ELEM_MASS_DOF_TYPES'
+
+      INTEGER(LONG), INTENT(OUT)      :: DOF_TYPE(:)       ! DOF type of each element DOF
+      INTEGER(LONG)                   :: I,J               ! DO loop indices
+      INTEGER(LONG)                   :: K                 ! Element DOF number
+      INTEGER(LONG)                   :: NUM_COMPS         ! 6 if a grid is a physical grid, 1 if a scalar point
+
+! **********************************************************************************************************************************
+      K = 0
+      DO I=1,ELGP
+         CALL GET_GRID_NUM_COMPS ( BGRID(I), NUM_COMPS, SUBR_NAME )
+         DO J=1,NUM_COMPS
+            K = K + 1
+            IF      (NUM_COMPS == 1) THEN
+               DOF_TYPE(K) = MASS_DOF_SCALAR
+            ELSE IF (J <= 3) THEN
+               DOF_TYPE(K) = MASS_DOF_TRAN
+            ELSE
+               DOF_TYPE(K) = MASS_DOF_ROT
+            ENDIF
+         ENDDO
+      ENDDO
+
+      RETURN
+
+      END SUBROUTINE GET_ELEM_MASS_DOF_TYPES
+
+! ##################################################################################################################################
+
+      SUBROUTINE FILTER_MASS_MATRIX ( N, DOF_TYPE, A )
+
+! Removes roundoff-level terms from a small symmetric mass matrix A (an element mass matrix, or the 6 x 6 CONM2 mass matrix for a
+! grid) by setting them to exactly zero. The tests are relative to the matrix's own diagonal terms, so the result does not depend on
+! the unit system (or on WTMASS):
+
+!   (1) A diagonal term A(i,i) is set to zero if |A(i,i)| < TOL*DMAX(t), where DMAX(t) is the largest |A(k,k)| over the DOF's k that
+!       have the same type t as DOF i (translational, rotational or scalar). Each type has its own scale since the types have
+!       different units (e.g. kg vs kg-m^2), whose ratio depends on the length unit and section size.
+
+!   (2) An off-diagonal term A(i,j) is set to zero if either diagonal term A(i,i) or A(j,j) is zero (after test 1), or if
+!       |A(i,j)| < TOL*SQRT(|A(i,i)|*|A(j,j)|). A valid (positive semi-definite) mass matrix has |A(i,j)| <= SQRT(A(i,i)*A(j,j)),
+!       and a zero diagonal term requires the whole row and column to be zero, so any term remaining there is roundoff.
+
+! TOL = MASS_FILTER_FAC*EPSIL(1)
+
+      USE CONSTANTS_1, ONLY           :  ZERO
+      USE PARAMS, ONLY                :  EPSIL
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(IN)       :: N                 ! Number of rows/cols of A to process
+      INTEGER(LONG), INTENT(IN)       :: DOF_TYPE(:)       ! DOF type of each row of A (MASS_DOF_TRAN/ROT/SCALAR)
+      INTEGER(LONG)                   :: I,J               ! DO loop indices
+
+      REAL(DOUBLE), INTENT(INOUT)     :: A(:,:)            ! Mass matrix to filter (rows/cols 1 to N are processed)
+      REAL(DOUBLE)                    :: DMAX(MASS_DOF_NTYPES)
+!                                                            Largest |diagonal term| for each DOF type
+      REAL(DOUBLE)                    :: SQRT_DIAG(N)      ! SQRT(|A(i,i)|) after test 1
+      REAL(DOUBLE)                    :: TOL               ! Relative tolerance
+
+      INTRINSIC                       :: DABS, DSQRT, MAX
+
+! **********************************************************************************************************************************
+      TOL = MASS_FILTER_FAC*EPSIL(1)
+
+! Test 1: diagonal terms, relative to the largest diagonal term of the same DOF type
+
+      DMAX(:) = ZERO
+      DO I=1,N
+         DMAX(DOF_TYPE(I)) = MAX( DMAX(DOF_TYPE(I)), DABS(A(I,I)) )
+      ENDDO
+
+      DO I=1,N
+         IF (DABS(A(I,I)) < TOL*DMAX(DOF_TYPE(I))) THEN
+            A(I,I) = ZERO
+         ENDIF
+         SQRT_DIAG(I) = DSQRT(DABS(A(I,I)))                ! Product of square roots avoids over/underflow of A(i,i)*A(j,j)
+      ENDDO
+
+! Test 2: off-diagonal terms, relative to the (filtered) diagonal terms in their row and column
+
+      DO I=1,N
+         DO J=1,N
+            IF (I == J) CYCLE
+            IF ((SQRT_DIAG(I) == ZERO) .OR. (SQRT_DIAG(J) == ZERO)) THEN
+               A(I,J) = ZERO
+            ELSE IF (DABS(A(I,J)) < TOL*SQRT_DIAG(I)*SQRT_DIAG(J)) THEN
+               A(I,J) = ZERO
+            ENDIF
+         ENDDO
+      ENDDO
+
+      RETURN
+
+      END SUBROUTINE FILTER_MASS_MATRIX
 
    END MODULE MASS_MATRIX_ASSEMBLY
