@@ -367,14 +367,6 @@ ply_do:  DO K=1,NUM_PLIES_TO_PROC
             THETA_PLY = RPCOMP(INTL_PID,PLY_RPCOMP_INDEX+1)! Ply angle from elem material axis to ply longitudinal axis
             ZPLY      = RPCOMP(INTL_PID,PLY_RPCOMP_INDEX+2)! Coord of mid plane of ply relative to mid plane of elem
 
-            IF      ((TYPE == 'QDMEM   ') .OR. (TYPE == 'QUAD4K  ') .OR. (TYPE == 'QUAD4   ') .OR.                                 &
-                     (TYPE == 'TRMEM   ') .OR. (TYPE == 'TRIA3K  ') .OR. (TYPE == 'TRIA3   ')) THEN
-               MASS_PER_UNIT_AREA = MASS_PER_UNIT_AREA + (RHO(1)*TPLY)
-            ELSE IF ((TYPE == 'QDPLT1  ') .OR. (TYPE == 'QDPLT2  ') .OR.                                                           &
-                     (TYPE == 'TRPLT1  ') .OR. (TYPE == 'TRPLT2  ')) THEN
-               MASS_PER_UNIT_AREA = MASS_PER_UNIT_AREA
-            ENDIF
-
             IF (INTL_MID(1) /= 0) THEN
                MTRL_ACT_ID(1) = MATL(INTL_MID(1),1)
                MTRL_TYPE(1)   = MATL(INTL_MID(1),2)
@@ -413,6 +405,14 @@ ply_do:  DO K=1,NUM_PLIES_TO_PROC
             EMAT(MRMATLC+1,3) = SB                         ! SB is the allowable interlaminar shear stress (on PCOMP B.D. entry)
             EMAT(MRMATLC+2,3) = SB
             CALL MATERIAL_PROPS_2D ( WRITE_WARN )
+                                                           ! Ply mass, after MATERIAL_PROPS_2D has set RHO(1) for this ply
+            IF      ((TYPE == 'QDMEM   ') .OR. (TYPE == 'QUAD4K  ') .OR. (TYPE == 'QUAD4   ') .OR.                                 &
+                     (TYPE == 'TRMEM   ') .OR. (TYPE == 'TRIA3K  ') .OR. (TYPE == 'TRIA3   ')) THEN
+               MASS_PER_UNIT_AREA = MASS_PER_UNIT_AREA + (RHO(1)*TPLY)
+            ELSE IF ((TYPE == 'QDPLT1  ') .OR. (TYPE == 'QDPLT2  ') .OR.                                                           &
+                     (TYPE == 'TRPLT1  ') .OR. (TYPE == 'TRPLT2  ')) THEN
+               MASS_PER_UNIT_AREA = MASS_PER_UNIT_AREA
+            ENDIF
                                                            ! Reset INTL_MID(3) if either transverse shear modulii are zero
             IF ((DABS(ET(1,1)) < EPS1) .OR. (DABS(ET(2,2)) < EPS1)) THEN
                INTL_MID(3) = 0
