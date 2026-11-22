@@ -1431,7 +1431,7 @@
             ENDIF
                                                            ! Read torsional stress coefficient
             CALL R8FLD ( JCARD(5), JF(5), RPBAR(NPBAR,17) )
-            IF (DABS(RPBAR(NPBAR,17)) > EPS1) THEN         ! Set BARTOR to 'Y' if any BAR elem has a nonzero torsional stress coeff
+            IF (RPBAR(NPBAR,17) /= ZERO) THEN              ! Set BARTOR to 'Y' if any BAR elem has a nonzero torsional stress coeff
                BARTOR = 'Y'
             ENDIF
 
