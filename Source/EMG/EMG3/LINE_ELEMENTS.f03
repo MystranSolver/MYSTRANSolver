@@ -51,8 +51,7 @@
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  TWO
-      USE PARAMS, ONLY                :  EPSIL
+      USE CONSTANTS_1, ONLY           :  ZERO, TWO
       USE DEBUG_PARAMETERS
       USE MODEL_STUF, ONLY            :  DOFPIN, EID, ELEM_LEN_AB, EMAT, NUM_EMG_FATAL_ERRS, EPROP, FCONV, ME, ULT_STRE,      &
                                          ULT_STRN, TYPE, ZS
@@ -72,7 +71,6 @@
       REAL(DOUBLE)                    :: ALPHA             ! Coefficient of thermal expansion
       REAL(DOUBLE)                    :: AREA              ! Cross-sectional area
       REAL(DOUBLE)                    :: E                 ! Youngs modulus
-      REAL(DOUBLE)                    :: EPS1              ! A small number to compare for real zero
       REAL(DOUBLE)                    :: G                 ! Shear modulus
       REAL(DOUBLE)                    :: GE                ! Material damping coeff
       REAL(DOUBLE)                    :: I1                ! Bending inertia in plane 1
@@ -90,7 +88,6 @@
 
 
 ! **********************************************************************************************************************************
-      EPS1 = EPSIL(1)
 
 ! Set element property and material constants
 
@@ -192,7 +189,7 @@
             CALL BAR1 ( OPT, ELEM_LEN_AB, AREA, I1, I2, JTOR, ZS(9), K1, K2, I12, E, G, ALPHA, TREF, NUM_PFLAG_DOFS, TPIN )
 
          ELSE
-            IF (DABS(I12) < EPS1) THEN
+            IF (I12 == ZERO) THEN
                CALL BART ( OPT, ELEM_LEN_AB, AREA, I1, I2, JTOR, ZS(9), K1, K2, I12, E, G, ALPHA, TREF, NUM_PFLAG_DOFS, TPIN )
             ELSE
                WRITE(ERR,1963) EID
@@ -475,7 +472,7 @@
 ! If DEBUG(12) = 1, then use R1 and R2 from below even when I12 = 0
 
       IERROR = 0
-      IF ((DABS(I12) <= EPS1) .OR. (DEBUG(12) == 1)) THEN
+      IF ((I12 == ZERO) .OR. (DEBUG(12) == 1)) THEN
          IF (DABS(G1) >= EPS1) THEN
             R1D = ONE + R1*L/G1
             IF (R1D <= EPS1) THEN
@@ -713,7 +710,7 @@
          B2(2,5) =  DELTA2
          B2(2,6) =  DELTA12
 
-         IF (DABS(JTOR) > EPS1) THEN                       ! Can't calc torsional stress if torsional constant = 0
+         IF (JTOR /= ZERO) THEN                            ! Can't calc torsional stress if torsional constant = 0
             B2(3,4) = -SCOEFF/JTOR
          ENDIF
 
@@ -1295,7 +1292,7 @@
          B2(2,5) =  DELTA2
          B2(2,6) =  DELTA12
 
-         IF (DABS(JTOR) > EPS1) THEN                       ! Can't calc torsional stress if torsional constant = 0
+         IF (JTOR /= ZERO) THEN                            ! Can't calc torsional stress if torsional constant = 0
             B2(3,4) = -SCOEFF/JTOR
          ENDIF
 
