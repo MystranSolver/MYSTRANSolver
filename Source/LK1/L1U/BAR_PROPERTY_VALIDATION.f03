@@ -36,13 +36,12 @@
 
       SUBROUTINE CHECK_BAR_MOIs ( NAME, ID, I1, I2, I12, IERR )
 
-! Checks sensibility of the 3 MOI's of a BAR or BEAM element and replaces zero values with small finite ones
+! Checks sensibility of the 3 MOI's of a BAR or BEAM element. Zero I1 and/or I2 are allowed (no bending stiffness in that plane)
+! and are left as zero. The BAR element handles them when it divides by I1*I2 - I12^2.
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
-      USE TIMDAT, ONLY                :  TSEC
-      USE PARAMS, ONLY                :  EPSIL, SUPINFO
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM
       USE CONSTANTS_1, ONLY           :  ZERO
 
       IMPLICIT NONE
@@ -54,10 +53,9 @@
       INTEGER(LONG), INTENT(OUT)      :: IERR              ! Error indicator
 
 
-      REAL(DOUBLE), INTENT(INOUT)     :: I1                ! MOI of the bar or beam
-      REAL(DOUBLE), INTENT(INOUT)     :: I2                ! MOI of the bar or beam
-      REAL(DOUBLE), INTENT(INOUT)     :: I12               ! MOI of the bar or beam
-      REAL(DOUBLE)                    :: EPS1              ! A small number
+      REAL(DOUBLE), INTENT(IN)        :: I1                ! MOI of the bar or beam
+      REAL(DOUBLE), INTENT(IN)        :: I2                ! MOI of the bar or beam
+      REAL(DOUBLE), INTENT(IN)        :: I12               ! MOI of the bar or beam
 
 
 ! **********************************************************************************************************************************
@@ -65,31 +63,13 @@
 
       IERR = 0
 
-      EPS1 = EPSIL(1)
 
+! If I12 is not zero, make sure I1*I2 > I12^2. I12^2 <= I1*I2 is proven by the Cauchy-Schwarz inequality, and equality is not
+! allowed because the BAR element divides by I1*I2 - I12^2 when I12 is not zero. So I1*I2 - I12^2 can only be zero if I12 = 0.
 
-! If I12 is zero replace a zero value of I1 and/or I2 with a small positive value. If I12 is not zero, make sure I1*I2 > I12^2
+      IF (I12 /= ZERO) THEN
 
-      IF (DABS(I12) <= EPS1) THEN
-         IF (DABS(I1) < EPS1) THEN
-            I1 = 10*EPS1
-            WRITE(ERR,1001) NAME, ID, 'I1', I1
-            IF (SUPINFO == 'N') THEN
-               WRITE(F06,1001) NAME, ID, 'I1', I1
-            ENDIF
-         ENDIF
-
-         IF (DABS(I2) <= EPS1) THEN
-            I2 = 10*EPS1
-            WRITE(ERR,1001) NAME, ID, 'I2', I2
-            IF (SUPINFO == 'N') THEN
-               WRITE(F06,1001) NAME, ID, 'I2', I2
-            ENDIF
-         ENDIF
-
-      ELSE                                                 ! I12^2 must be <= I1*I2 is proven by the Cauchy-Schwarz inequality
-
-         IF (I12*I12 > I1*I2) THEN
+         IF (I12*I12 >= I1*I2) THEN
             IERR = IERR + 1
             WRITE(ERR,1195) NAME, ID, I1, I2, I12
             WRITE(F06,1195) NAME, ID, I1, I2, I12
@@ -102,10 +82,8 @@
       RETURN
 
 ! **********************************************************************************************************************************
- 1001 FORMAT(' *INFORMATION: FOR ',A,'   ',A8,' MOMENT OF INERTIA ',A,' HAS BEEN CHANGED FROM 0 TO A SMALL NUMBER = ',1ES10.3)
-
  1195 FORMAT(' *ERROR  1195: THE MOMENTS AND PRODUCTS OF INERTIA ON ',A,'   ',A8,' DO NOT SATISIFY THE REQUIREMENT THAT:'          &
-                    ,/,14X,' I12^2  <=  I1*12  WHERE: I1 = ',1ES10.3,', I2 = ',1ES10.3,', I12 = ',1ES10.3)
+                    ,/,14X,' I12^2  <  I1*I2  WHERE: I1 = ',1ES10.3,', I2 = ',1ES10.3,', I12 = ',1ES10.3)
 
 ! **********************************************************************************************************************************
 
