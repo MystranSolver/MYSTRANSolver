@@ -237,6 +237,11 @@ jdo:  DO J=1,NFIELD                                        ! Load element data i
 
       IMPLICIT NONE
 
+      LOGICAL                         :: IS_SECOND         ! The line after a large field parent's first line continues it
+      INTEGER(LONG)                   :: ISPILL            ! That line is small field with data in fields 6-9
+
+      LOGICAL                         :: PARENT_NOT_READ   ! The last entry is one MYSTRAN does not read
+
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME   = 'LOADB'
       CHARACTER(LEN=BD_ENTRY_LEN)     :: CARD1              ! BD card (a small field card or the 1st half of a large field card)
       CHARACTER(LEN=BD_ENTRY_LEN)     :: CARD2              ! 2nd half of a large field card
@@ -333,6 +338,7 @@ jdo:  DO J=1,NFIELD                                        ! Load element data i
 
       ! Process Bulk Data cards in a large loop that runs until either an
       ! ENDDATA card is found or when an error or EOF/EOR occurs
+      PARENT_NOT_READ = .FALSE.
 bdf:  DO
 
          CALL READ_BDF_LINE(IN1, IOCHK, CARD1)
@@ -362,6 +368,8 @@ bdf:  DO
          IF (ECHO(1:4) /= 'NONE') THEN
             WRITE(F06,101) CARD1
          ENDIF
+
+         IF (INDEX(' +*$', CARD1(1:1)) == 0) PARENT_NOT_READ = .FALSE.   ! A new entry starts
 
          ! Determine if the card is large or small format
          LARGE_FLD_INP = 'N'
@@ -401,17 +409,16 @@ bdf:  DO
                   WRITE(F06,101) CARD2
                ENDIF
 
-               IF      (CARD2( 1: 8) == CARD1(73:80)) THEN
-                  CONTINUE
-               ELSE IF ((CARD2( 1: 1) == '*') .AND. (CARD1(73:73) == ' ') .AND. (CARD2(2:8) == CARD1(74:80))) THEN
-                  CONTINUE
-               ELSE IF ((CARD2( 1: 1) == ' ') .AND. (CARD1(73:73) == '*') .AND. (CARD2(2:8) == CARD1(74:80))) THEN
-                  CONTINUE
-               ELSE
+               CALL LARGE_PARENT_SECOND_LINE ( CARD1, CARD2, IS_SECOND, ISPILL )
+               IF (.NOT. IS_SECOND) THEN
                   ! CARD2 is not a continuation of CARD1 so backspace IN1
                   BACKSPACE(IN1)
                   CARD2(1:) = ' '
                   CARD2(1:8) = CARD1(73:80)
+               ELSE IF (ISPILL /= 0) THEN
+                  FATAL_ERR = FATAL_ERR + 1
+                  WRITE(ERR,1212) TRIM(CARD1), TRIM(CARD2)
+                  WRITE(F06,1212) TRIM(CARD1), TRIM(CARD2)
                ENDIF
 
                CALL FFIELD2 ( CARD1, CARD2, CARD, IERR )
@@ -779,13 +786,18 @@ bdf:  DO
          ELSE IF (CARD(1:7) == 'ENDDATA' )  THEN
             EXIT
          ELSE IF ((CARD(1:1) == ' ') .OR. (CARD(1:1) == '+') .OR. (CARD(1:1) == '*'))  THEN
-            !WRITE(ERR,*) 'FAILED WHEN FINDING A CONTINUATION'
-            !WRITE(F06,*) 'FAILED WHEN FINDING A CONTINUATION'
-            ! only defined when it's a large field continuation
-            !WRITE(ERR,'(A)') CARD2
-            !WRITE(F06,'(A)') CARD2
+            ! A continuation that no entry read: the reader of its entry stops before it, or its marker matches no field 10. Its
+            ! data is not used, which is said here (always, as it may change results). The continuations of an entry MYSTRAN
+            ! does not read are not listed: that entry has its own warning.
+            IF (.NOT. PARENT_NOT_READ) THEN
+               WARN_ERR = WARN_ERR + 1
+               WRITE(ERR,1211) TRIM(CARD)
+               WRITE(F06,1211) TRIM(CARD)
+            ENDIF
+            CYCLE
 
          ELSE                                              ! CARD not processed by MYSTRAN
+            PARENT_NOT_READ = .TRUE.
             WARN_ERR = WARN_ERR + 1
             write(err,*) 'card name not found...'
             WRITE(ERR,101) CARD
@@ -1173,6 +1185,11 @@ j_do2:            DO J=2,LMPCADDC
 
  1003 FORMAT(' *ERROR  1003: ALL FIELDS ON THE ABOVE ENTRY MUST BE NO LONGER THAN 8 CHARACTERS')
 
+ 1212 FORMAT(' *ERROR  1212: THE SMALL FIELD LINE AFTER THE FIRST LINE OF A LARGE FIELD ENTRY GIVES THE FIELDS 6-9 OF THE',  &
+             ' ENTRY FROM ITS',/,15X,'FIELDS 2-5; ITS FIELDS 6-9 MUST BE BLANK (MOVE THEM TO THE NEXT CONTINUATION):',/,15X,A,/,15X,A)
+ 1211 FORMAT(' *WARNING    : THIS CONTINUATION ENTRY WAS NOT READ AND ITS DATA IS NOT USED (THE READER OF ITS ENTRY DOES NOT',&
+             ' READ IT, OR',/,15X,'ITS CONTINUATION MARKER MATCHES NO FIELD 10 BEFORE IT):',/,15X,A)
+
  1005 FORMAT(' *ERROR  1005: NO EIGENVALUE ENTRY WAS FOUND IN BULK DATA DECK MATCHING SID = ',I8,' REQUESTED IN CASE CONTROL')
 
  1006 FORMAT(' *ERROR  1006: NO ',A3,' ENTRY WAS FOUND IN BULK DATA DECK MATCHING SID = ',I8,' REQUESTED IN CASE CONTROL')
@@ -1390,6 +1407,9 @@ j_do2:            DO J=2,LMPCADDC
 
       IMPLICIT NONE
 
+      LOGICAL                         :: IS_SECOND         ! The line after a large field parent's first line continues it
+      INTEGER(LONG)                   :: ISPILL            ! That line is small field with data in fields 6-9
+
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME   = 'LOADB0'
       CHARACTER( 7*BYTE), PARAMETER   :: END_CARD    = 'ENDDATA'
 
@@ -1528,13 +1548,8 @@ j_do2:            DO J=2,LMPCADDC
 !                 CARD2(1:8) = CARD1(73:80)
 !              ENDIF
 
-               IF      (CARD2( 1: 8) == CARD1(73:80)) THEN
-                  CONTINUE     !ICONT = 1
-               ELSE IF ((CARD2( 1: 8) == '*       ') .AND. (CARD1(73:80) == '        ')) THEN
-                  CONTINUE     !ICONT = 1
-               ELSE IF ((CARD2( 1: 8) == '        ') .AND. (CARD1(73:80) == '*       ')) THEN
-                  CONTINUE     !ICONT = 1
-               ELSE
+               CALL LARGE_PARENT_SECOND_LINE ( CARD1, CARD2, IS_SECOND, ISPILL )
+               IF (.NOT. IS_SECOND) THEN
                   BACKSPACE(IN1)
                   CARD2(1:) = ' '
                   CARD2(1:8) = CARD1(73:80)
@@ -1889,6 +1904,9 @@ j_do2:            DO J=2,LMPCADDC
 
       IMPLICIT NONE
 
+      LOGICAL                         :: IS_SECOND         ! The line after a large field parent's first line continues it
+      INTEGER(LONG)                   :: ISPILL            ! That line is small field with data in fields 6-9
+
       INTEGER(LONG), PARAMETER        :: NUM_PARMS = 25      ! Number of PARAM entries allowed in RESTART
       INTEGER(LONG), PARAMETER        :: NUM_DEB   = 28      ! Number of DEBUG entries allowed in RESTART
 
@@ -2065,6 +2083,13 @@ j_do2:            DO J=2,LMPCADDC
 
                IF (COMMENT_COL > 1) THEN
                   CARD2(COMMENT_COL:) = ' '
+               ENDIF
+
+               CALL LARGE_PARENT_SECOND_LINE ( CARD1, CARD2, IS_SECOND, ISPILL )
+               IF (.NOT. IS_SECOND) THEN                   ! CARD2 does not continue CARD1: it is read next
+                  BACKSPACE(IN1)
+                  CARD2(1:) = ' '
+                  CARD2(1:8) = CARD1(73:80)
                ENDIF
 
                CALL FFIELD2 ( CARD1, CARD2, CARD, IERR )
@@ -3281,6 +3306,55 @@ i_do3:      DO I=FILE_NAM_MAXLEN,1,-1
 ! **********************************************************************************************************************************
 
       END SUBROUTINE LOADE0
+
+
+! ##################################################################################################################################
+
+      SUBROUTINE LARGE_PARENT_SECOND_LINE ( CARD1, CARD2, IS_SECOND, ISPILL )
+
+! CARD2, the line after the first physical line CARD1 of a large field entry, continues it when its field 1 (also of a free field
+! line: LINE_TAG) matches field 10 of CARD1 (subr TAGS_MATCH: equal after the first character, which is blank, '+' or '*').
+! A large field line ('*') is the second
+! half of the entry as it is. A small field line (blank or '+' in column 1) gives the fields 6-9 of the entry from its fields
+! 2-5: it is rewritten here as a large field second half (its field 10 kept), so that FFIELD2 joins the two lines as usual. Its
+! fields 6-9 would be fields 10-13 of the entry, which the 10-field entry cannot hold: ISPILL = 1 if they are not blank.
+! Comments ($ after column 1) are removed from CARD2.
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG
+      USE SCONTR, ONLY                :  BD_ENTRY_LEN, JCARD_LEN
+      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD, TAGS_MATCH, LINE_TAG
+      USE INPUT_FILE_MECHANICS, ONLY  :  FFIELD
+
+      CHARACTER(LEN=*), INTENT(IN)    :: CARD1
+      CHARACTER(LEN=*), INTENT(INOUT) :: CARD2
+      LOGICAL         , INTENT(OUT)   :: IS_SECOND
+      INTEGER(LONG)   , INTENT(OUT)   :: ISPILL
+      CHARACTER(LEN=LEN(CARD2))       :: SMALL
+      CHARACTER(LEN=JCARD_LEN)        :: JC(10)
+      INTEGER(LONG)                   :: I, IERR
+
+      ISPILL = 0
+      DO I=2,LEN(CARD2)
+         IF (CARD2(I:I) == '$') THEN
+            CARD2(I:) = ' '
+            EXIT
+         ENDIF
+      ENDDO
+      IS_SECOND = TAGS_MATCH ( CARD1(73:80), LINE_TAG ( CARD2 ) ) ! Field 1, also of a free field line
+      IF ((.NOT. IS_SECOND) .OR. (CARD2(1:1) == '*')) RETURN
+
+      SMALL = CARD2                                        ! A small field line: its fields 2-5 become the second half
+      CALL FFIELD ( SMALL, IERR )
+      CALL MKJCARD ( 'LARGE_PARENT_SECOND_LINE', SMALL, JC )
+      IF ((JC(6)(1:) /= ' ') .OR. (JC(7)(1:) /= ' ') .OR. (JC(8)(1:) /= ' ') .OR. (JC(9)(1:) /= ' ')) ISPILL = 1
+      CARD2(1:) = ' '
+      CARD2(1:8) = CARD1(73:80)
+      DO I=1,4
+         CARD2(9+16*(I-1):24+16*(I-1)) = JC(I+1)
+      ENDDO
+      CARD2(73:80) = JC(10)(1:8)
+
+      END SUBROUTINE LARGE_PARENT_SECOND_LINE
 
    END MODULE INPUT_STAGE_DISPATCH
 
