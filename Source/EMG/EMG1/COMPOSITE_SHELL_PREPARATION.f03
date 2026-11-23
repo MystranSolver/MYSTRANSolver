@@ -165,7 +165,7 @@ pcom0:IF (PCOMP_PROPS == 'N') THEN                         ! Element is not a co
             FCONV(3)          =  TS
          ENDIF
 
-         IF ((TYPE(1:5) == 'QUAD4') .OR. (TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'TRIA3')) THEN
+         IF ((TYPE(1:5) == 'QUAD4') .OR. (TYPE(1:5) == 'TRIA3') .OR. (TYPE == 'SHEAR   ')) THEN
             MASS_PER_UNIT_AREA = (RHO(1)*TM + NSM)
          ENDIF
 
