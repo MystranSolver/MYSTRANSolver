@@ -781,37 +781,44 @@
 
          C01 = Fx/L
 
+! Bending moment terms. M1 and M2 are internal moments (EI1*v" and EI2*w") with the same sign at both ends for constant moment. The
+! coupling of twist to transverse displ must vanish for rigid body twist with constant moment so the end a and b terms have opposite
+! signs. The M/2 terms coupling twist to bending rotation make the end moments semitangential so that they are consistent between
+! elements at joints where not all rotations are continuous. See McGuire, Gallagher and Ziemian, Matrix Structural Analysis.
+
          KED( 2, 2) =  (SIX/FIVE)*Fx/L
-         KED( 2, 4) =  M2b/L
+         KED( 2, 4) =  M2a/L
          KED( 2, 6) =  Fx/TEN
          KED( 2, 8) = -KED( 2, 2)
-         KED( 2,10) =  M2a/L
+         KED( 2,10) = -M2b/L
          KED( 2,12) =  KED( 2, 6)
 
          KED( 3, 3) =  KED( 2, 2)
-         KED( 3, 4) =  M1b/L
+         KED( 3, 4) = -M1a/L
          KED( 3, 5) = -KED( 2, 6)
          KED( 3, 9) = -KED( 2, 2)
-         KED( 3,10) =  M1a/L
+         KED( 3,10) =  M1b/L
          KED( 3,11) = -KED( 2, 6)
 
-         KED( 4, 4) =  JTOR*Fx/(L*L*AREA)
-         KED( 4, 5) = -V1*L/SIX
-         KED( 4, 6) = -V2*L/SIX
-         KED( 4, 8) = -M2b/L
-         KED( 4, 9) = -M1b/L
+         IF (AREA > ZERO) THEN                             ! Fx = 0 if AREA = 0, so the term is zero
+            KED( 4, 4) =  (I1 + I2)*Fx/(AREA*L)            ! Polar moment of area, not torsional constant
+         ENDIF
+         KED( 4, 5) = -V1*L/SIX + M1a/TWO
+         KED( 4, 6) = -V2*L/SIX + M2a/TWO
+         KED( 4, 8) = -KED( 2, 4)
+         KED( 4, 9) = -KED( 3, 4)
          KED( 4,10) = -KED( 4, 4)
-         KED( 4,11) = -KED( 4, 5)
-         KED( 4,12) = -KED( 4, 6)
+         KED( 4,11) =  V1*L/SIX
+         KED( 4,12) =  V2*L/SIX
 
          KED( 5, 5) =  FOUR*Fx*L/(THREE*TEN)
          KED( 5, 9) =  KED( 2, 6)
-         KED( 5,10) = -KED( 4, 5)
+         KED( 5,10) =  V1*L/SIX
          KED( 5,11) = -Fx*L/(THREE*TEN)
 
          KED( 6, 6) =  KED( 5, 5)
          KED( 6, 8) = -KED( 2, 6)
-         KED( 6,10) = -KED( 4, 6)
+         KED( 6,10) =  V2*L/SIX
          KED( 6,12) =  KED( 5,11)
 
          KED( 8, 8) =  KED( 2, 2)
@@ -823,8 +830,8 @@
          KED( 9,11) =  KED( 2, 6)
 
          KED(10,10) =  KED( 4, 4)
-         KED(10,11) =  KED( 4, 5)
-         KED(10,12) =  KED( 4, 6)
+         KED(10,11) = -V1*L/SIX - M1b/TWO
+         KED(10,12) = -V2*L/SIX - M2b/TWO
 
          KED(11,11) =  KED( 5, 5)
 
@@ -1363,37 +1370,44 @@
 
          C01 = Fx/L
 
+! Bending moment terms. M1 and M2 are internal moments (EI1*v" and EI2*w") with the same sign at both ends for constant moment. The
+! coupling of twist to transverse displ must vanish for rigid body twist with constant moment so the end a and b terms have opposite
+! signs. The M/2 terms coupling twist to bending rotation make the end moments semitangential so that they are consistent between
+! elements at joints where not all rotations are continuous. See McGuire, Gallagher and Ziemian, Matrix Structural Analysis.
+
          KED( 2, 2) =  (SIX/FIVE)*Fx/L
-         KED( 2, 4) =  M2b/L
+         KED( 2, 4) =  M2a/L
          KED( 2, 6) =  Fx/TEN
          KED( 2, 8) = -KED( 2, 2)
-         KED( 2,10) =  M2a/L
+         KED( 2,10) = -M2b/L
          KED( 2,12) =  KED( 2, 6)
 
          KED( 3, 3) =  KED( 2, 2)
-         KED( 3, 4) =  M1b/L
+         KED( 3, 4) = -M1a/L
          KED( 3, 5) = -KED( 2, 6)
          KED( 3, 9) = -KED( 2, 2)
-         KED( 3,10) =  M1a/L
+         KED( 3,10) =  M1b/L
          KED( 3,11) = -KED( 2, 6)
 
-         KED( 4, 4) =  JTOR*Fx/(L*L*AREA)
-         KED( 4, 5) = -V1*L/SIX
-         KED( 4, 6) = -V2*L/SIX
-         KED( 4, 8) = -M2b/L
-         KED( 4, 9) = -M1b/L
+         IF (AREA > ZERO) THEN                             ! Fx = 0 if AREA = 0, so the term is zero
+            KED( 4, 4) =  (I1 + I2)*Fx/(AREA*L)            ! Polar moment of area, not torsional constant
+         ENDIF
+         KED( 4, 5) = -V1*L/SIX + M1a/TWO
+         KED( 4, 6) = -V2*L/SIX + M2a/TWO
+         KED( 4, 8) = -KED( 2, 4)
+         KED( 4, 9) = -KED( 3, 4)
          KED( 4,10) = -KED( 4, 4)
-         KED( 4,11) = -KED( 4, 5)
-         KED( 4,12) = -KED( 4, 6)
+         KED( 4,11) =  V1*L/SIX
+         KED( 4,12) =  V2*L/SIX
 
          KED( 5, 5) =  FOUR*Fx*L/(THREE*TEN)
          KED( 5, 9) =  KED( 2, 6)
-         KED( 5,10) = -KED( 4, 5)
+         KED( 5,10) =  V1*L/SIX
          KED( 5,11) = -Fx*L/(THREE*TEN)
 
          KED( 6, 6) =  KED( 5, 5)
          KED( 6, 8) = -KED( 2, 6)
-         KED( 6,10) = -KED( 4, 6)
+         KED( 6,10) =  V2*L/SIX
          KED( 6,12) =  KED( 5,11)
 
          KED( 8, 8) =  KED( 2, 2)
@@ -1405,8 +1419,8 @@
          KED( 9,11) =  KED( 2, 6)
 
          KED(10,10) =  KED( 4, 4)
-         KED(10,11) =  KED( 4, 5)
-         KED(10,12) =  KED( 4, 6)
+         KED(10,11) = -V1*L/SIX - M1b/TWO
+         KED(10,12) = -V2*L/SIX - M2b/TWO
 
          KED(11,11) =  KED( 5, 5)
 
