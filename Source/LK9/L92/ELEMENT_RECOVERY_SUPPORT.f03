@@ -34,7 +34,7 @@
 
    CONTAINS
 
-      SUBROUTINE ELEM_STRE_STRN_ARRAYS ( STR_PT_NUM )
+      SUBROUTINE ELEM_STRE_STRN_ARRAYS ( STR_PT_NUM, ELEM_AXES )
 
 ! Calculates element stress and strain arrays (arrays STRESS and STRAIN). Stresses are calculated for all engineering elements
 ! (1-D, 2-D, 3-D elements). Strains are calculated for the BUSH element, all 2-D and 3-D elements. The default method for
@@ -47,6 +47,10 @@
 ! The arrays STRESS and STRAIN are calculated at the mid plane of 2-D elements and have to be processed later to get element
 ! specific outputs (e.g. stresses at the top and bottom of the 2-D element). The same is true for some of the 1-D elements (e.g.
 ! the BAR element stresses at the 4 points on the cross-section have to be processed from the STRESS array generated here)
+
+! By default, STRESS/STRAIN are transformed at the end to the output coord system defined by PARAM STR_CID (for solids the default
+! is the PSOLID material coord system). Callers that use STRESS in calculations in local element coords (e.g. the differential
+! stiffness matrix KED) must specify ELEM_AXES = 'Y' so that STRESS/STRAIN are left in local element coords.
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
@@ -70,6 +74,7 @@
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'ELEM_STRE_STRN_ARRAYS'
 
       INTEGER(LONG), INTENT(IN)       :: STR_PT_NUM        ! Which point (3rd index in SEi matrices) this call is for
+      CHARACTER(1*BYTE), INTENT(IN), OPTIONAL :: ELEM_AXES ! If 'Y', leave STRESS/STRAIN in local elem coords (ignore STR_CID)
       INTEGER(LONG)                   :: I,J               ! DO loop indices
       INTEGER(LONG)                   :: K                 ! Counter
 
@@ -388,6 +393,10 @@
 
 ! **********************************************************************************************************************************
 ! Transform coord for STRESS/STRAIN arrays, if requested (and if for 2D or 3D elements)
+
+      IF (PRESENT(ELEM_AXES)) THEN                        ! Caller wants STRESS/STRAIN in local element coords
+         IF (ELEM_AXES == 'Y') RETURN
+      ENDIF
 
       IF (STR_CID /= -1) THEN                         ! User req diff stress/strain/engr force output coord sys than elem local
 
