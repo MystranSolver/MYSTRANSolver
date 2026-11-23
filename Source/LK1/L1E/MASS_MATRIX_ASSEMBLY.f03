@@ -922,13 +922,13 @@ i_do1:DO I=1,NGRID
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE PARAMS, ONLY                :  SPARSTOR, WTMASS
       USE TIMDAT, ONLY                :  TSEC
-      USE DOF_TABLES, ONLY            :  TDOF
+      USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  CMASS, GRID_ID, PMASS, RPMASS
       USE SPARSE_MATRICES, ONLY       :  I_MGGS, J_MGGS, MGGS
 
       USE LINK1_WORKSPACE_LIFECYCLE, ONLY:  ALLOCATE_L1_MGG
       USE DOF_NUMBERING, ONLY         :  TDOF_COL_NUM
-      USE DOF_ARRAY_INDEXING, ONLY    :  ARRAY_SIZE_ERROR_1, GET_ARRAY_ROW_NUM
+      USE DOF_ARRAY_INDEXING, ONLY    :  ARRAY_SIZE_ERROR_1, GET_ARRAY_ROW_NUM, GET_GRID_NUM_COMPS
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
       USE SORTING, ONLY               :  SORT_INT2_REAL1
 
@@ -937,13 +937,14 @@ i_do1:DO I=1,NGRID
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'MGGS_MASS_MATRIX'
       CHARACTER( 1*BYTE)              :: FOUND             ! 'Y'/'N' indicator of whether we found something
 
-      INTEGER(LONG)                   :: G_SET_DOF(NGRID)  ! G-set array with grid actual ID's for the grids that have scalar mass
       INTEGER(LONG)                   :: G_SET_COL         ! Col in TDOF where G-set exists
-      INTEGER(LONG)                   :: I,J,K             ! DO loop indices or counters
+      INTEGER(LONG)                   :: I,J               ! DO loop indices or counters
+      INTEGER(LONG)                   :: ICOMP             ! Displ component that a scalar mass is attached to (from array CMASS)
       INTEGER(LONG)                   :: IERROR            ! Local error count
       INTEGER(LONG)                   :: IDOF(NCMASS)      ! G-set DOF number
       INTEGER(LONG)                   :: KTERM_MGGS        ! Count of number of terma going into MGGS
-      INTEGER(LONG)                   :: ROW_NUM           ! Row number in TDOF where data begins for IGRID
+      INTEGER(LONG)                   :: NUM_COMPS         ! Number of displ components (1 for SPOINT, 6 for physical grid)
+      INTEGER(LONG)                   :: ROW_NUM           ! Row number in array GRID_ID where SGRID(I) exists
       INTEGER(LONG)                   :: SGRID(NCMASS)     ! Grid number for a scalar mass (from array CMASS)
       INTEGER(LONG)                   :: PMASS_ID(NCMASS)  ! Prop ID for the CMASS that is attached to SGRID(I) (from array PMASS)
 
@@ -963,32 +964,38 @@ i_do1:DO I=1,NGRID
       CALL ALLOCATE_L1_MGG ( 'MGGS', SUBR_NAME )
 
       CALL TDOF_COL_NUM ( 'G ', G_SET_COL )
-      K = 0
-      DO I=1,NDOFG
-         IF (TDOF(I,2) == 1) THEN
-            K = K + 1
-            G_SET_DOF(K)  = TDOF(I,G_SET_COL)
-         ENDIF
-      ENDDO
 
       DO I=1,NCMASS
 
          IF (CMASS(I,4) /= 0) THEN                         ! The scalar point is in either col 4 or 6 in CMASS (checked in BD read)
             SGRID(I) = CMASS(I,4)
+            ICOMP    = CMASS(I,5)
          ELSE
             SGRID(I) = CMASS(I,6)
+            ICOMP    = CMASS(I,7)
          ENDIF
          PMASS_ID(I) = CMASS(I,3)
 
          ROW_NUM = -1
          CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, SGRID(I), ROW_NUM )
          IF (ROW_NUM /= -1) THEN
-            IDOF(I) = G_SET_DOF(ROW_NUM)
+            CALL GET_GRID_NUM_COMPS ( ROW_NUM, NUM_COMPS, SUBR_NAME )
+            IF ((NUM_COMPS == 1) .AND. (ICOMP == 0)) THEN  ! The component can be 0 or blank for an SPOINT
+               ICOMP = 1
+            ENDIF
+            IF ((ICOMP >= 1) .AND. (ICOMP <= NUM_COMPS)) THEN
+               IDOF(I) = TDOF(TDOF_ROW_START(ROW_NUM)+ICOMP-1,G_SET_COL)
+            ELSE
+               IERROR    = IERROR + 1
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(ERR,1602) ICOMP, CMASS(I,1), SGRID(I), NUM_COMPS
+               WRITE(F06,1602) ICOMP, CMASS(I,1), SGRID(I), NUM_COMPS
+            ENDIF
          ELSE
             IERROR    = IERROR + 1
             FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,1361) 'GRID OR SPOINT', SGRID, 'BULK DATA CMASS ENTRY'
-            WRITE(F06,1361) 'GRID OR SPOINT', SGRID, 'BULK DATA CMASS ENTRY'
+            WRITE(ERR,1361) 'GRID OR SPOINT', SGRID(I), 'BULK DATA CMASS ENTRY'
+            WRITE(F06,1361) 'GRID OR SPOINT', SGRID(I), 'BULK DATA CMASS ENTRY'
          ENDIF
 
       ENDDO
@@ -1027,22 +1034,27 @@ j_do1:   DO J=1,NPMASS
       CALL SORT_INT2_REAL1 ( SUBR_NAME, 'IDOF, SGRI, PMASS_VAL', NCMASS, IDOF, SGRID, PMASS_VAL )
       IF (DEBUG(182) > 0) CALL DEB_MGGS ( 2 )
 
-! Formulate sparse matrix MGGS. Note that the MGGS matrix is diagonal since CMASS is attached to only 1 grid/scalar point
+! Formulate sparse matrix MGGS. Note that the MGGS matrix is diagonal since CMASS is attached to only 1 grid/scalar point.
+! IDOF is sorted, so all of the masses at a DOF are consecutive. They are added to get the 1 term for that DOF
 
       KTERM_MGGS = 0
       I_MGGS(1) = 1
+      J = 1
 i_do2:DO I=1,NDOFG
-j_do2:   DO J=1,NCMASS
-            IF (IDOF(J) == I) THEN
+         I_MGGS(I+1) = I_MGGS(I)
+j_do2:   DO
+            IF (J > NCMASS)   EXIT j_do2
+            IF (IDOF(J) /= I) EXIT j_do2
+            IF (I_MGGS(I+1) == I_MGGS(I)) THEN             ! 1st mass at this DOF
                I_MGGS(I+1)        = I_MGGS(I) + 1
                KTERM_MGGS         = KTERM_MGGS + 1
                IF (KTERM_MGGS > NTERM_MGGS) CALL ARRAY_SIZE_ERROR_1 ( SUBR_NAME, NTERM_MGGS, 'MGGS' )
                J_MGGS(KTERM_MGGS) = I                      ! Since MGGS is diagonal
                MGGS(KTERM_MGGS)   = PMASS_VAL(J)
-               EXIT j_do2
-            ELSE
-               I_MGGS(I+1) = I_MGGS(I)
+            ELSE                                           ! Another mass at the same DOF
+               MGGS(KTERM_MGGS)   = MGGS(KTERM_MGGS) + PMASS_VAL(J)
             ENDIF
+            J = J + 1
          ENDDO j_do2
       ENDDO i_do2
 
@@ -1060,6 +1072,9 @@ j_do2:   DO J=1,NCMASS
  1361 FORMAT(' *ERROR  1361: UNDEFINED ',A,I8,' ON ',A)
 
  1601 FORMAT(' *ERROR  1601: UNDEFINED SCALAR MASS PROPERTY ID = ',I8,' ON CMASS ID ',I8)
+
+ 1602 FORMAT(' *ERROR  1602: INVALID COMPONENT NUMBER = ',I8,' ON CMASS ID ',I8,'. FOR GRID OR SPOINT ',I8,                       &
+                    ' THE COMPONENT MUST BE FROM 1 TO ',I2)
 
  9999 FORMAT(' PROCESSING TERMINATED DUE TO ABOVE ',I8,' ERRORS')
 

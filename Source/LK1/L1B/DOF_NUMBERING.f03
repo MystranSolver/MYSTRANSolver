@@ -244,8 +244,8 @@
 
       IROW = 0
       CALL COUNTER_INIT('       Process col 1-4 of TDOF', NGRID)
-      DO I = 1,NGRID
-         CALL GET_GRID_NUM_COMPS ( INV_GRID_SEQ(I), NUM_COMPS, SUBR_NAME )
+      DO I = 1,NGRID                                       ! TDOF rows are in grid numerical order, so use I and not INV_GRID_SEQ(I)
+         CALL GET_GRID_NUM_COMPS ( I, NUM_COMPS, SUBR_NAME )
          DO J = 1,NUM_COMPS
             IROW = IROW + 1
             TDOF(IROW,1) = GRID_ID(I)
