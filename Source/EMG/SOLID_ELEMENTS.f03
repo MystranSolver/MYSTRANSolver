@@ -684,7 +684,7 @@
       IF ((OPT(6) == 'Y') .AND. (LOAD_ISTEP > 1)) THEN
 
         CALL ELMDIS
-        CALL ELEM_STRE_STRN_ARRAYS ( 1 )
+        CALL ELEM_STRE_STRN_ARRAYS ( 1, 'Y' )              ! Stress at the center, in local elem coords like B (not STR_CID coords)
 
         SIGxx = STRESS(1)
         SIGyy = STRESS(2)
@@ -1981,7 +1981,7 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
       IF ((OPT(6) == 'Y') .AND. (LOAD_ISTEP > 1)) THEN
 
         CALL ELMDIS
-        CALL ELEM_STRE_STRN_ARRAYS ( 1 )
+        CALL ELEM_STRE_STRN_ARRAYS ( 1, 'Y' )              ! Stress at the center, in local elem coords like B (not STR_CID coords)
 
         SIGxx = STRESS(1)
         SIGyy = STRESS(2)
@@ -2431,7 +2431,7 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
       IF ((OPT(6) == 'Y') .AND. (LOAD_ISTEP > 1)) THEN
 
         CALL ELMDIS
-        CALL ELEM_STRE_STRN_ARRAYS ( 1 )
+        CALL ELEM_STRE_STRN_ARRAYS ( 1, 'Y' )              ! Stress at the center, in local elem coords like B (not STR_CID coords)
 
         SIGxx = STRESS(1)
         SIGyy = STRESS(2)
