@@ -377,8 +377,9 @@
 ! Element pressure data
 ! ----------------------
 
-      CHARACTER( 1*BYTE), ALLOCATABLE :: PTYPE(:)            ! NELE x 1 array of how many pressures there are in PDATA for an elem.
-!                                                              ('6' for PLOAD1, '1' for PLOAD2, and '3' or '4' for PLOAD4)
+      CHARACTER( 1*BYTE), ALLOCATABLE :: PTYPE(:,:)          ! NELE x NSUB array of how many pressures there are in PDATA for an
+!                                                              elem in a S/C ('2' for PLOAD1, '1' for PLOAD2, '3' or '4' for PLOAD4)
+!                                                              Like PPNT, it is by S/C since the entry type can differ between S/C's
 
       INTEGER(LONG), ALLOCATABLE      :: PPNT(:,:)           ! NELE x 1 array of pointers to where in PDATA the elem pressure data
 !                                                              begins for an element

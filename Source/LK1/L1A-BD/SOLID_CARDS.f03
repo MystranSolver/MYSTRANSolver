@@ -757,7 +757,7 @@
          ENDIF
       ENDIF
 
-      PSOLID(NPSOLID,3) = -1                               ! Mat'l coord sys ID default value = -1 to distinguish from CID > or = 0
+      PSOLID(NPSOLID,3) =  0                               ! Mat'l coord sys ID default value = 0 (basic), as in MSC/NX (-1 = element)
       IF (JCARD(4)(1:) /= ' ') THEN                        ! Read material coord system ID and enter into array PSOLID
          CALL I4FLD ( JCARD(4), JF(4), ID )
          IF (IERRFL(4) == 'N') THEN

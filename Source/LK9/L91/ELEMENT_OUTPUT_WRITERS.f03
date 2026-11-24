@@ -956,7 +956,7 @@ headr:IF (IHDR == 'Y') THEN
       INTEGER(LONG)                   :: ISUBCASE     ! the subcase ID
       INTEGER(LONG)                   :: NELEMENTS
       INTEGER(LONG)                   :: ISUBCASE_INDEX   ! the index into SCNUM
-      INTEGER(LONG)                   :: CID          ! coordinate system
+      INTEGER(LONG), ALLOCATABLE      :: CID_OUT(:)   ! coordinate system of the output of each solid element
       CHARACTER(4*BYTE)               :: CEN_WORD     ! the word "CEN/" (we need to cast the length)
 
 
@@ -1250,14 +1250,11 @@ headr:IF (IHDR == 'Y') THEN
             WRITE(OP2) NVALUES
             CEN_WORD = "CEN/"
 
-            ! See the CHEXA, CPENTA, or CTETRA entry for the definition of the element coordinate systems.
-            ! The material coordinate system (CORDM) may be the basic system (0 or blank), any defined system
-            ! (Integer > 0), or the standard internal coordinate system of the element designated as:
-            ! -1: element coordinate system (-1)
-            ! -2: element system based on eigenvalue techniques to insure non bias in the element formulation.
-
-            ! TODO hardcoded
-            CID = -1
+            ! Coord system of the output of each element (CORDM can be different for each PSOLID)
+            ALLOCATE(CID_OUT(NUM))
+            DO I=1,NUM,NNODES
+               CID_OUT(I) = SOLID_OUTPUT_CID ( EID_OUT_ARRAY(I,1) )
+            ENDDO
 
             ! setting:
             !  - CTETRA: [element_device, cid, 'CEN/', 4]
@@ -1276,7 +1273,7 @@ headr:IF (IHDR == 'Y') THEN
                CALL PRINCIPAL_3D_DIRECTIONS ( STRN6, DCOS3(:,:,I) )
             ENDDO
 
-            WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, CID, CEN_WORD, NNODES-1,                      &
+            WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, CID_OUT(I), CEN_WORD, NNODES-1,               &
                      !grid_id
                      (GID_OUT_ARRAY(I,J),                                                                &
                      !    oxx                     txy                    s1       a1 a2 a3 = x cosines of principals 1,2,3
@@ -1292,6 +1289,7 @@ headr:IF (IHDR == 'Y') THEN
                      REAL(DCOS3(1,3,I+J-1),4), REAL(DCOS3(2,3,I+J-1),4), REAL(DCOS3(3,3,I+J-1),4),            &
                      J=1,NNODES), I=1,NUM,NNODES)
             DEALLOCATE(DCOS3)
+            DEALLOCATE(CID_OUT)
 
          ENDIF  ! end of op2
 
@@ -1980,7 +1978,7 @@ headr:IF (IHDR == 'Y') THEN
       INTEGER(LONG)                   :: ISUBCASE         ! the subcase ID
       INTEGER(LONG)                   :: NELEMENTS
       INTEGER(LONG)                   :: ISUBCASE_INDEX   ! the index into SCNUM
-      INTEGER(LONG)                   :: CID              ! coordinate system
+      INTEGER(LONG), ALLOCATABLE      :: CID_OUT(:)       ! coordinate system of the output of each solid element
       CHARACTER(4*BYTE)               :: CEN_WORD         ! the word "CEN/" (we need to cast the length)
       CHARACTER(139*BYTE)             :: CLINE_BUF        ! Pre-assembled CENTER line for solid stresses (matches FORMAT 1303)
       CHARACTER(139*BYTE)             :: GLINE_BUF        ! Pre-assembled GRD    line for solid stresses (matches FORMAT 1306)
@@ -2284,14 +2282,11 @@ headr:IF (IHDR == 'Y') THEN
             WRITE(OP2) NVALUES
             CEN_WORD = "CEN/"
 
-            ! See the CHEXA, CPENTA, or CTETRA entry for the definition of the element coordinate systems.
-            ! The material coordinate system (CORDM) may be the basic system (0 or blank), any defined system
-            ! (Integer > 0), or the standard internal coordinate system of the element designated as:
-            ! -1: element coordinate system (-1)
-            ! -2: element system based on eigenvalue techniques to insure non bias in the element formulation.
-
-            ! TODO hardcoded
-            CID = -1
+            ! Coord system of the output of each element (CORDM can be different for each PSOLID)
+            ALLOCATE(CID_OUT(NUM))
+            DO I=1,NUM,NNODES
+               CID_OUT(I) = SOLID_OUTPUT_CID ( EID_OUT_ARRAY(I,1) )
+            ENDDO
 
             ! setting:
             !  - CTETRA: [element_device, cid, 'CEN/', 4]
@@ -2308,7 +2303,7 @@ headr:IF (IHDR == 'Y') THEN
                CALL PRINCIPAL_3D_DIRECTIONS ( OGEL(I,1:6), DCOS3(:,:,I) )
             ENDDO
 
-            WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, CID, CEN_WORD, NNODES-1,                      &
+            WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, CID_OUT(I), CEN_WORD, NNODES-1,               &
                      !grid_id
                      (GID_OUT_ARRAY(I,J),                                                                &
                      !    oxx                     txy                    s1       a1 a2 a3 = x cosines of principals 1,2,3
@@ -2324,6 +2319,7 @@ headr:IF (IHDR == 'Y') THEN
                      REAL(DCOS3(1,3,I+J-1),4), REAL(DCOS3(2,3,I+J-1),4), REAL(DCOS3(3,3,I+J-1),4),            &
                      J=1,NNODES), I=1,NUM,NNODES)
             DEALLOCATE(DCOS3)
+            DEALLOCATE(CID_OUT)
 
          ENDIF  ! end of op2
 
@@ -3050,6 +3046,42 @@ headr:IF (IHDR == 'Y') THEN
 ! **********************************************************************************************************************************
 
       END SUBROUTINE GET_MAX_MIN_ABS_STR
+
+
+      FUNCTION SOLID_OUTPUT_CID ( EID ) RESULT ( CID )
+
+! Returns the coord system ID, for the OP2 file, of the stresses and strains of a solid element: 0 for basic, > 0 for a coord system
+! defined in the Bulk Data or -1 for the element coord system. This must agree with the transformation of STRESS and STRAIN that is
+! done at the end of subr ELEM_STRE_STRN_ARRAYS: to CORDM of the element's PSOLID if PARAM STR_CID = -2 (the default) or to STR_CID
+! otherwise, except that they are left in the element coord system if the requested system is -1 or is not defined.
+
+      USE PENTIUM_II_KIND, ONLY       :  LONG
+      USE SCONTR, ONLY                :  NCORD, NELE
+      USE PARAMS, ONLY                :  STR_CID
+      USE MODEL_STUF, ONLY            :  CORD, EDAT, EPNT, ESORT1, PSOLID
+
+      USE DOF_ARRAY_INDEXING, ONLY    :  GET_ARRAY_ROW_NUM
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(IN)       :: EID               ! Actual element ID
+      INTEGER(LONG)                   :: CID               ! Coord system ID of the output for this element
+      INTEGER(LONG)                   :: IELEM             ! Internal element ID for actual element ID, EID
+
+! **********************************************************************************************************************************
+      CID = STR_CID
+
+      IF (STR_CID == -2) THEN                              ! Use CORDM. After EDAT(EPNT) there is the internal property ID
+         CID = -1
+         CALL GET_ARRAY_ROW_NUM ( 'ESORT1', 'SOLID_OUTPUT_CID', NELE, ESORT1, EID, IELEM )
+         IF (IELEM > 0) CID = PSOLID(EDAT(EPNT(IELEM)+1),3)
+      ENDIF
+
+      IF (CID > 0) THEN                                    ! Subr STR_TENSOR_TRANSFORM does nothing if CID is not defined
+         IF (.NOT. ANY(CORD(1:NCORD,2) == CID)) CID = -1
+      ENDIF
+
+      END FUNCTION SOLID_OUTPUT_CID
 
 
    END MODULE ELEMENT_OUTPUT_WRITERS

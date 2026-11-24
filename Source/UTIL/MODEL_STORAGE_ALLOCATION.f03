@@ -2885,14 +2885,16 @@
             FATAL_ERR = FATAL_ERR + 1
             JERR = JERR + 1
          ELSE
-            ALLOCATE (PTYPE(LELE),STAT=IERR)
+            ALLOCATE (PTYPE(LELE,LSUB),STAT=IERR)
             NROWS = LELE
-            NCOLS = 1
-            MB_ALLOCATED = REAL(BYTE)*REAL(LPDAT)/ONEPP6
+            NCOLS = LSUB
+            MB_ALLOCATED = REAL(BYTE)*REAL(LELE)*REAL(LSUB)/ONEPP6
             IF (IERR == 0) THEN
                CALL ALLOCATED_MEMORY ( NAME, MB_ALLOCATED, 'ALLOC', 'Y', CUR_MB_ALLOCATED, SUBR_NAME )
                DO I=1,LELE
-                  PTYPE(I) = ' '
+                  DO J=1,LSUB
+                     PTYPE(I,J) = ' '
+                  ENDDO
                ENDDO
             ELSE
                WRITE(ERR,991) MB_ALLOCATED, NAME,SUBR_NAME, IERR

@@ -337,7 +337,7 @@ j_do_2:  DO J=1,NCORD
       REAL(DOUBLE)                    :: XRP(3)            ! Array of relative coords of RGRID_ROW and origin of coord system ICORD
 !                                                            in local coord system L.
 
-      INTRINSIC                       :: DASIN, DATAN2, DSIN, DCOS
+      INTRINSIC                       :: DATAN2, DSIN, DCOS
 
 
 
@@ -445,7 +445,7 @@ j_do_2:  DO J=1,NCORD
                   ENDDO
                ENDDO
             ELSE
-               THETA    =  DASIN(RADXY/RAD)
+               THETA    =  DATAN2(RADXY,XRP(3))                ! Colatitude, 0 to 180 deg
                PHI      =  DATAN2(XRP(2),XRP(1))
                CT       =  DCOS(THETA)
                ST       =  DSIN(THETA)

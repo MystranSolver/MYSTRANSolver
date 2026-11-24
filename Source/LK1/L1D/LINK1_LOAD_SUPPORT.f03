@@ -453,9 +453,9 @@ k_do: DO K=1,NTERM_MGG
          RSID(I) = ZERO
       ENDDO
 
+      NPDAT = 0                                            ! PDATA accumulates over all S/C's since PPNT(elem,S/C) points into it.
+                                                           ! LPDAT is sized for all S/C's in LOADB0.
 isubc:DO I=1,NSUB                                          ! Loop through the S/C's
-
-         NPDAT = 0                                         ! 09/21/21: Init NPDAT before each S/C. Otherwise can get error 1523
 
          IF (SUBLOD(I,1) == 0) THEN                        ! If no load for this S/C, CYCLE
             CYCLE isubc
@@ -673,8 +673,11 @@ k_do6:            DO K=EID1,EID2
       DATA_SET_NAME = 'PTYPE'
       WRITE(L1Q) DATA_SET_NAME
       WRITE(L1Q) NELE
+      WRITE(L1Q) NSUB
       DO I=1,NELE
-         WRITE(L1Q) PTYPE(I)
+         DO J=1,NSUB
+            WRITE(L1Q) PTYPE(I,J)
+         ENDDO
       ENDDO
 
       DATA_SET_NAME = 'PLOAD4_3D_DATA'
@@ -715,7 +718,7 @@ k_do6:            DO K=EID1,EID2
 
       SUBROUTINE EPPUT ( SETID, EID, JSUB, IPPNT, NAME, EFLAG, IELEM, EL_REDUNDANT_PRES, EL_PRES_ERR )
 
-! Element pressure routine - generates the PPNT(i,J) array and PTYPE(i) array
+! Element pressure routine - generates the PPNT(i,J) and PTYPE(i,J) arrays
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
@@ -761,6 +764,17 @@ k_do6:            DO K=EID1,EID2
          RETURN
       ENDIF
 
+! PLOAD2/PLOAD4 pressure on solid elements is not implemented (the G1/G3 form of PLOAD4 is rejected when the card is read).
+! Stop here for any other form that reaches a solid (blank G1/G3 fields, THRU range, G1 only for a CPENTA triangular face).
+
+      IF ((ETYPE(IELEM)(1:4) == 'HEXA') .OR. (ETYPE(IELEM)(1:5) == 'PENTA') .OR. (ETYPE(IELEM)(1:5) == 'TETRA')) THEN
+         WRITE(ERR,1524) NAME(1:6), SETID, EID, ETYPE(IELEM)
+         WRITE(F06,1524) NAME(1:6), SETID, EID, ETYPE(IELEM)
+         FATAL_ERR   = FATAL_ERR + 1
+         EL_PRES_ERR = EL_PRES_ERR + 1
+         RETURN
+      ENDIF
+
 ! No error, so put pointer into PPNT(i,j) and give warning if the elem has had a pressure defined previously
 
       IF (PPNT(IELEM,JSUB) /= 0) THEN
@@ -774,17 +788,17 @@ k_do6:            DO K=EID1,EID2
 
       PPNT(IELEM,JSUB) = IPPNT
 
-! Set PTYPE for this element
+! Set PTYPE for this element and S/C. It must be the type of the entry whose data PPNT(IELEM,JSUB) points to
 
       IF      (NAME(1:6) == 'PLOAD1') THEN
-         PTYPE(IELEM) = '2'
+         PTYPE(IELEM,JSUB) = '2'
       ELSE IF (NAME(1:6) == 'PLOAD2') THEN
-         PTYPE(IELEM) = '1'
+         PTYPE(IELEM,JSUB) = '1'
       ELSE IF (NAME(1:6) == 'PLOAD4') THEN
          IF      ((ETYPE(IELEM)(1:4) == 'TRIA') .OR. (ETYPE(IELEM)(1:5) == 'TETRA') .OR. (ETYPE(IELEM)(1:5) == 'PENTA')) THEN
-            PTYPE(IELEM) = '3'
+            PTYPE(IELEM,JSUB) = '3'
          ELSE IF ((ETYPE(IELEM)(1:4) == 'QUAD') .OR. (ETYPE(IELEM)(1:4) == 'HEXA')) THEN
-            PTYPE(IELEM) = '4'
+            PTYPE(IELEM,JSUB) = '4'
          ENDIF
       ENDIF
 
@@ -794,6 +808,9 @@ k_do6:            DO K=EID1,EID2
 
 ! **********************************************************************************************************************************
  1520 FORMAT(' *ERROR  1520: ELEMENT ',I8,' ON PLOAD2 ',I8,' DOES NOT EXIST OR IS OF WRONG TYPE FOR THE PRESSURE CARD:')
+
+ 1524 FORMAT(' *ERROR  1524: ',A,' SID ',I8,' REFERENCES SOLID ELEMENT ',I8,' (',A,'). PRESSURE LOADS ON SOLID ELEMENTS',     &
+                ' ARE NOT IMPLEMENTED; THE LOAD WOULD BE IGNORED')
 
  1521 FORMAT(' *WARNING    : FOR INTERNAL SUBCASE NUMBER ',I8,' ELEMENT ',I8,' HAS PRESSURE DEFINED MORE THAN ONCE.',              &
                            ' LAST VALUE IN INPUT DECK WILL BE USED')

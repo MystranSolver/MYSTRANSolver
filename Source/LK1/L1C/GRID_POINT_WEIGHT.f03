@@ -40,7 +40,7 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06, OP2, SC1, WRT_BUG, WRT_ERR
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELDT_BUG_ME_BIT, IBIT, MBUG, NCONM2, NCORD, NELE, NGRID, SOL_NAME, WARN_ERR
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELDT_BUG_ME_BIT, IBIT, MBUG, MELGP, NCONM2, NCORD, NELE, NGRID, SOL_NAME, WARN_ERR
       USE PARAMS, ONLY                :  EPSIL, GRDPNT, MEFMGRID, MEFMLOC, SUPWARN, WTMASS
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE TIMDAT, ONLY                :  TSEC
@@ -48,12 +48,12 @@
       USE MODEL_STUF, ONLY            :  AGRID, BGRID, CONM2, CORD, CAN_ELEM_TYPE_OFFSET, ELDT, ELGP, NUM_EMG_FATAL_ERRS,          &
                                          GRID, GRID_ID, MCG, ME, MEFFMASS_CALC, MEFM_RB_MASS,                                      &
                                          MODEL_MASS, MODEL_IXX, MODEL_IYY, MODEL_IZZ, MODEL_XCG, MODEL_YCG, MODEL_ZCG,             &
-                                         OFFDIS, OFFSET, PLY_NUM, RCONM2, RGRID, TYPE, USERIN_RBM0
+                                         OFFDIS, OFFSET, PLY_NUM, RCONM2, RGRID, TE, TYPE, USERIN_RBM0
 
       USE DOF_ARRAY_INDEXING, ONLY    :  GET_ARRAY_ROW_NUM, GET_GRID_NUM_COMPS
       USE EMG_MOD, ONLY               :  EMG
       USE VECTOR_GEOMETRY, ONLY       :  GEN_T0L
-      USE FULL_MATRIX_ALGEBRA, ONLY   :  MATMULT_FFF
+      USE FULL_MATRIX_ALGEBRA, ONLY   :  MATMULT_FFF, MATMULT_FFF_T
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
       USE PROGRESS_COUNTERS, ONLY     :  COUNTER_INIT, COUNTER_PROGRESS
 
@@ -74,7 +74,6 @@
       INTEGER(LONG)                   :: I1                ! Intermediate variable resulting from an IAND operation
       INTEGER(LONG)                   :: ICID_G            ! Internal coord sys ID corresponding to actual coord sys ACID_G
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
-      INTEGER(LONG)                   :: JDOF              ! Array index used in getting mass terms from the elem mass matrix, ME
       INTEGER(LONG)                   :: GRID_NUM          ! An actual grid ID
       INTEGER(LONG)                   :: GRID_ID_ROW_NUM   ! Row number in array GRID_ID where an actual grid ID is found
       INTEGER(LONG)                   :: INFO        = 0   ! An output from subr GPWG_PMOI, called herein
@@ -89,6 +88,7 @@
       REAL(DOUBLE)                    :: DY                ! Y offset of a mass from its' grid
       REAL(DOUBLE)                    :: DZ                ! Z offset of a mass from its' grid
       REAL(DOUBLE)                    :: GLOBAL_OFF(3)     ! Offsets of an element at a grid in global coords
+      REAL(DOUBLE)                    :: LOCAL_OFF(3)      ! Offsets of a plate element at a grid in local elem coords
       REAL(DOUBLE)                    :: MASS              ! Total mass
       REAL(DOUBLE)                    :: M0                ! An intermediate variable used in calc model mass props
       REAL(DOUBLE)                    :: MOI1(3,3)         ! Moments of inertia (several diff interps during exec of this subr)
@@ -105,6 +105,10 @@
       REAL(DOUBLE)                    :: TRANS(3,3)        ! Transfer terms when MOI's about c.g. ard calc'd from MOI's about XREF
       REAL(DOUBLE)                    :: XB(3)             ! Basic coord diffs bet c.g. and XREF in X, Y, Z directions
       REAL(DOUBLE)                    :: XD(3)             ! Basic coord diffs bet a mass (at it's c.m.) and XREF in X, Y, Z dirs
+      REAL(DOUBLE)                    :: XDE(3,MELGP)      ! XD for each grid of the current element
+      REAL(DOUBLE)                    :: MJK               ! Translational mass term of ME for a pair of element grids
+      INTEGER(LONG)                   :: JDOFE(MELGP)      ! 1st translational DOF in ME for each grid of the element
+      INTEGER(LONG)                   :: K2                ! DO loop index over the grids of an element
       REAL(DOUBLE)                    :: XREF(3)           ! GRDPNT basic coords (or origin of basic sys if GRDPNT doesn't exist)
       REAL(DOUBLE)                    :: X2                ! XD(1)*XD(1)
       REAL(DOUBLE)                    :: Y2                ! XD(2)*XD(2)
@@ -204,52 +208,67 @@ elgp_do:          DO J=1,ELGP
                      BASIC_OFF(3) = ZERO
                      IF (CAN_ELEM_TYPE_OFFSET == 'Y') THEN
                         IF (OFFSET(J) == 'Y') THEN               ! Calc (or set to 0) elem offset in basic (BASIC_OFF) at this grid
-                           GLOBAL_OFF(1) = OFFDIS(J,1)
-                           GLOBAL_OFF(2) = OFFDIS(J,2)
-                           GLOBAL_OFF(3) = OFFDIS(J,3)
-                           CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), GRID_ID_ROW_NUM )
-                           ACID_G = GRID(GRID_ID_ROW_NUM,3)
-                           IF (ACID_G /= 0) THEN
-k_do111:                      DO K=1,NCORD
-                                 IF (ACID_G == CORD(K,2)) THEN
-                                    ICID_G = K
-                                    EXIT k_do111
-                                 ENDIF
-                              ENDDO k_do111
-                              CALL GEN_T0L ( GRID_ID_ROW_NUM, ICID_G, THETAD, PHID, T0G )
-                              CALL MATMULT_FFF ( T0G, GLOBAL_OFF, 3, 3, 1, BASIC_OFF )
-                           ELSE
-                              BASIC_OFF(1) = GLOBAL_OFF(1)
-                              BASIC_OFF(2) = GLOBAL_OFF(2)
-                              BASIC_OFF(3) = GLOBAL_OFF(3)
+                           IF ((TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'QUAD4')) THEN
+                                                                 ! Plate offsets are in local elem coords (see subr ELMOFF)
+                              LOCAL_OFF(1) = OFFDIS(J,1)
+                              LOCAL_OFF(2) = OFFDIS(J,2)
+                              LOCAL_OFF(3) = OFFDIS(J,3)
+                              CALL MATMULT_FFF_T ( TE, LOCAL_OFF, 3, 3, 1, BASIC_OFF )
+                           ELSE                                  ! Other elem offsets are in global coords at the grid
+                              GLOBAL_OFF(1) = OFFDIS(J,1)
+                              GLOBAL_OFF(2) = OFFDIS(J,2)
+                              GLOBAL_OFF(3) = OFFDIS(J,3)
+                              CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), GRID_ID_ROW_NUM )
+                              ACID_G = GRID(GRID_ID_ROW_NUM,3)
+                              IF (ACID_G /= 0) THEN
+k_do111:                         DO K=1,NCORD
+                                    IF (ACID_G == CORD(K,2)) THEN
+                                       ICID_G = K
+                                       EXIT k_do111
+                                    ENDIF
+                                 ENDDO k_do111
+                                 CALL GEN_T0L ( GRID_ID_ROW_NUM, ICID_G, THETAD, PHID, T0G )
+                                 CALL MATMULT_FFF ( T0G, GLOBAL_OFF, 3, 3, 1, BASIC_OFF )
+                              ELSE
+                                 BASIC_OFF(1) = GLOBAL_OFF(1)
+                                 BASIC_OFF(2) = GLOBAL_OFF(2)
+                                 BASIC_OFF(3) = GLOBAL_OFF(3)
+                              ENDIF
                            ENDIF
                         ENDIF
                      ENDIF
 
                      CALL GET_GRID_NUM_COMPS ( BGRID(J), NUM_COMPS, SUBR_NAME )
-                     JDOF  = NUM_COMPS*(J - 1) + 1
-                     M0    = ME(JDOF,JDOF)
-                     MASS  = MASS + M0
-                     XD(1) = RGRID(BGRID(J),1) + BASIC_OFF(1) - XREF(1)
-                     XD(2) = RGRID(BGRID(J),2) + BASIC_OFF(2) - XREF(2)
-                     XD(3) = RGRID(BGRID(J),3) + BASIC_OFF(3) - XREF(3)
-                     MX    = MX + M0*XD(1)
-                     MY    = MY + M0*XD(2)
-                     MZ    = MZ + M0*XD(3)
-                     X2    = XD(1)*XD(1)
-                     Y2    = XD(2)*XD(2)
-                     Z2    = XD(3)*XD(3)
-                     XY    = XD(1)*XD(2)
-                     XZ    = XD(1)*XD(3)
-                     YZ    = XD(2)*XD(3)
-                     MOI1(1,1) = MOI1(1,1) + M0*(Y2 + Z2)
-                     MOI1(2,2) = MOI1(2,2) + M0*(X2 + Z2)
-                     MOI1(3,3) = MOI1(3,3) + M0*(X2 + Y2)
-                     MOI1(2,1) = MOI1(2,1) - M0*XY
-                     MOI1(3,1) = MOI1(3,1) - M0*XZ
-                     MOI1(3,2) = MOI1(3,2) - M0*YZ
+                     JDOFE(J) = NUM_COMPS*(J - 1) + 1
+                     XDE(1,J) = RGRID(BGRID(J),1) + BASIC_OFF(1) - XREF(1)
+                     XDE(2,J) = RGRID(BGRID(J),2) + BASIC_OFF(2) - XREF(2)
+                     XDE(3,J) = RGRID(BGRID(J),3) + BASIC_OFF(3) - XREF(3)
 
                   ENDDO elgp_do
+                                                           ! Rigid body mass D'*ME*D from the translational terms of ME. Assumes
+                                                           ! the terms for a pair of grids are the same for x, y and z
+                  DO J=1,ELGP
+                     DO K2=1,ELGP
+                        MJK   = ME(JDOFE(J),JDOFE(K2))
+                        IF (MJK == ZERO) CYCLE
+                        MASS  = MASS + MJK
+                        MX    = MX + MJK*XDE(1,J)
+                        MY    = MY + MJK*XDE(2,J)
+                        MZ    = MZ + MJK*XDE(3,J)
+                        X2    = XDE(1,J)*XDE(1,K2)
+                        Y2    = XDE(2,J)*XDE(2,K2)
+                        Z2    = XDE(3,J)*XDE(3,K2)
+                        XY    = XDE(1,J)*XDE(2,K2)
+                        XZ    = XDE(1,J)*XDE(3,K2)
+                        YZ    = XDE(2,J)*XDE(3,K2)
+                        MOI1(1,1) = MOI1(1,1) + MJK*(Y2 + Z2)
+                        MOI1(2,2) = MOI1(2,2) + MJK*(X2 + Z2)
+                        MOI1(3,3) = MOI1(3,3) + MJK*(X2 + Y2)
+                        MOI1(2,1) = MOI1(2,1) - MJK*XY
+                        MOI1(3,1) = MOI1(3,1) - MJK*XZ
+                        MOI1(3,2) = MOI1(3,2) - MJK*YZ
+                     ENDDO
+                  ENDDO
 
                ENDIF res_or_oa
 

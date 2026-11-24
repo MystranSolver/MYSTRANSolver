@@ -1017,11 +1017,17 @@
 
          READ(UNT,IOSTAT=IOCHK) INT2                                           ; REC_NO = REC_NO + 1
          CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
-         IF (INT2 /= NPDAT) CALL DATA_SET_SIZE_ERROR ( LINK1Q, NAME_Is, 'NPDAT', NPDAT, INT2 )
+         IF (INT2 /= NELE) CALL DATA_SET_SIZE_ERROR ( LINK1Q, NAME_Is, 'NELE', NELE, INT2 )
+
+         READ(UNT,IOSTAT=IOCHK) INT2                                           ; REC_NO = REC_NO + 1
+         CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+         IF (INT2 /= NSUB) CALL DATA_SET_SIZE_ERROR ( LINK1Q, NAME_Is, 'NSUB', NSUB, INT2 )
 
          DO I=1,NELE
-            READ(UNT,IOSTAT=IOCHK) PTYPE(I)                                    ; REC_NO = REC_NO + 1
-            CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+            DO J=1,NSUB
+               READ(UNT,IOSTAT=IOCHK) PTYPE(I,J)                               ; REC_NO = REC_NO + 1
+               CALL READ_CHK ( IOCHK, FILNAM, NAME_ShouldBe, REC_NO, OUNT )
+            ENDDO
          ENDDO
 
       ENDIF

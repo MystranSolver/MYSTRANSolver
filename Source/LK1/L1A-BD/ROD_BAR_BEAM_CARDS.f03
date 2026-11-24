@@ -2021,7 +2021,7 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       K1   =  H2/D(2)
       K2   =  B2/D(1)
       Y(1) =  HALF*D(2)   ;   Z(1) =  HALF*D(1)
-      Y(2) = -HALF*D(2)   ;   Z(1) =  HALF*D(1)
+      Y(2) = -HALF*D(2)   ;   Z(2) =  HALF*D(1)
       Y(3) = -HALF*D(2)   ;   Z(3) = -HALF*D(1)
       Y(4) =  HALF*D(2)   ;   Z(4) = -HALF*D(1)
 
@@ -2074,14 +2074,14 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
 
       IF (JERR > 0) RETURN
 
-      YCG  =  (H*(TL + TR)*HALF*H + (W - TL - TR)*(HALF*TB + (H - HALF*TT)))/AREA
+      YCG  =  (H*(TL + TR)*HALF*H + (W - TL - TR)*(TB*HALF*TB + TT*(H - HALF*TT)))/AREA
       ZCG  =  (H*TL*HALF*TL + H*TR*(W - HALF*TR) + (W - TL -TR)*(TT + TB)*(TL + HALF*(W - TL - TR)))/AREA
                                                            ! Calc I1,I2 as I for each of parts about own C.G + part area times D^2
-      I1   =  (TL + TR)*H*H*H/TWELVE + H*TL*(YCG - HALF*H)*(YCG - HALF*H)                                                          &
+      I1   =  (TL + TR)*H*H*H/TWELVE + H*(TL + TR)*(YCG - HALF*H)*(YCG - HALF*H)                                                   &
             + (W - TL - TR)*(TT*TT*TT + TB*TB*TB)/TWELVE + (W - TL -TR)*TB*(YCG - HALF*TB)*(YCG - HALF*TB)                         &
             +                                              (W - TL -TR)*TT*(H - HALF*TT - YCG)*(H - HALF*TT - YCG)
       I2   =  H*(TL*TL*TL + TR*TR*TR)/TWELVE + H*TL*(ZCG - HALF*TL)*(ZCG - HALF*TL) + H*TR*(W - HALF*TR -ZCG)*(W - HALF*TR -ZCG)   &
-            + (TT + TB)*W*W*W/TWELVE + W*(TT + TB)*(HALF*W - ZCG)*(HALF*W - ZCG)
+            + (TT + TB)*(W - TL - TR)**3/TWELVE + (W - TL - TR)*(TT + TB)*(TL + HALF*(W - TL - TR) - ZCG)**2
       I12  =  ZERO
       Y(1) =  H - YCG   ;   Z(1) =  W - ZCG
       Y(2) = -YCG       ;   Z(2) =  Z(1)
@@ -2106,7 +2106,6 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       REAL(DOUBLE)                    :: H                 ! Overall height
       REAL(DOUBLE)                    :: TW                ! Web thickness
       REAL(DOUBLE)                    :: TF                ! Flange thickness
-      REAL(DOUBLE)                    :: ZSHR              ! Z location of shear center relative to center line of vertical web
       REAL(DOUBLE)                    :: ZCG               ! Z location of C.G. relative to center line of vertical web
 
 ! **********************************************************************************************************************************
@@ -2119,7 +2118,6 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
 
       DEN  = SIX*(B - HALF*TW)*TF + (H - TF)*TW
       IF (DEN > ZERO) THEN
-         ZSHR = -THREE*TF*(B - HALF*TW)*(B - HALF*TW)/DEN
          AREA =  (H - TWO*TF)*TW + TWO*B*TF
          ZCG = TWO*TF*(B - TW) * HALF*B / AREA
       ELSE
@@ -2138,9 +2136,9 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
 
       I12  =  ZERO
       JTOR =  ALPHA*THIRD*(H*TW*TW*TW + (B - TW)*TF*TF*TF + (B - TW)*TF*TF*TF)
-      Y(1) =  HALF*H   ;   Z(1) = -ZSHR - HALF*TW + B
+      Y(1) =  HALF*H   ;   Z(1) = -ZCG - HALF*TW + B     ! Stress points relative to the C.G. (neutral axis), as I1/I2 are
       Y(2) = -Y(1)     ;   Z(2) =  Z(1)
-      Y(3) = -Y(1)     ;   Z(3) = -ZSHR - HALF*TW
+      Y(3) = -Y(1)     ;   Z(3) = -ZCG - HALF*TW
       Y(4) =  Y(1)     ;   Z(4) =  Z(3)
       K1   =  (H - TWO*TF)/H
       K2   =  (B - TW)/B
@@ -2161,7 +2159,7 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       REAL(DOUBLE)                    :: H                 ! Overall height
       REAL(DOUBLE)                    :: TW                ! Web thickness
       REAL(DOUBLE)                    :: TF                ! Flange thickness
-      REAL(DOUBLE)                    :: ZSHR              ! Z location of shear center relative to lower left corner
+      REAL(DOUBLE)                    :: ZCG               ! Z location of C.G. relative to center line of vertical web
 
 ! **********************************************************************************************************************************
       JERR = 0
@@ -2172,11 +2170,7 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       TF = HALF*(D(4) - D(3))
 
       DEN  = SIX*(B - HALF*TW)*TF + (H - TF)*TW
-      IF (DEN > ZERO) THEN
-         ZSHR = -THREE*TF*(B - HALF*TW)*(B - HALF*TW)/DEN
-      ELSE
-         JERR = 1
-      ENDIF
+      IF (DEN <= ZERO) JERR = 1
 
       IF (TF < ZERO) JERR = 1
       IF (JERR > 0) RETURN
@@ -2184,14 +2178,15 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       AREA =  (H - TWO*TF)*TW + TWO*B*TF
       I1   =  TW*H*H*H/TWELVE + TWO*((B - TW)*TF*TF*TF/TWELVE + (B - TW)*TF*QUARTER*(H - TF)*(H - TF))
 
-      I2   =  H*TW*TW*TW/TWELVE + H*TW*ZSHR*ZSHR                                                                                   &
-            + TF*(B - TW)*(B - TW)*(B - TW) + TWO*TF*(B - TW)*(-ZSHR + HALF*(B + TW))*(-ZSHR + HALF*(B + TW))
+      ZCG  =  TWO*TF*(B - TW)*HALF*B/AREA                    ! C.G. relative to the center line of the web (as in CHAN)
+      I2   =  H*TW*TW*TW/TWELVE + H*TW*ZCG*ZCG                                                                                     &
+            + TWO*( TF*(B - TW)*(B - TW)*(B - TW)/TWELVE + TF*(B - TW)*(HALF*B - ZCG)*(HALF*B - ZCG) )
 
       I12  =  ZERO
-      JTOR =  ALPHA*THIRD*(H*TW*TW*TW + (B - TF)*TF*TF*TF)
-      Y(1) =  HALF*H   ;   Z(1) = -ZSHR - HALF*TW + B
+      JTOR =  ALPHA*THIRD*(H*TW*TW*TW + TWO*(B - TW)*TF*TF*TF)
+      Y(1) =  HALF*H   ;   Z(1) = -ZCG - HALF*TW + B     ! Stress points relative to the C.G. (neutral axis), as I1/I2 are
       Y(2) = -Y(1)     ;   Z(2) =  Z(1)
-      Y(3) = -Y(1)     ;   Z(3) = -ZSHR - HALF*TW
+      Y(3) = -Y(1)     ;   Z(3) = -ZCG - HALF*TW
       Y(4) =  Y(1)     ;   Z(4) =  Z(3)
       K1   =  (H - TWO*TF)/H
       K2   =  (B - TW)/B
@@ -2212,7 +2207,9 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       REAL(DOUBLE)                    :: H                 ! Overall height
       REAL(DOUBLE)                    :: TW                ! Web thickness
       REAL(DOUBLE)                    :: TF                ! Flange thickness
-      REAL(DOUBLE)                    :: ZSHR              ! Z location of shear center relative to lower left corner
+      INTEGER(LONG)                   :: I                 ! DO loop index
+      REAL(DOUBLE)                    :: SWAP              ! Temporary for exchanging the y and z axes
+      REAL(DOUBLE)                    :: ZCG               ! Z location of C.G. relative to center line of vertical web
 
 ! **********************************************************************************************************************************
       JERR = 0
@@ -2223,29 +2220,38 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       TF = D(1)
 
       DEN  = SIX*(B - HALF*TW)*TF + (H - TF)*TW
-      IF (DEN > ZERO) THEN
-         ZSHR = -THREE*TF*(B - HALF*TW)*(B - HALF*TW)/DEN
-      ELSE
-         JERR = 1
-      ENDIF
+      IF (DEN <= ZERO) JERR = 1
 
       IF (TF < ZERO) JERR = 1
       IF (JERR > 0) RETURN
 
       AREA =  (H - TWO*TF)*TW + TWO*B*TF
-      I2   =  H*TW*TW*TW/TWELVE + H*TW*ZSHR*ZSHR                                                                                   &
-            + TF*(B - TW)*(B - TW)*(B - TW) + TWO*TF*(B - TW)*(-ZSHR + HALF*(B + TW))*(-ZSHR + HALF*(B + TW))
+      ZCG  =  TWO*TF*(B - TW)*HALF*B/AREA                    ! C.G. relative to the center line of the web (as in CHAN)
+      I2   =  H*TW*TW*TW/TWELVE + H*TW*ZCG*ZCG                                                                                     &
+            + TWO*( TF*(B - TW)*(B - TW)*(B - TW)/TWELVE + TF*(B - TW)*(HALF*B - ZCG)*(HALF*B - ZCG) )
 
       I1   =  TW*H*H*H/TWELVE + TWO*((B - TW)*TF*TF*TF/TWELVE + (B - TW)*TF*QUARTER*(H - TF)*(H - TF))
 
       I12  =  ZERO
-      JTOR =  ALPHA*THIRD*(H*TW*TW*TW + (B - TF)*TF*TF*TF)
-      Y(1) =  HALF*H   ;   Z(1) = -ZSHR - HALF*TW + B
+      JTOR =  ALPHA*THIRD*(H*TW*TW*TW + TWO*(B - TW)*TF*TF*TF)
+      Y(1) =  HALF*H   ;   Z(1) = -ZCG - HALF*TW + B     ! Stress points relative to the C.G. (neutral axis), as I1/I2 are
       Y(2) = -Y(1)     ;   Z(2) =  Z(1)
-      Y(3) = -Y(1)     ;   Z(3) = -ZSHR - HALF*TW
+      Y(3) = -Y(1)     ;   Z(3) = -ZCG - HALF*TW
       Y(4) =  Y(1)     ;   Z(4) =  Z(3)
       K1   =  (H - TWO*TF)/H
       K2   =  (B - TW)/B
+                                                           ! The MSC CHAN2 web is horizontal (along element z, DIM4 = width)
+                                                           ! and the legs point along +y (DIM3 = depth): the channel above has
+                                                           ! its web along y, so exchange the y and z axes.
+      SWAP  = I1   ;   I1   = I2   ;   I2   = SWAP
+      SWAP  = K1   ;   K1   = K2   ;   K2   = SWAP
+      DO I=1,4
+         SWAP = Y(I)   ;   Y(I) = Z(I)   ;   Z(I) = SWAP
+      ENDDO
+                                                           ! The exchange mirrors the section, which reverses the order of the
+                                                           ! points around it. Exchange points 2 and 4 (D and F) to restore it
+      SWAP  = Y(2)   ;   Y(2) = Y(4)   ;   Y(4) = SWAP
+      SWAP  = Z(2)   ;   Z(2) = Z(4)   ;   Z(4) = SWAP
 
       END SUBROUTINE SECTION_PROPS_CHAN2
 
@@ -2354,13 +2360,12 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       REAL(DOUBLE)                    :: ALPHA = 1.15D0    ! Constant in calc of JTOR for open cross-sections
 !                                                            Avg: Pilkey has 1.12 for channel section and 1.17 for I section
       REAL(DOUBLE)                    :: DEN               ! Intermediate variable
-      REAL(DOUBLE)                    :: NUM               ! Intermediate variable
       REAL(DOUBLE)                    :: H                 ! Height
       REAL(DOUBLE)                    :: T                 ! Thickness of hat walls
       REAL(DOUBLE)                    :: W1                ! Overall width of top of hat
       REAL(DOUBLE)                    :: W2                ! Width of base legs of hat
       REAL(DOUBLE)                    :: W3                ! Inside width of top of hat
-      REAL(DOUBLE)                    :: YSHR              ! Location of shear center relative to center of top of hat
+      REAL(DOUBLE)                    :: YCG               ! C.G. height above the bottom of the flanges
 
 ! **********************************************************************************************************************************
       JERR = 0
@@ -2372,12 +2377,7 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       W3 = W1 - TWO*T
 
       DEN  = W3*W3*W3 + SIX*W3*W3*(H - T) + SIX*(W2 + T)*W3*W3 + EIGHT*(W2 + T)*(W2 + T)*(W2 + T) + TWELVE*(W2 + T)*(W2 + T)*W3
-      NUM  = (H - T)*(THREE*(H - T)*W3*W3 - EIGHT*W3*W3*W3)
-      IF (DEN > ZERO) THEN
-         YSHR = NUM/DEN
-      ELSE
-         JERR = 1
-      ENDIF
+      IF (DEN <= ZERO) JERR = 1
 
       IF (H - T      < ZERO) JERR = 1
       IF (W1 - TWO*T < ZERO) JERR = 1
@@ -2389,18 +2389,17 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
 
       IF (JERR > 0) RETURN
 
-      I1   =  TWO*W2*T*T*T/TWELVE + TWO*W2*T*(H - T + YSHR)*T*(H - T + YSHR)                                                       &
-            + TWO*T*H*H*H/TWELVE + TWO*H*T*(HALF*H + YSHR - HALF*T)*(HALF*H + YSHR - HALF*T)                                       &
-            + W3*T*T*T/TWELVE + W3*T*(HALF*T + YSHR)*(HALF*T + YSHR)
-
-      I2   =  TWO*T*W2*W2*W2/TWELVE + W2*T*QUARTER*(W1 + W2)*(W1 + W2)                                                             &
-            + TWO*H*T*T*T/TWELVE + TWO*H*T*(W3 + HALF*T)*(W3 + HALF*T)                                                             &
-            + T*(W3*W3*W3)/TWELVE
-
+      YCG  =  ( W3*T*(H - HALF*T) + TWO*H*T*HALF*H + TWO*W2*T*HALF*T )/AREA      ! C.G. height above the bottom of the flanges
+      I1   =  W3*T*T*T/TWELVE + W3*T*(H - HALF*T - YCG)*(H - HALF*T - YCG)                                                         &
+            + TWO*( T*H*H*H/TWELVE + H*T*(HALF*H - YCG)*(HALF*H - YCG) )                                                           &
+            + TWO*( W2*T*T*T/TWELVE + W2*T*(HALF*T - YCG)*(HALF*T - YCG) )
+      I2   =  T*W3*W3*W3/TWELVE                                                                                                    &
+            + TWO*( H*T*T*T/TWELVE + H*T*(HALF*W1 - HALF*T)*(HALF*W1 - HALF*T) )                                                   &
+            + TWO*( T*W2*W2*W2/TWELVE + T*W2*HALF*(W1 + W2)*HALF*(W1 + W2) )
       I12  =  ZERO
       JTOR =  ALPHA*THIRD*( TWO*W2 + TWO*H + (W1 - TWO*T) )*T*T*T
-      Y(1) =  HALF*T + YSHR       ; Z(1) =  HALF*W1
-      Y(2) = -YSHR + HALF*T - H   ; Z(2) =  HALF*W1 + W2
+      Y(1) =  H - YCG             ; Z(1) =  HALF*W1      ! Stress points relative to the C.G.: top of crown, flange tips
+      Y(2) = -YCG                 ; Z(2) =  HALF*W1 + W2
       Y(3) =  Y(2)                ; Z(3) = -Z(2)
       Y(4) =  Y(1)                ; Z(4) = -Z(1)
       K1   =  (H - TWO*T)/H
@@ -2436,7 +2435,7 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
 
       AREA =  W1*H0 + TWO*WT*HT
       I1   =  W1*H0*H0*H0/TWELVE + FOUR*( WT*HT*HT*HT/(THREE*TWELVE) + HALF*WT*HT*HT*HT/NINE )
-      I2   =  H0*W1*W1*W1/TWELVE + FOUR*( HT*WT*WT*WT/(THREE*TWELVE) + HALF*WT*HT*WT*WT/NINE )
+      I2   =  H0*W1*W1*W1/TWELVE + FOUR*( HT*WT*WT*WT/(THREE*TWELVE) + HALF*WT*HT*(HALF*W1 + THIRD*WT)**2 )
       I12  =  ZERO
       IF (WAVG > H0) THEN
          BETA = H0/WAVG
@@ -2540,7 +2539,6 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       REAL(DOUBLE)                    :: TW                ! Thickness of web
       REAL(DOUBLE)                    :: WB                ! Width of top flange
       REAL(DOUBLE)                    :: WT                ! Width of bottom flange
-      REAL(DOUBLE)                    :: YCG               ! Dist from bottom of I section to section C.G.
 
 ! **********************************************************************************************************************************
       JERR = 0
@@ -2562,7 +2560,6 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
       AWEB = HW*TW
       AREA =  ATOP + ABOT + AWEB
 
-      YCG  =  ZERO
                                                            ! Calc I1 as I for each of parts about own C.G + part area times D^2
       I1   =  WT*TT*TT*TT/TWELVE + WT*TT*(HALF*HW + HALF*TT)*(HALF*HW + HALF*TT)                                                   &
             + WB*TB*TB*TB/TWELVE + WB*TB*(HALF*HW + HALF*TB)*(HALF*HW + HALF*TB)                                                   &
@@ -2572,8 +2569,8 @@ D_do1:   DO J=2,9                                          ! --- Read cross-sect
 
       I12  =  ZERO
       JTOR =  ALPHA*THIRD*(WB*TB*TB*TB + HW*TW*TW*TW + WT*TT*TT*TT)
-      Y(1) =  H0 - YCG     ;   Z(1) =  HALF*WT
-      Y(2) = -YCG          ;   Z(2) =  HALF*WB
+      Y(1) =  HALF*H0      ;   Z(1) =  HALF*WT        ! C.G. is at mid-height (section is symmetric)
+      Y(2) = -HALF*H0      ;   Z(2) =  HALF*WB
       Y(3) =  Y(2)         ;   Z(3) = -Z(2)
       Y(4) =  Y(1)         ;   Z(4) = -Z(1)
 
