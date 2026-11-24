@@ -765,6 +765,18 @@ k_do6:            DO K=EID1,EID2
          RETURN
       ENDIF
 
+! PLOAD2/PLOAD4 pressure on solid elements is not implemented (the G1/G3 form of PLOAD4 is rejected when the card is read).
+! Any other form that reaches a solid (blank G1/G3 fields, THRU range, G1 only for a CPENTA triangular face) would otherwise
+! be accepted and give no load at all, so stop here.
+
+      IF ((ETYPE(IELEM)(1:4) == 'HEXA') .OR. (ETYPE(IELEM)(1:5) == 'PENTA') .OR. (ETYPE(IELEM)(1:5) == 'TETRA')) THEN
+         WRITE(ERR,1524) NAME(1:6), SETID, EID, ETYPE(IELEM)
+         WRITE(F06,1524) NAME(1:6), SETID, EID, ETYPE(IELEM)
+         FATAL_ERR   = FATAL_ERR + 1
+         EL_PRES_ERR = EL_PRES_ERR + 1
+         RETURN
+      ENDIF
+
 ! No error, so put pointer into PPNT(i,j) and give warning if the elem has had a pressure defined previously
 
       IF (PPNT(IELEM,JSUB) /= 0) THEN
@@ -798,6 +810,9 @@ k_do6:            DO K=EID1,EID2
 
 ! **********************************************************************************************************************************
  1520 FORMAT(' *ERROR  1520: ELEMENT ',I8,' ON PLOAD2 ',I8,' DOES NOT EXIST OR IS OF WRONG TYPE FOR THE PRESSURE CARD:')
+
+ 1524 FORMAT(' *ERROR  1524: ',A,' SID ',I8,' REFERENCES SOLID ELEMENT ',I8,' (',A,'). PRESSURE LOADS ON SOLID ELEMENTS',     &
+                ' ARE NOT IMPLEMENTED; THE LOAD WOULD BE IGNORED')
 
  1521 FORMAT(' *WARNING    : FOR INTERNAL SUBCASE NUMBER ',I8,' ELEMENT ',I8,' HAS PRESSURE DEFINED MORE THAN ONCE.',              &
                            ' LAST VALUE IN INPUT DECK WILL BE USED')

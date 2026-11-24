@@ -522,8 +522,11 @@
 !xx   ELSE IF ((OLDTAG(1:8) == '        ') .AND. (NEWTAG(1:8) == '*      ')) THEN
       ELSE IF ((OLDTAG(1:1) == ' ') .AND. (NEWTAG(1:1) == '*') .AND. (OLDTAG(2:8) == NEWTAG(2:8))) THEN
          ICONT = 1
-      ELSE
-         BACKSPACE(IN1)
+      ELSE                                                 ! Only the 1st half of a large field continuation is present (allowed;
+         BACKSPACE(IN1)                                    ! remaining fields are blank). Use it, as subr NEXTC2 does, so that
+         CHILD2(1:) = ' '                                  ! the counts made here match what the BD_ routines read later.
+         CALL FFIELD2 ( CHILD1, CHILD2, CHILD, IERR )
+         ICONT = 1
          RETURN
       ENDIF
 

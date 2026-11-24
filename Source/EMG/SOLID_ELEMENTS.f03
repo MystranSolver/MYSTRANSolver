@@ -694,7 +694,7 @@
         SIGzx = STRESS(6)
 
 
-        IF (.TRUE.) THEN
+        IF (.FALSE.) THEN                                  ! Use the full G' S G form (ELSE branch)
 
           KWW(1,1) = SIGyy + SIGzz   ;   KWW(1,2) = -SIGxy   ;   KWW(1,3) = -SIGzx
           KWW(2,2) = SIGxx + SIGzz   ;   KWW(2,3) = -SIGyz
@@ -1579,6 +1579,8 @@
       REAL(DOUBLE)                    :: JAC(3,3)                ! An output from subr JAC3D, called herein. 3 x 3 Jacobian matrix.
       REAL(DOUBLE)                    :: JACI(3,3)               ! An output from subr JAC3D, called herein. 3 x 3 Jacobian inverse.
       REAL(DOUBLE)                    :: KWW(3,3)                ! Portion of differential stiffness matrix
+      REAL(DOUBLE)                    :: DUM8(ELGP,ELGP)         ! G' S G for one Gauss point (differential stiffness)
+      REAL(DOUBLE)                    :: DUM9(3,ELGP)            ! S G for one Gauss point (differential stiffness)
       REAL(DOUBLE)                    :: PSH(ELGP)               ! Output from subr SHP3DP. Shape fcn at Gauss pts SSI, SSJ
       REAL(DOUBLE)                    :: SIGxx                   ! Normal stress in the elem x  direction
       REAL(DOUBLE)                    :: SIGyy                   ! Normal stress in the elem y  direction
@@ -1990,9 +1992,9 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
         SIGyz = STRESS(5)
         SIGzx = STRESS(6)
 
-        KWW(1,1) = SIGyy + SIGzz   ;   KWW(1,2) = -SIGxy   ;   KWW(1,3) = -SIGzx
-        KWW(2,2) = SIGxx + SIGzz   ;   KWW(2,3) = -SIGyz
-        KWW(3,3) = SIGxx + SIGyy
+        KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx    ! Full initial stress tensor: KED = int(G' S G dV)
+        KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz                      ! for each displacement component (rotation-only
+        KWW(3,3) = SIGzz                                           ! form omega' K omega dropped the strain terms)
         KWW(2,1) = KWW(1,2)
         KWW(3,1) = KWW(1,3)
         KWW(3,2) = KWW(2,3)
@@ -2013,8 +2015,16 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
               CBAR(2,3*(L-1)+1) =  HALF*DPSHX(3,L) ; CBAR(2,3*(L-1)+2) =  ZERO            ; CBAR(2,3*(L-1)+3)= -HALF*DPSHX(1,L)
               CBAR(3,3*(L-1)+1) = -HALF*DPSHX(2,L) ; CBAR(3,3*(L-1)+2) =  HALF*DPSHX(1,L) ; CBAR(3,3*(L-1)+3)=  ZERO
             ENDDO
-            CALL MATMULT_FFF ( KWW, CBAR, 3, 3, 3*ELGP, DUM6 )
-            CALL MATMULT_FFF_T ( CBAR, DUM6, 3, 3*ELGP, 3*ELGP, DUM5 )
+            CALL MATMULT_FFF ( KWW, DPSHX, 3, 3, ELGP, DUM9 )
+            CALL MATMULT_FFF_T ( DPSHX, DUM9, 3, ELGP, ELGP, DUM8 )
+            DUM5 = ZERO
+            DO L=1,ELGP
+              DO M=1,ELGP
+                DUM5(3*(L-1)+1,3*(M-1)+1) = DUM8(L,M)
+                DUM5(3*(L-1)+2,3*(M-1)+2) = DUM8(L,M)
+                DUM5(3*(L-1)+3,3*(M-1)+3) = DUM8(L,M)
+              ENDDO
+            ENDDO
             INTFAC = DETJ(GAUSS_PT)*HH_IJ(IJ)*HH_K(K)
             DO L=1,3*ELGP
               DO M=1,3*ELGP
@@ -2153,6 +2163,8 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
       REAL(DOUBLE)                    :: JAC(3,3)                ! An output from subr JAC3D, called herein. 3 x 3 Jacobian matrix.
       REAL(DOUBLE)                    :: JACI(3,3)               ! An output from subr JAC3D, called herein. 3 x 3 Jacobian inverse.
       REAL(DOUBLE)                    :: KWW(3,3)                ! Portion of differential stiffness matrix
+      REAL(DOUBLE)                    :: DUM8(ELGP,ELGP)         ! G' S G for one Gauss point (differential stiffness)
+      REAL(DOUBLE)                    :: DUM9(3,ELGP)            ! S G for one Gauss point (differential stiffness)
       REAL(DOUBLE)                    :: PSH(ELGP)               ! Output from subr SHP3DT. Shape fcn at Gauss pts SSI, SSJ
       REAL(DOUBLE)                    :: SIGxx                   ! Normal stress in the elem x  direction
       REAL(DOUBLE)                    :: SIGyy                   ! Normal stress in the elem y  direction
@@ -2440,9 +2452,9 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
         SIGyz = STRESS(5)
         SIGzx = STRESS(6)
 
-        KWW(1,1) = SIGyy + SIGzz   ;   KWW(1,2) = -SIGxy   ;   KWW(1,3) = -SIGzx
-        KWW(2,2) = SIGxx + SIGzz   ;   KWW(2,3) = -SIGyz
-        KWW(3,3) = SIGxx + SIGyy
+        KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx    ! Full initial stress tensor: KED = int(G' S G dV)
+        KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz                      ! for each displacement component (rotation-only
+        KWW(3,3) = SIGzz                                           ! form omega' K omega dropped the strain terms)
         KWW(2,1) = KWW(1,2)
         KWW(3,1) = KWW(1,3)
         KWW(3,2) = KWW(2,3)
@@ -2466,8 +2478,16 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
             CBAR(2,3*(L-1)+1) =  HALF*DPSHX(3,L)  ;  CBAR(2,3*(L-1)+2) =  ZERO             ;  CBAR(2,3*(L-1)+3)= -HALF*DPSHX(1,L)
             CBAR(3,3*(L-1)+1) = -HALF*DPSHX(2,L)  ;  CBAR(3,3*(L-1)+2) =  HALF*DPSHX(1,L)  ;  CBAR(3,3*(L-1)+3)=  ZERO
           ENDDO
-          CALL MATMULT_FFF ( KWW, CBAR, 3, 3, 3*ELGP, DUM6 )
-          CALL MATMULT_FFF_T ( CBAR, DUM6, 3, 3*ELGP, 3*ELGP, DUM5 )
+          CALL MATMULT_FFF ( KWW, DPSHX, 3, 3, ELGP, DUM9 )
+          CALL MATMULT_FFF_T ( DPSHX, DUM9, 3, ELGP, ELGP, DUM8 )
+          DUM5 = ZERO
+          DO L=1,ELGP
+            DO M=1,ELGP
+              DUM5(3*(L-1)+1,3*(M-1)+1) = DUM8(L,M)
+              DUM5(3*(L-1)+2,3*(M-1)+2) = DUM8(L,M)
+              DUM5(3*(L-1)+3,3*(M-1)+3) = DUM8(L,M)
+            ENDDO
+          ENDDO
           INTFAC = DETJ(I)*HHH_IJK(I)
           DO L=1,3*ELGP
             DO M=1,3*ELGP
