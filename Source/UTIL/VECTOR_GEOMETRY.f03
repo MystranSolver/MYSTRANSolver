@@ -445,7 +445,7 @@ j_do_2:  DO J=1,NCORD
                   ENDDO
                ENDDO
             ELSE
-               THETA    =  DASIN(RADXY/RAD)
+               THETA    =  DATAN2(RADXY,XRP(3))                ! Colatitude 0..180 deg (DASIN only gives 0..90)
                PHI      =  DATAN2(XRP(2),XRP(1))
                CT       =  DCOS(THETA)
                ST       =  DSIN(THETA)

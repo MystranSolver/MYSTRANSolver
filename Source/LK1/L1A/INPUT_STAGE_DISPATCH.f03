@@ -1362,7 +1362,7 @@ j_do2:            DO J=2,LMPCADDC
                                          LEDAT, LFORCE, LCONM2, LCORD, LGRAV, LGRID, LGUSERIN, LLOADC, LLOADR,                     &
                                          LMATL, LMPC, LMPCADDC, LMPCADDR, LPBAR, LPBEAM, LPBUSH, LPCOMP, LPCOMP_PLIES, LPDAT,      &
                                          LPELAS, LPLOAD, LPMASS, LPROD, LPSHEL, LPSHEAR, LPSOLID, LPUSER1, LPUSERIN, LRFORCE,      &
-                                         LRIGEL, LSEQ, LSLOAD, LSNORM, LSPC, LSPC1, LSPCADDC, LSPCADDR, LSUSERIN, LTDAT,           &
+                                         LRIGEL, LSEQ, LSLOAD, LSNORM, LSPC, LSPC1, LSPCADDC, LSPCADDR, LSUB, LSUSERIN, LTDAT,     &
                                          MEDAT_CBAR, MEDAT_CBEAM, MEDAT_CBUSH,                                                     &
                                          MEDAT_CELAS1, MEDAT_CELAS2, MEDAT_CELAS3, MEDAT_CELAS4,                                   &
                                          MEDAT_CQUAD, MEDAT_CQUAD8, MEDAT_CROD, MEDAT_CSHEAR, MEDAT_CTRIA, MEDAT_CUSER1,           &
@@ -1748,12 +1748,12 @@ j_do2:            DO J=2,LMPCADDC
          ELSE IF (CARD(1:5) == 'PELAS'   )  THEN
             LPELAS = LPELAS + 1
 
-         ELSE IF (CARD(1:6) == 'PLOAD2'  )  THEN
-            LPDAT  = LPDAT  + MPDAT_PLOAD2
+         ELSE IF (CARD(1:6) == 'PLOAD2'  )  THEN       ! PDATA holds the pressures of every subcase (a card can be used in each
+            LPDAT  = LPDAT  + MPDAT_PLOAD2*MAX(1,LSUB)  ! subcase through LOAD combinations), so size it for all subcases
             LPLOAD = LPLOAD + 1
 
          ELSE IF (CARD(1:6) == 'PLOAD4'  )  THEN
-            LPDAT  = LPDAT  + MPDAT_PLOAD4
+            LPDAT  = LPDAT  + MPDAT_PLOAD4*MAX(1,LSUB)
             LPLOAD = LPLOAD + 1
 
          ELSE IF (CARD(1:6) == 'PLOTEL'  )  THEN

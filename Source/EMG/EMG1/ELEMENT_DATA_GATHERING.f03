@@ -1297,56 +1297,31 @@
 
             IF ((TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'QUAD4')) THEN
 
-               IF      (PTYPE(INT_ELEM_ID) == '1') THEN
-
-                  DO I=1,NSUB
-                     IPPN = PPNT(INT_ELEM_ID,I)
-                     IF (IPPN /= 0) THEN
+               DO I=1,NSUB                                 ! PTYPE is tested for each S/C since the entry type can differ by S/C
+                  IPPN = PPNT(INT_ELEM_ID,I)
+                  IF (IPPN /= 0) THEN
+                     IF      (PTYPE(INT_ELEM_ID,I) == '1') THEN
                         PRESS(3,I) = PDATA(IPPN)
-                     ENDIF
-                  ENDDO
-
-               ELSE IF (PTYPE(INT_ELEM_ID) == '3') THEN
-
-                  DO I=1,NSUB
-                     IPPN = PPNT(INT_ELEM_ID,I)
-                     IF (IPPN /= 0) THEN
+                     ELSE IF (PTYPE(INT_ELEM_ID,I) == '3') THEN
                         PRESS(3,I) = THIRD*( PDATA(IPPN) + PDATA(IPPN+1) + PDATA(IPPN+2) )
-                     ENDIF
-                  ENDDO
-
-               ELSE IF (PTYPE(INT_ELEM_ID) == '4') THEN
-
-                  DO I=1,NSUB
-                     IPPN = PPNT(INT_ELEM_ID,I)
-                     IF (IPPN /= 0) THEN
+                     ELSE IF (PTYPE(INT_ELEM_ID,I) == '4') THEN
                         PRESS(3,I) = QUARTER*( PDATA(IPPN) + PDATA(IPPN+1) + PDATA(IPPN+2) + PDATA(IPPN+3) )
                      ENDIF
-                  ENDDO
-
-               ENDIF
+                  ENDIF
+               ENDDO
 
             ELSE IF ((TYPE(1:4) == 'HEXA') .OR. (TYPE(1:5) == 'PENTA') .OR. (TYPE(1:5) == 'TETRA')) THEN
 
-               IF (PTYPE(INT_ELEM_ID) == '3') THEN
-
-                  DO I=1,NSUB
-                     IPPN = PPNT(INT_ELEM_ID,I)
-                     IF (IPPN /= 0) THEN
+               DO I=1,NSUB
+                  IPPN = PPNT(INT_ELEM_ID,I)
+                  IF (IPPN /= 0) THEN
+                     IF      (PTYPE(INT_ELEM_ID,I) == '3') THEN
                         PRESS(3,I) = THIRD*( PDATA(IPPN) + PDATA(IPPN+1) + PDATA(IPPN+2) )
-                     ENDIF
-                  ENDDO
-
-               ELSE IF (PTYPE(INT_ELEM_ID) == '4') THEN
-
-                  DO I=1,NSUB
-                     IPPN = PPNT(INT_ELEM_ID,I)
-                     IF (IPPN /= 0) THEN
+                     ELSE IF (PTYPE(INT_ELEM_ID,I) == '4') THEN
                         PRESS(3,I) = QUARTER*( PDATA(IPPN) + PDATA(IPPN+1) + PDATA(IPPN+2) + PDATA(IPPN+3) )
                      ENDIF
-                  ENDDO
-
-               ENDIF
+                  ENDIF
+               ENDDO
 
             ENDIF
 
