@@ -501,7 +501,8 @@
       INTEGER(LONG), PARAMETER :: MPCOMP_PLIES        =   2      ! No. integer data for each layer on PCOMP (MIDi, SOUTi)
       INTEGER(LONG), PARAMETER :: MPELAS              =   1      ! No. cols allowed in dimensioning array PELAS
       INTEGER(LONG), PARAMETER :: MPMASS              =   1      ! No. cols allowed in dimensioning array PMASS
-      INTEGER(LONG), PARAMETER :: MPRESS              =   3      ! No. rows allowed in dimensioning array PRESS
+      INTEGER(LONG), PARAMETER :: MPRESS              =   7      ! No. rows allowed in dimensioning array PRESS
+                                                                 ! (rows 4-7: PLOAD4 corner pressures of TRIA3/QUAD4)
       INTEGER(LONG), PARAMETER :: MPROD               =   2      ! No. cols allowed in dimensioning array PROD
       INTEGER(LONG), PARAMETER :: MPSHEAR             =   2      ! No. cols allowed in dimensioning array PSHEAR
       INTEGER(LONG), PARAMETER :: MPSHEL              =   6      ! No. cols allowed in dimensioning array PSHEL

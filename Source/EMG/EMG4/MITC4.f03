@@ -91,6 +91,8 @@
       REAL(DOUBLE)                    :: DUM3(6*ELGP,6)    ! Intermediate matrix
       REAL(DOUBLE)                    :: DUM4(3)           ! Intermediate matrix
       REAL(DOUBLE)                    :: INTFAC            ! An integration factor (constant multiplier for the Gauss integration)
+      INTEGER(LONG)                   :: JSUB              ! Subcase index for the pressure load
+      REAL(DOUBLE)                    :: PGAUSS            ! Pressure at a Gauss point (PLOAD4 corner values interpolated)
       REAL(DOUBLE)                    :: DETJ              ! Jacobian determinant
       REAL(DOUBLE)                    :: E2(6,6)           ! Membrane and shear elasticity matrix in the element coordinate system.
       REAL(DOUBLE)                    :: E3(6,6)           ! Membrane and shear elasticity matrix in the cartesian local coordinate system.
@@ -476,6 +478,7 @@
       IF (OPT(5) == 'Y') THEN
 
          UNIT_PPE(:) = ZERO
+         PPE(1:6*ELGP,1:NSUB) = ZERO
 
          CALL ORDER_GAUSS ( IORD_IJ, SS_IJ, HH_IJ )
 
@@ -495,18 +498,17 @@
                DETJ = SQRT(DOT_PRODUCT(DUM4, DUM4))
                INTFAC = DETJ * HH_IJ(I) * HH_IJ(J)         ! Contribution to area for this Gauss point
 
-               DO GP=1,ELGP
-                  K = (GP-1) * 6
-                  UNIT_PPE(K+1:K+3) = UNIT_PPE(K+1:K+3) + NORMAL * PSH(GP) * INTFAC
+               DO JSUB=1,NSUB                                ! Pressure at this Gauss point, interpolated from the PLOAD4 corner values
+                  PGAUSS = DOT_PRODUCT( PSH(1:4), PRESS(4:7,JSUB) )
+                  DO GP=1,ELGP
+                     K = (GP-1) * 6
+                     PPE(K+1:K+3,JSUB) = PPE(K+1:K+3,JSUB) + NORMAL * PSH(GP) * INTFAC * PGAUSS
+                  ENDDO
                ENDDO
 
             ENDDO
          ENDDO
 
-                                                           ! Scale the unit pressure load vector by the pressure in each subcase.
-         DO J=1,NSUB
-            PPE(1:6*ELGP,J) = UNIT_PPE(1:6*ELGP) * PRESS(3,J)
-         ENDDO
 
 
 
