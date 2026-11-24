@@ -107,6 +107,7 @@
       REAL(DOUBLE)                    :: R, S              ! Isoparametric coordinates of a point
       REAL(DOUBLE)                    :: DETJ              ! Mid-surface area Jacobian |g_r x g_s|
       REAL(DOUBLE)                    :: INTFAC            ! Integration factor DETJ*weight
+      REAL(DOUBLE)                    :: PGAUSS            ! Pressure at a point (PLOAD4 corner values interpolated)
       REAL(DOUBLE)                    :: AREA              ! Element area
       REAL(DOUBLE)                    :: G(3,3)            ! Covariant basis vectors
       REAL(DOUBLE)                    :: NORMAL(3)         ! Unit director at a point
@@ -347,14 +348,16 @@
             DETJ = DSQRT( DOT_PRODUCT( CROSS3(G(:,1),G(:,2)), CROSS3(G(:,1),G(:,2)) ) )
             INTFAC = DETJ*HH_IJ(I)
 
-            DO GP=1,ELGP
-               K = (GP-1)*6
-               UNIT_PPE(K+1:K+3) = UNIT_PPE(K+1:K+3) + NORMAL*H(GP)*INTFAC
+            DO J=1,NSUB                                    ! Pressure at this point, interpolated from the PLOAD4 corner values
+               PGAUSS = DOT_PRODUCT( H(1:3), PRESS(4:6,J) )
+               DO GP=1,ELGP
+                  K = (GP-1)*6
+                  PPE(K+1:K+3,J) = PPE(K+1:K+3,J) + NORMAL*H(GP)*INTFAC*PGAUSS
+               ENDDO
             ENDDO
          ENDDO
 
          DO J=1,NSUB
-            PPE(1:18,J) = UNIT_PPE(1:18)*PRESS(3,J)
             DO GP=1,ELGP
                K = (GP-1)*6
                PPE(K+1,J) = PPE(K+1,J) + AREA*PRESS(1,J)/THREE

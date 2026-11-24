@@ -1302,10 +1302,13 @@
                   IF (IPPN /= 0) THEN
                      IF      (PTYPE(INT_ELEM_ID,I) == '1') THEN
                         PRESS(3,I) = PDATA(IPPN)
+                        PRESS(4:7,I) = PDATA(IPPN)
                      ELSE IF (PTYPE(INT_ELEM_ID,I) == '3') THEN
                         PRESS(3,I) = THIRD*( PDATA(IPPN) + PDATA(IPPN+1) + PDATA(IPPN+2) )
+                        PRESS(4:6,I) = PDATA(IPPN:IPPN+2)  ! Corner pressures, used by MITC3 to integrate a varying pressure
                      ELSE IF (PTYPE(INT_ELEM_ID,I) == '4') THEN
                         PRESS(3,I) = QUARTER*( PDATA(IPPN) + PDATA(IPPN+1) + PDATA(IPPN+2) + PDATA(IPPN+3) )
+                        PRESS(4:7,I) = PDATA(IPPN:IPPN+3)  ! Corner pressures, used by MITC4 to integrate a varying pressure
                      ENDIF
                   ENDIF
                ENDDO
