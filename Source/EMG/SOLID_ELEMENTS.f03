@@ -133,7 +133,7 @@
                                                                 ! Strain-displ matrix for this element for all Gauss points
 
       REAL(DOUBLE)                    :: BI(6,3*ELGP)           ! Strain-displ matrix for this element for one Gauss point
-      REAL(DOUBLE)                    :: B_SH(6,3*ELGP,8)       ! Shear rows of B at the 2x2x2 points (reduced shear integration, IORD = 3)
+      REAL(DOUBLE)                    :: B_SH(6,3*ELGP,8)       ! B at the 2x2x2 points (reduced shear integration, IORD = 3)
       REAL(DOUBLE)                    :: DETJ_SH(8)             ! Jacobian determinants at the 2x2x2 points
       LOGICAL                         :: RED3                   ! True for IORD = 3 with reduced integration of the shear terms
 
@@ -411,7 +411,7 @@
                         CALL JAC3D ( SSS_SH(I), SSS_SH(J), SSS_SH(K), DPSHG, 'N', JAC, JACI, DETJ_SH(GAUSS_PT) )
                         DPSHX = MATMUL(JACI, DPSHG)
                         CALL B3D_ISOPARAMETRIC ( DPSHX, GAUSS_PT, I, J, K, 'direct strains', 'Y', BI )
-                        DO L=4,6
+                        DO L=1,6                           ! Direct rows are needed for direct-shear coupling terms of ES
                            DO M=1,3*ELGP
                               B_SH(L,M,GAUSS_PT) = BI(L,M)
                            ENDDO
@@ -556,7 +556,7 @@
                DO I=1,IORD
                   GAUSS_PT = GAUSS_PT + 1
                   BI = B(:,:,GAUSS_PT)
-                  IF (RED3) BI(4:6,:) = ZERO                      ! shear terms are integrated separately with 2x2x2 points
+                  IF (RED3) BI(4:6,:) = ZERO                      ! shear and coupling terms: integrated with 2x2x2 points
                   DUM4 = MATMUL(ES,BI)
                   DUM5 = MATMUL(TRANSPOSE(BI),DUM4)
                   INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
@@ -565,16 +565,18 @@
             ENDDO
          ENDDO
 
-         IF (RED3) THEN                                       ! Shear strain energy with 2x2x2 Gauss points
+         IF (RED3) THEN                                       ! Shear and direct-shear coupling energy with 2x2x2 Gauss points
             CALL ORDER_GAUSS ( 2, SSS_SH, HHH_SH )
             GAUSS_PT = 0
             DO K=1,2
                DO J=1,2
                   DO I=1,2
                      GAUSS_PT = GAUSS_PT + 1
-                     BI = ZERO
-                     BI(4:6,:) = B_SH(4:6,:,GAUSS_PT)
-                     DUM4 = MATMUL(ES,BI)
+                     BI = B_SH(:,:,GAUSS_PT)
+                     DUM4 = MATMUL(ES,BI)                     ! Rows 4-6: shear stress from all strains
+                                                              ! Rows 1-3: direct stress from shear strains only (direct-direct
+                                                              ! terms are already in the full integration loop)
+                     DUM4(1:3,:) = MATMUL(ES(1:3,4:6),BI(4:6,:))
                      DUM5 = MATMUL(TRANSPOSE(BI),DUM4)
                      INTFAC = DETJ_SH(GAUSS_PT)*HHH_SH(I)*HHH_SH(J)*HHH_SH(K)
                      DO L=1,3*ELGP
@@ -1556,6 +1558,9 @@
 !                                                                  (contains terms from DPSHX matrices for each grid of the PENTA)
 
       REAL(DOUBLE)                    :: DETJ(IORD_IJ*IORD_K)    ! Determinant of JAC for all Gauss points
+      REAL(DOUBLE)                    :: B_SH(6,3*ELGP,6)        ! B at the 3x2 points (reduced shear, IORD_IJ = 7)
+      REAL(DOUBLE)                    :: DETJ_SH(6)              ! Determinant of JAC at the 3x2 reduced shear points
+      LOGICAL                         :: RED7                    ! Reduced shear with IORD_IJ = 7: shear integrated with 3x2 points
       REAL(DOUBLE)                    :: DUM_DETJ
       REAL(DOUBLE)                    :: DPSHG(3,ELGP)           ! Output from subr SHP3DP. Derivs of PSH wrt elem isopar coords.
       REAL(DOUBLE)                    :: DPSHX(3,ELGP)           ! Derivatives of PSH wrt elem x, y coords.
@@ -1805,12 +1810,12 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
                      GAUSS_PT = GAUSS_PT + 1
                      CALL SHP3DP ( IJ, IJ, K, ELGP, SUBR_NAME, IORD_MSG, IORD_IJ_SH, IORD_K_SH,                                    &
                                    SS_I_SH(IJ), SS_J_SH(IJ), SS_K_SH(K), 'N', PSH, DPSHG )
-                     CALL JAC3D ( SS_I_SH(IJ), SS_J_SH(IJ), SS_K_SH(K), DPSHG, 'N', JAC, JACI, DETJ(GAUSS_PT) )
+                     CALL JAC3D ( SS_I_SH(IJ), SS_J_SH(IJ), SS_K_SH(K), DPSHG, 'N', JAC, JACI, DETJ_SH(GAUSS_PT) )
                      CALL MATMULT_FFF ( JACI, DPSHG, 3, 3, ELGP, DPSHX )
                      CALL B3D_ISOPARAMETRIC ( DPSHX, GAUSS_PT, IJ, IJ, K, 'direct strains', 'Y', BI )
-                     DO L=4,6
-                        DO M=1,3*ELGP
-                           B(L,M,GAUSS_PT) = BI(L,M)
+                     DO L=1,6                                ! Kept apart from B: B and DETJ hold the 7x3 full-rule points.
+                        DO M=1,3*ELGP                        ! Direct rows are needed for direct-shear coupling terms of ES
+                           B_SH(L,M,GAUSS_PT) = BI(L,M)
                         ENDDO
                      ENDDO
                   ENDDO
@@ -1940,6 +1945,7 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
 
          DUM3 = ZERO
 
+         RED7 = ((RED_INT_SHEAR == 'Y') .AND. (IORD_IJ == 7))
          IORD_MSG = ' '
          GAUSS_PT = 0
          DO K=1,IORD_K
@@ -1950,6 +1956,7 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
                      BI(L,M) = B(L,M,GAUSS_PT)
                   ENDDO
                ENDDO
+               IF (RED7) BI(4:6,:) = ZERO                     ! shear and coupling terms: integrated with 3x2 points
                CALL MATMULT_FFF ( ES, BI, 6, 6, 3*ELGP, DUM4 )
                CALL MATMULT_FFF_T ( BI, DUM4, 6, 3*ELGP, 3*ELGP, DUM5 )
                INTFAC = DETJ(GAUSS_PT)*HH_IJ(IJ)*HH_K(K)
@@ -1960,6 +1967,28 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
                ENDDO
             ENDDO
          ENDDO
+
+         IF (RED7) THEN                                       ! Shear and direct-shear coupling energy with the 3x2 points
+            GAUSS_PT = 0
+            DO K=1,IORD_K_SH
+               DO IJ=1,IORD_IJ_SH
+                  GAUSS_PT = GAUSS_PT + 1
+                  BI = B_SH(:,:,GAUSS_PT)
+                  CALL MATMULT_FFF ( ES, BI, 6, 6, 3*ELGP, DUM4 )
+                                                              ! DUM4 rows 4-6: shear stress from all strains
+                                                              ! DUM4 rows 1-3: direct stress from shear strains only (direct-
+                                                              ! direct terms are already in the full integration loop)
+                  DUM4(1:3,:) = MATMUL(ES(1:3,4:6),BI(4:6,:))
+                  CALL MATMULT_FFF_T ( BI, DUM4, 6, 3*ELGP, 3*ELGP, DUM5 )
+                  INTFAC = DETJ_SH(GAUSS_PT)*HH_IJ_SH(IJ)*HH_K_SH(K)
+                  DO L=1,3*ELGP
+                     DO M=1,3*ELGP
+                        DUM3(L,M) = DUM3(L,M) + DUM5(L,M)*INTFAC
+                     ENDDO
+                  ENDDO
+               ENDDO
+            ENDDO
+         ENDIF
 
          DO I=1,3*ELGP
             DO J=1,3*ELGP
