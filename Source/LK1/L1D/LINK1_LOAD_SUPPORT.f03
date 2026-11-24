@@ -453,9 +453,8 @@ k_do: DO K=1,NTERM_MGG
          RSID(I) = ZERO
       ENDDO
 
-      NPDAT = 0                                            ! PDATA accumulates over all S/C's: PPNT(elem,S/C) points into it, so it
-                                                           ! must not be reset per S/C (that made every S/C use the last S/C's
-                                                           ! pressures). LPDAT is sized for all S/C's in LOADB0.
+      NPDAT = 0                                            ! PDATA accumulates over all S/C's since PPNT(elem,S/C) points into it.
+                                                           ! LPDAT is sized for all S/C's in LOADB0.
 isubc:DO I=1,NSUB                                          ! Loop through the S/C's
 
          IF (SUBLOD(I,1) == 0) THEN                        ! If no load for this S/C, CYCLE
@@ -766,8 +765,7 @@ k_do6:            DO K=EID1,EID2
       ENDIF
 
 ! PLOAD2/PLOAD4 pressure on solid elements is not implemented (the G1/G3 form of PLOAD4 is rejected when the card is read).
-! Any other form that reaches a solid (blank G1/G3 fields, THRU range, G1 only for a CPENTA triangular face) would otherwise
-! be accepted and give no load at all, so stop here.
+! Stop here for any other form that reaches a solid (blank G1/G3 fields, THRU range, G1 only for a CPENTA triangular face).
 
       IF ((ETYPE(IELEM)(1:4) == 'HEXA') .OR. (ETYPE(IELEM)(1:5) == 'PENTA') .OR. (ETYPE(IELEM)(1:5) == 'TETRA')) THEN
          WRITE(ERR,1524) NAME(1:6), SETID, EID, ETYPE(IELEM)

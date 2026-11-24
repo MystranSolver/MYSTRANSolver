@@ -75,7 +75,7 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_ORDER_GAUSS, MELDOF, MPLOAD4_3D_DATA, NPLOAD4_3D, NSUB, NTSUB
-      USE CONSTANTS_1, ONLY           :  QUARTER, HALF, ZERO, ONE, TWO
+      USE CONSTANTS_1, ONLY           :  QUARTER, ZERO, ONE, TWO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE PARAMS, ONLY                :  EPSIL
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
@@ -137,8 +137,6 @@
       REAL(DOUBLE)                    :: DETJ_SH(8)             ! Jacobian determinants at the 2x2x2 points
       LOGICAL                         :: RED3                   ! True for IORD = 3 with reduced integration of the shear terms
 
-      REAL(DOUBLE)                    :: CBAR(3,3*ELGP)         ! Derivatives of shape fcns wrt x,y,z used in diff stiff matrix
-!                                                                 (contains terms from DPSHX matrices for each grid of the HEXA)
 
       REAL(DOUBLE)                    :: DETJ(IORD*IORD*IORD)   ! Determinant of JAC for all Gauss points
       REAL(DOUBLE)                    :: DPSHG(3,ELGP)          ! Output from subr SHP3DH. Derivatives of PSH wrt elem isopar coords
@@ -149,7 +147,6 @@
       REAL(DOUBLE)                    :: DUM3(3*ELGP,3*ELGP)    ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM4(6,3*ELGP)         ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM5(3*ELGP,3*ELGP)    ! Intermediate matrix used in solving for KE elem matrices
-      REAL(DOUBLE)                    :: DUM6(3,3*ELGP)         ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM7(ELGP,ELGP)        ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM8(ELGP,ELGP)        ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM9(3,ELGP)           ! Intermediate matrix used in solving for elem matrices
@@ -695,108 +692,47 @@
         SIGyz = STRESS(5)
         SIGzx = STRESS(6)
 
+                                                           ! Initial stress stiffness: see ANSYS manual "Theory Reference for
+                                                           ! the Mechanical APDL and Mechanical Applications" section 3.4.3
+        KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx
+        KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz
+        KWW(3,3) = SIGzz
+        KWW(2,1) = KWW(1,2)
+        KWW(3,1) = KWW(1,3)
+        KWW(3,2) = KWW(2,3)
 
-        IF (.FALSE.) THEN                                  ! Use the full G' S G form (ELSE branch)
-
-          KWW(1,1) = SIGyy + SIGzz   ;   KWW(1,2) = -SIGxy   ;   KWW(1,3) = -SIGzx
-          KWW(2,2) = SIGxx + SIGzz   ;   KWW(2,3) = -SIGyz
-          KWW(3,3) = SIGxx + SIGyy
-          KWW(2,1) = KWW(1,2)
-          KWW(3,1) = KWW(1,3)
-          KWW(3,2) = KWW(2,3)
-
-         DUM3 = ZERO
-
-                                                           ! KED = int( CBAR^T * KWW * CBAR , dV)
-          IORD_MSG = ' '
-          GAUSS_PT = 0
-          DO K=1,IORD
-            DO J=1,IORD
-              DO I=1,IORD
-                GAUSS_PT = GAUSS_PT + 1
-                DO L=1,ELGP
-                  DPSHX(1,L) = B(1,3*(L-1)+1,GAUSS_PT)     ! Collect shape function derivatives at this Gauss point.
-                  DPSHX(2,L) = B(2,3*(L-1)+2,GAUSS_PT)
-                  DPSHX(3,L) = B(3,3*(L-1)+3,GAUSS_PT)
-                  CBAR(1,3*(L-1)+1) =  ZERO            ; CBAR(1,3*(L-1)+2) = -HALF*DPSHX(3,L) ; CBAR(1,3*(L-1)+3)=  HALF*DPSHX(2,L)
-                  CBAR(2,3*(L-1)+1) =  HALF*DPSHX(3,L) ; CBAR(2,3*(L-1)+2) =  ZERO            ; CBAR(2,3*(L-1)+3)= -HALF*DPSHX(1,L)
-                  CBAR(3,3*(L-1)+1) = -HALF*DPSHX(2,L) ; CBAR(3,3*(L-1)+2) =  HALF*DPSHX(1,L) ; CBAR(3,3*(L-1)+3)=  ZERO
-                ENDDO
-                DUM6 = MATMUL(KWW, CBAR)
-                DUM5 = MATMUL(TRANSPOSE(CBAR), DUM6)
-                INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
-                DO L=1,3*ELGP
-                  DO M=1,3*ELGP
-                    DUM3(L,M) = DUM3(L,M) + DUM5(L,M)*INTFAC
-                  ENDDO
-                ENDDO
-              ENDDO
-            ENDDO
-          ENDDO
-
-          DO I=1,3*ELGP
-            DO J=1,3*ELGP
-              KED(ID(I),ID(J)) = DUM3(I,J)
-            ENDDO
-          ENDDO
-
-          DO I=2,6*ELGP                                    ! Set lower triangular portion of KE equal to upper portion
-            DO J=1,I-1
-              KED(I,J) = KED(J,I)
-            ENDDO
-          ENDDO
-
-        ELSE
-
-          ! Alternative method described in ANSYS's manual
-          ! "Theory Reference for the Mechanical APDL and Mechanical Applications"
-          ! section 3.4.3 Stress Stiffening Implementation.
-          ! The results are about the same as the other method so this probably isn't useful.
-
-          KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx
-          KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz
-          KWW(3,3) = SIGzz
-          KWW(2,1) = KWW(1,2)
-          KWW(3,1) = KWW(1,3)
-          KWW(3,2) = KWW(2,3)
-
-         DUM7 = ZERO
+        DUM7 = ZERO
 
                                                            ! KED = int( DPSHX^T * KWW * DPSHX , dV)
-          IORD_MSG = ' '
-          GAUSS_PT = 0
-          DO K=1,IORD
-            DO J=1,IORD
-               DO I=1,IORD
-                  GAUSS_PT = GAUSS_PT + 1
-                  DO L=1,ELGP                              ! Collect shape function derivatives at this Gauss point.
-                    DPSHX(1,L) = B(1,3*(L-1)+1,GAUSS_PT)
-                    DPSHX(2,L) = B(2,3*(L-1)+2,GAUSS_PT)
-                    DPSHX(3,L) = B(3,3*(L-1)+3,GAUSS_PT)
-                  ENDDO
-                  DUM9 = MATMUL(KWW, DPSHX)
-                  DUM8 = MATMUL(TRANSPOSE(DPSHX), DUM9)
-                  INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
-                  DUM7 = DUM7 + DUM8*INTFAC
-               ENDDO
+        IORD_MSG = ' '
+        GAUSS_PT = 0
+        DO K=1,IORD
+          DO J=1,IORD
+            DO I=1,IORD
+              GAUSS_PT = GAUSS_PT + 1
+              DO L=1,ELGP                                  ! Collect shape function derivatives at this Gauss point.
+                DPSHX(1,L) = B(1,3*(L-1)+1,GAUSS_PT)
+                DPSHX(2,L) = B(2,3*(L-1)+2,GAUSS_PT)
+                DPSHX(3,L) = B(3,3*(L-1)+3,GAUSS_PT)
+              ENDDO
+              DUM9 = MATMUL(KWW, DPSHX)
+              DUM8 = MATMUL(TRANSPOSE(DPSHX), DUM9)
+              INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
+              DUM7 = DUM7 + DUM8*INTFAC
             ENDDO
           ENDDO
+        ENDDO
 
                                                            ! Initialize KED to zero
-         KED = ZERO
+        KED = ZERO
                                                            ! Copy submatrix into KED for each DOF.
-          DO I=1,ELGP
-            DO J=1,ELGP
-               KED(ID(3*(I-1)+1),ID(3*(J-1)+1)) = DUM7(I,J)
-               KED(ID(3*(I-1)+2),ID(3*(J-1)+2)) = DUM7(I,J)
-               KED(ID(3*(I-1)+3),ID(3*(J-1)+3)) = DUM7(I,J)
-            ENDDO
+        DO I=1,ELGP
+          DO J=1,ELGP
+            KED(ID(3*(I-1)+1),ID(3*(J-1)+1)) = DUM7(I,J)
+            KED(ID(3*(I-1)+2),ID(3*(J-1)+2)) = DUM7(I,J)
+            KED(ID(3*(I-1)+3),ID(3*(J-1)+3)) = DUM7(I,J)
           ENDDO
-
-
-        ENDIF
-
-
+        ENDDO
 
         IF (DEBUG(178) >= 1) THEN
           WRITE(F06,2001) TRIM(SUBR_NAME), OPT(6), LOAD_ISTEP, TYPE, EID
@@ -1518,7 +1454,7 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_ORDER_TRIA, MAX_ORDER_GAUSS, NTSUB
-      USE CONSTANTS_1, ONLY           :  HALF, THIRD, ZERO
+      USE CONSTANTS_1, ONLY           :  THIRD, ZERO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  ALPVEC, BE1, BE2, DT, EID, ELGP, NUM_EMG_FATAL_ERRS, ES, KE, KED, ME, PTE, RHO,           &
@@ -1554,8 +1490,6 @@
       REAL(DOUBLE)                    :: B(6,3*ELGP,IORD_IJ*IORD_K)
 
       REAL(DOUBLE)                    :: BI(6,3*ELGP)            ! Strain-displ matrix for this element for one Gauss point
-      REAL(DOUBLE)                    :: CBAR(3,3*ELGP)          ! Derivatives of shape fcns wrt x,y,z used in diff stiff matrix
-!                                                                  (contains terms from DPSHX matrices for each grid of the PENTA)
 
       REAL(DOUBLE)                    :: DETJ(IORD_IJ*IORD_K)    ! Determinant of JAC for all Gauss points
       REAL(DOUBLE)                    :: B_SH(6,3*ELGP,6)        ! B at the 3x2 points (reduced shear, IORD_IJ = 7)
@@ -1570,7 +1504,6 @@
       REAL(DOUBLE)                    :: DUM3(3*ELGP,3*ELGP)     ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM4(6,3*ELGP)          ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM5(3*ELGP,3*ELGP)     ! Intermediate matrix used in solving for KE elem matrices
-      REAL(DOUBLE)                    :: DUM6(3,3*ELGP)          ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: EALP(6)                 ! Interm var used in calc PTE therm loads & STEi stress coeffs
 
                                                                  ! Array of all DT values at the grids GRID_DT_ARRAY(i,j) = DT(i,j)
@@ -1813,8 +1746,8 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
                      CALL JAC3D ( SS_I_SH(IJ), SS_J_SH(IJ), SS_K_SH(K), DPSHG, 'N', JAC, JACI, DETJ_SH(GAUSS_PT) )
                      CALL MATMULT_FFF ( JACI, DPSHG, 3, 3, ELGP, DPSHX )
                      CALL B3D_ISOPARAMETRIC ( DPSHX, GAUSS_PT, IJ, IJ, K, 'direct strains', 'Y', BI )
-                     DO L=1,6                                ! Kept apart from B: B and DETJ hold the 7x3 full-rule points.
-                        DO M=1,3*ELGP                        ! Direct rows are needed for direct-shear coupling terms of ES
+                     DO L=1,6                                ! Direct rows are needed for direct-shear coupling terms of ES
+                        DO M=1,3*ELGP
                            B_SH(L,M,GAUSS_PT) = BI(L,M)
                         ENDDO
                      ENDDO
@@ -2021,16 +1954,16 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
         SIGyz = STRESS(5)
         SIGzx = STRESS(6)
 
-        KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx    ! Full initial stress tensor: KED = int(G' S G dV)
-        KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz                      ! for each displacement component (rotation-only
-        KWW(3,3) = SIGzz                                           ! form omega' K omega dropped the strain terms)
+        KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx    ! Initial stress tensor
+        KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz
+        KWW(3,3) = SIGzz
         KWW(2,1) = KWW(1,2)
         KWW(3,1) = KWW(1,3)
         KWW(3,2) = KWW(2,3)
 
         DUM3 = ZERO
 
-                                                           ! KED = int( CBAR^T * KWW * CBAR , dV)
+                                                           ! KED = int( DPSHX^T * KWW * DPSHX , dV) for each displ component
         IORD_MSG = ' '
         GAUSS_PT = 0
         DO K=1,IORD_K
@@ -2040,9 +1973,6 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
               DPSHX(1,L) = B(1,3*(L-1)+1,GAUSS_PT)         ! Collect shape function derivatives at this Gauss point.
               DPSHX(2,L) = B(2,3*(L-1)+2,GAUSS_PT)
               DPSHX(3,L) = B(3,3*(L-1)+3,GAUSS_PT)
-              CBAR(1,3*(L-1)+1) =  ZERO            ; CBAR(1,3*(L-1)+2) = -HALF*DPSHX(3,L) ; CBAR(1,3*(L-1)+3)=  HALF*DPSHX(2,L)
-              CBAR(2,3*(L-1)+1) =  HALF*DPSHX(3,L) ; CBAR(2,3*(L-1)+2) =  ZERO            ; CBAR(2,3*(L-1)+3)= -HALF*DPSHX(1,L)
-              CBAR(3,3*(L-1)+1) = -HALF*DPSHX(2,L) ; CBAR(3,3*(L-1)+2) =  HALF*DPSHX(1,L) ; CBAR(3,3*(L-1)+3)=  ZERO
             ENDDO
             CALL MATMULT_FFF ( KWW, DPSHX, 3, 3, ELGP, DUM9 )
             CALL MATMULT_FFF_T ( DPSHX, DUM9, 3, ELGP, ELGP, DUM8 )
@@ -2133,7 +2063,7 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_ORDER_TETRA, NTSUB
-      USE CONSTANTS_1, ONLY           :  HALF, QUARTER, ZERO
+      USE CONSTANTS_1, ONLY           :  QUARTER, ZERO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  ALPVEC, BE1, BE2, DT, EID, ELGP, NUM_EMG_FATAL_ERRS, ES, KE, KED, ME, PTE, RHO,           &
@@ -2169,8 +2099,6 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
 
       REAL(DOUBLE)                    :: BI(6,3*ELGP)            ! Strain-displ matrix for this element for one Gauss point
 
-      REAL(DOUBLE)                    :: CBAR(3,3*ELGP)          ! Derivatives of shape fcns wrt x,y,z used in diff stiff matrix
-!                                                                  (contains terms from DPSHX matrices for each grid of the HEXA)
 
       REAL(DOUBLE)                    :: DETJ(IORD*IORD*IORD)    ! Determinant of JAC for all Gauss points
       REAL(DOUBLE)                    :: DUM_DETJ
@@ -2182,7 +2110,6 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
       REAL(DOUBLE)                    :: DUM3(3*ELGP,3*ELGP)     ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM4(6,3*ELGP)          ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM5(3*ELGP,3*ELGP)     ! Intermediate matrix used in solving for KE elem matrices
-      REAL(DOUBLE)                    :: DUM6(3,3*ELGP)          ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: EALP(6)                 ! Intermed var used in calc PTE therm lds & STEi therm stress coeff
                                                                  ! Array of all DT values at the grids GRID_DT_ARRAY(i,j) = DT(i,j)
       REAL(DOUBLE)                    :: GRID_DT_ARRAY(ELGP,NTSUB)
@@ -2481,9 +2408,9 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
         SIGyz = STRESS(5)
         SIGzx = STRESS(6)
 
-        KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx    ! Full initial stress tensor: KED = int(G' S G dV)
-        KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz                      ! for each displacement component (rotation-only
-        KWW(3,3) = SIGzz                                           ! form omega' K omega dropped the strain terms)
+        KWW(1,1) = SIGxx   ;   KWW(1,2) = SIGxy   ;   KWW(1,3) = SIGzx    ! Initial stress tensor
+        KWW(2,2) = SIGyy   ;   KWW(2,3) = SIGyz
+        KWW(3,3) = SIGzz
         KWW(2,1) = KWW(1,2)
         KWW(3,1) = KWW(1,3)
         KWW(3,2) = KWW(2,3)
@@ -2494,7 +2421,7 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
           ENDDO
         ENDDO
 
-                                                           ! KED = int( CBAR^T * KWW * CBAR , dV)
+                                                           ! KED = int( DPSHX^T * KWW * DPSHX , dV) for each displ component
         IORD_MSG = ' '
         GAUSS_PT = 0
         DO I=1,IORD
@@ -2503,9 +2430,6 @@ opt234:IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(4) == 'Y') .OR. (OPT(6
             DPSHX(1,L) = B(1,3*(L-1)+1,GAUSS_PT)           ! Collect shape function derivatives at this Gauss point.
             DPSHX(2,L) = B(2,3*(L-1)+2,GAUSS_PT)
             DPSHX(3,L) = B(3,3*(L-1)+3,GAUSS_PT)
-            CBAR(1,3*(L-1)+1) =  ZERO             ;  CBAR(1,3*(L-1)+2) = -HALF*DPSHX(3,L)  ;  CBAR(1,3*(L-1)+3)=  HALF*DPSHX(2,L)
-            CBAR(2,3*(L-1)+1) =  HALF*DPSHX(3,L)  ;  CBAR(2,3*(L-1)+2) =  ZERO             ;  CBAR(2,3*(L-1)+3)= -HALF*DPSHX(1,L)
-            CBAR(3,3*(L-1)+1) = -HALF*DPSHX(2,L)  ;  CBAR(3,3*(L-1)+2) =  HALF*DPSHX(1,L)  ;  CBAR(3,3*(L-1)+3)=  ZERO
           ENDDO
           CALL MATMULT_FFF ( KWW, DPSHX, 3, 3, ELGP, DUM9 )
           CALL MATMULT_FFF_T ( DPSHX, DUM9, 3, ELGP, ELGP, DUM8 )

@@ -74,7 +74,6 @@
       INTEGER(LONG)                   :: I1                ! Intermediate variable resulting from an IAND operation
       INTEGER(LONG)                   :: ICID_G            ! Internal coord sys ID corresponding to actual coord sys ACID_G
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
-      INTEGER(LONG)                   :: JDOF              ! Array index used in getting mass terms from the elem mass matrix, ME
       INTEGER(LONG)                   :: GRID_NUM          ! An actual grid ID
       INTEGER(LONG)                   :: GRID_ID_ROW_NUM   ! Row number in array GRID_ID where an actual grid ID is found
       INTEGER(LONG)                   :: INFO        = 0   ! An output from subr GPWG_PMOI, called herein
@@ -107,8 +106,8 @@
       REAL(DOUBLE)                    :: XB(3)             ! Basic coord diffs bet c.g. and XREF in X, Y, Z directions
       REAL(DOUBLE)                    :: XD(3)             ! Basic coord diffs bet a mass (at it's c.m.) and XREF in X, Y, Z dirs
       REAL(DOUBLE)                    :: XDE(3,MELGP)      ! XD for each grid of the current element
-      REAL(DOUBLE)                    :: MJK               ! Translational mass coupling term ME(JDOF,KDOF) of an element
-      INTEGER(LONG)                   :: JDOFE(MELGP)      ! JDOF (1st translational DOF in ME) for each grid of the element
+      REAL(DOUBLE)                    :: MJK               ! Translational mass term of ME for a pair of element grids
+      INTEGER(LONG)                   :: JDOFE(MELGP)      ! 1st translational DOF in ME for each grid of the element
       INTEGER(LONG)                   :: K2                ! DO loop index over the grids of an element
       REAL(DOUBLE)                    :: XREF(3)           ! GRDPNT basic coords (or origin of basic sys if GRDPNT doesn't exist)
       REAL(DOUBLE)                    :: X2                ! XD(1)*XD(1)
@@ -246,11 +245,8 @@ k_do111:                         DO K=1,NCORD
                      XDE(3,J) = RGRID(BGRID(J),3) + BASIC_OFF(3) - XREF(3)
 
                   ENDDO elgp_do
-                                                           ! Rigid body mass D'*ME*D using all translational terms of ME, not
-                                                           ! just the diagonal: element (e.g. solid) consistent mass matrices
-                                                           ! couple the grids. Assumes ME(JDOF,KDOF) is the same for x, y and z
-                                                           ! (true for the lumped and the solid consistent mass matrices). For a
-                                                           ! diagonal ME this is the same as summing M0 = ME(JDOF,JDOF) at grid J.
+                                                           ! Rigid body mass D'*ME*D from the translational terms of ME. Assumes
+                                                           ! the terms for a pair of grids are the same for x, y and z
                   DO J=1,ELGP
                      DO K2=1,ELGP
                         MJK   = ME(JDOFE(J),JDOFE(K2))

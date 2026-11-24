@@ -801,7 +801,7 @@
          KED( 3,11) = -KED( 2, 6)
 
          IF (AREA > ZERO) THEN                             ! Fx = 0 if AREA = 0, so the term is zero
-            KED( 4, 4) =  (I1 + I2)*Fx/(AREA*L)            ! Polar moment of area, not torsional constant
+            KED( 4, 4) =  (I1 + I2)*Fx/(AREA*L)            ! Polar moment of area
          ENDIF
          KED( 4, 5) = -V1*L/SIX + M1a/TWO
          KED( 4, 6) = -V2*L/SIX + M2a/TWO
@@ -1390,7 +1390,7 @@
          KED( 3,11) = -KED( 2, 6)
 
          IF (AREA > ZERO) THEN                             ! Fx = 0 if AREA = 0, so the term is zero
-            KED( 4, 4) =  (I1 + I2)*Fx/(AREA*L)            ! Polar moment of area, not torsional constant
+            KED( 4, 4) =  (I1 + I2)*Fx/(AREA*L)            ! Polar moment of area
          ENDIF
          KED( 4, 5) = -V1*L/SIX + M1a/TWO
          KED( 4, 6) = -V2*L/SIX + M2a/TWO
