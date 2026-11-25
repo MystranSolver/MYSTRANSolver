@@ -843,7 +843,10 @@ vec:  IF (JCARD(9)(1:) == ' ') THEN                        ! CID field is blank 
 
             IF      (OCID == -1) THEN                      ! Get components of BUSHOFF
                CALL R8FLD ( JCARD(2), JF(2), R8INP )
-               IF (IERRFL(1) == 'N') THEN
+               IF (JCARD(2)(1:) == ' ') THEN               ! Blank S means the default S = 0.5 (R8FLD returns zero for a blank)
+                  R8INP = HALF
+               ENDIF
+               IF (IERRFL(2) == 'N') THEN
                   NBUSHOFF = NBUSHOFF + 1
                   EDAT(NEDAT_START+9) = NBUSHOFF           ! Slot 9 in EDAT is for the offset key
                   BUSHOFF(NBUSHOFF,1) = R8INP
@@ -866,8 +869,7 @@ vec:  IF (JCARD(9)(1:) == ' ') THEN                        ! CID field is blank 
 
          ELSE
 
-            EDAT(NEDAT_START+8) = -1                       ! Con't entry was blank so default OCID and null offset flag
-            EDAT(NEDAT_START+7) =  0
+            EDAT(NEDAT_START+8) = -1                       ! Con't entry was blank so default OCID (slot 7, the CID, is kept)
 
             NBUSHOFF = NBUSHOFF + 1
             EDAT(NEDAT_START+9) = NBUSHOFF                 ! Slot 9 in EDAT is for the offset key
