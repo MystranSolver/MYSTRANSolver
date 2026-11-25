@@ -671,7 +671,7 @@ bdf:  DO
             CALL BD_PELAS   ( CARD )
 
          ELSE IF (CARD(1:6) == 'PLOAD4'  )  THEN
-            CALL BD_PLOAD4  ( CARD, CC_LOAD_FND )
+            CALL BD_PLOAD4  ( CARD, LARGE_FLD_INP, CC_LOAD_FND )
 
          ELSE IF (CARD(1:6) == 'PLOAD2'  )  THEN
             CALL BD_PLOAD2  ( CARD, CC_LOAD_FND )

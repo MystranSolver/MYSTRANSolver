@@ -838,7 +838,7 @@
       END SUBROUTINE BD_PLOAD2
 
 
-      SUBROUTINE BD_PLOAD4 ( CARD, CC_LOAD_FND )
+      SUBROUTINE BD_PLOAD4 ( CARD, LARGE_FLD_INP, CC_LOAD_FND )
 
 ! Processes PLOAD4 Bulk Data Cards. Reads and checks data and then writes CARD to file LINK1Q for later processing
 
@@ -849,14 +849,20 @@
       USE TIMDAT, ONLY                :  TSEC
       USE MODEL_STUF, ONLY            :  PRESS_SIDS, SUBLOD
 
-      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD
+      USE BDF_CARD_CONTINUATIONS, ONLY:  MKJCARD, NEXTC, NEXTC2
       USE BDF_FIELD_VALIDATION, ONLY  :  BD_IMBEDDED_BLANK, CRDERR, I4FLD, LEFT_ADJ_BDFLD, R8FLD
       USE TEXT_FIELD_UTILS, ONLY      :  CARD_FLDS_NOT_BLANK
 
       IMPLICIT NONE
 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'BD_PLOAD4'
-      CHARACTER(LEN=*),INTENT(IN)     :: CARD               ! A Bulk Data card
+      CHARACTER(LEN=*),INTENT(INOUT)  :: CARD               ! A Bulk Data card
+      CHARACTER(LEN=*),INTENT(IN)     :: LARGE_FLD_INP      ! If 'Y', CARD is large field format
+      CHARACTER(LEN(CARD))            :: PARENT             ! Copy of the parent card (written to L1Q)
+      CHARACTER(LEN(CARD))            :: CHILD              ! Continuation card read in subr NEXTC2
+      CHARACTER(LEN=JCARD_LEN)        :: JCONT(10)          ! Fields of the optional continuation (CID, N1, N2, N3, ...)
+      INTEGER(LONG)                   :: ICONT              ! Indicator of whether a cont card exists. Output from subr NEXTC
+      INTEGER(LONG)                   :: IERRC              ! Error indicator returned from subr NEXTC
       CHARACTER( 1*BYTE),INTENT(INOUT):: CC_LOAD_FND(LSUB,2)! 'Y' if B.D load/temp card w/ same set ID (SID) as C.C. LOAD = SID
       CHARACTER(LEN=JCARD_LEN)        :: JCARD(10)          ! The 10 fields of characters making up CARD
 
@@ -999,10 +1005,35 @@
       ENDIF
       CALL CRDERR ( CARD )                                 ! CRDERR prints errors found when reading fields
 
+! Optional continuation: CID, N1, N2, N3 (direction of the pressure) and, in newer Nastran versions, SORL, LDIR.
+! MYSTRAN applies PLOAD4 pressure normal to the face only. A direction on the continuation was silently ignored, so the
+! load went in the wrong direction; it is now an error. SORL = SURF and LDIR = NORM (the defaults) are accepted.
+
+      PARENT = CARD
+      IF (LARGE_FLD_INP == 'N') THEN
+         CALL NEXTC  ( CARD, ICONT, IERRC )
+      ELSE
+         CALL NEXTC2 ( CARD, ICONT, IERRC, CHILD )
+         CARD = CHILD
+      ENDIF
+      IF (ICONT == 1) THEN
+         CALL MKJCARD ( SUBR_NAME, CARD, JCONT )
+         CALL LEFT_ADJ_BDFLD ( JCONT(6) )
+         CALL LEFT_ADJ_BDFLD ( JCONT(7) )
+         IF ((JCONT(2)(1:) /= ' ') .OR. (JCONT(3)(1:) /= ' ') .OR. (JCONT(4)(1:) /= ' ') .OR. (JCONT(5)(1:) /= ' ') .OR.  &
+             ((JCONT(6)(1:) /= ' ') .AND. (JCONT(6)(1:4) /= 'SURF')) .OR.                                                   &
+             ((JCONT(7)(1:) /= ' ') .AND. (JCONT(7)(1:4) /= 'NORM'))) THEN
+            JERR = JERR + 1
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,1204) JCARD(1), JCARD(3)
+            WRITE(F06,1204) JCARD(1), JCARD(3)
+         ENDIF
+      ENDIF
+
 ! Write data to file L1Q
 
       IF (JERR == 0) THEN
-         WRITE(L1Q) CARD
+         WRITE(L1Q) PARENT
       ENDIF
 
       NPCARD = NPCARD + 1
@@ -1022,6 +1053,9 @@
                     ,/,14X,' TOO MANY ',A,' ENTRIES; LIMIT = ',I12)
 
  1198 FORMAT(' *ERROR  1198: FIELD ',I2,' ON ',A,A,' CANNOT BE BLANK')
+
+ 1204 FORMAT(' *ERROR  1204: ON ',A,' ELEMENT ',A,' THE CONTINUATION GIVES A LOAD DIRECTION (CID, N1-N3, SORL, LDIR).'          &
+                    ,/,14X,' THIS IS NOT SUPPORTED: MYSTRAN APPLIES PLOAD4 PRESSURE NORMAL TO THE FACE ONLY')
 
 ! **********************************************************************************************************************************
 

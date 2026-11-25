@@ -554,12 +554,13 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, INT_SC_NUM, JTSUB, NCORD, NGRID, WARN_ERR
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, INT_SC_NUM, JTSUB, MELDOF, NCORD, NGRID, WARN_ERR
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE DEBUG_PARAMETERS
       USE MODEL_STUF, ONLY            :  AGRID, BGRID, CORD, EID, ELAS_COMP, ELDOF, ELGP, GRID, KE, KEG, KEO_BUSH,                &
-                                         PEB, PE_GA_GB, PEG, PEL, PTE, RCORD, SCNUM, SUBLOD, TYPE, UEB, UEG, UEL, TE, TE_GA_GB
+                                         PEB, PE_GA_GB, PEG, PEL, PTE, RCORD, SCNUM, SUBLOD, TYPE, UEB, UEG, UEL, TE, TE_GA_GB,    &
+                                         CAN_ELEM_TYPE_OFFSET, OFFSET, OFFDIS
       USE ELEMENT_TRANSFORMATIONS, ONLY:  ELEM_TRANSFORM_LBG
 
       USE DOF_ARRAY_INDEXING, ONLY    :  GET_GRID_NUM_COMPS
@@ -581,6 +582,7 @@
       INTEGER(LONG)                   :: NUM_COMPS_GRID_1  ! No. displ components for 1st grid on ELAS elems
 
 
+      REAL(DOUBLE)                    :: UEL_KE(MELDOF)    ! Element displacements consistent with KE (at the grids for plates)
       REAL(DOUBLE)                    :: DUM1(3),DUM2(3)   ! Intermediate variables
       REAL(DOUBLE)                    :: PHID, THETAD      ! Outputs from subr GEN_T0L
       REAL(DOUBLE)                    :: T0G(3,3)          ! Matrix to transform offsets from global to basic  coords
@@ -712,6 +714,21 @@
          CALL MATMULT_FFF_T ( TR, PEB, 12, 12, 1, PE_GA_GB )
 
       ELSE                                                 ! Calculate forces for any other type of elem
+         DO J=1,NCOLS
+            UEL_KE(J) = UEL(J)
+         ENDDO
+         IF ((TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'QUAD4')) THEN
+            IF (CAN_ELEM_TYPE_OFFSET == 'Y') THEN          ! For offset plates, KE (and PTE) from EMG were already moved to the
+               DO I=1,ELGP                                 ! grids by ELMOFF, but UEL is at the offset nodes (for stress
+                  IF (OFFSET(I) == 'Y') THEN               ! recovery). Use the grid displacements here: u_grid = u_off - theta x d
+                     K = 6*(I-1)
+                     UEL_KE(K+1) = UEL(K+1) - OFFDIS(I,3)*UEL(K+5) + OFFDIS(I,2)*UEL(K+6)
+                     UEL_KE(K+2) = UEL(K+2) + OFFDIS(I,3)*UEL(K+4) - OFFDIS(I,1)*UEL(K+6)
+                     UEL_KE(K+3) = UEL(K+3) - OFFDIS(I,2)*UEL(K+4) + OFFDIS(I,1)*UEL(K+5)
+                  ENDIF
+               ENDDO
+            ENDIF
+         ENDIF
 
          DO I=1,NROWS
 
@@ -720,7 +737,7 @@
             ENDIF
 
             DO J=1,NCOLS
-               PEL(I) = PEL(I) + KE(I,J)*UEL(J)
+               PEL(I) = PEL(I) + KE(I,J)*UEL_KE(J)
             ENDDO
          ENDDO
 

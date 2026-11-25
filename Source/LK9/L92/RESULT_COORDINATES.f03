@@ -79,6 +79,7 @@
       INTEGER(LONG)                   :: TDOF_ROW          ! Row no. in array TDOF to find GDOF DOF number
 
 
+      REAL(DOUBLE)                    :: U_OFF(3)          ! Offset translations of one node (plate offsets)
       REAL(DOUBLE)                    :: DXI               ! An offset distance in direction 1
       REAL(DOUBLE)                    :: DYI               ! An offset distance in direction 2
       REAL(DOUBLE)                    :: DZI               ! An offset distance in direction 3
@@ -138,7 +139,10 @@
                UEG(I2) = UGG(I2)
             ENDDO
             IF (CAN_ELEM_TYPE_OFFSET == 'Y') THEN
-               IF (TYPE /= 'BUSH    ') THEN                !     BUSH local axes are et the grids, not at the BUSH location
+               IF ((TYPE /= 'BUSH    ') .AND. (TYPE(1:5) /= 'TRIA3') .AND. (TYPE(1:5) /= 'QUAD4')) THEN
+                                                           !     BUSH local axes are et the grids, not at the BUSH location.
+                                                           !     TRIA3/QUAD4 offsets (ZOFFS) are along the element normal, in
+                                                           !     local element coords: they are applied in step (4) below
                   IF (OFFSET(I) == 'Y') THEN               !     Elem is offset at this node so transform UGG to UEG
                      DXI = OFFDIS(I,1)
                      DYI = OFFDIS(I,2)
@@ -204,6 +208,25 @@
             UEL(I1+1) = TE(2,1)*UEB(I1)+ TE(2,2)*UEB(I1+1)+ TE(2,3)*UEB(I1+2)
             UEL(I1+2) = TE(3,1)*UEB(I1)+ TE(3,2)*UEB(I1+1)+ TE(3,3)*UEB(I1+2)
          ENDDO
+
+         IF ((TYPE(1:5) == 'TRIA3') .OR. (TYPE(1:5) == 'QUAD4')) THEN
+            IF (CAN_ELEM_TYPE_OFFSET == 'Y') THEN          ! (4) Plate offsets: OFFDIS is in local element coords (ZOFFS along
+               DO I=1,ELGP                                 !     the element normal), so offset UEL in local coords
+                  IF (OFFSET(I) == 'Y') THEN
+                     DXI = OFFDIS(I,1)
+                     DYI = OFFDIS(I,2)
+                     DZI = OFFDIS(I,3)
+                     PROW = 6*(I-1) + 1
+                     U_OFF(1) = UEL(PROW)   + DZI*UEL(PROW+4) - DYI*UEL(PROW+5)
+                     U_OFF(2) = UEL(PROW+1) - DZI*UEL(PROW+3) + DXI*UEL(PROW+5)
+                     U_OFF(3) = UEL(PROW+2) + DYI*UEL(PROW+3) - DXI*UEL(PROW+4)
+                     UEL(PROW)   = U_OFF(1)
+                     UEL(PROW+1) = U_OFF(2)
+                     UEL(PROW+2) = U_OFF(3)
+                  ENDIF
+               ENDDO
+            ENDIF
+         ENDIF
 
          IF (DEBUG(56) > 0) THEN
             WRITE(F06,5104)

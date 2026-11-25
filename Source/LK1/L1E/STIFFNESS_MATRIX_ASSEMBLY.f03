@@ -1493,6 +1493,7 @@ stfpnt0:          DO                                       ! so, run this loop u
       REAL(DOUBLE)                    :: K33(3,3)           ! Partition of the 6x6 stiff matrix for rotation    DOF's for a grid
       REAL(DOUBLE)                    :: K33_LAMBDAS(3)     ! Eigenvalues  of K33_ROT
       REAL(DOUBLE)                    :: K33_LAMBDA_MAX     ! Max value from  K33_ROT K33_LAMBDAS(i)
+      REAL(DOUBLE)                    :: K33_DIAG_MAX       ! Max abs diagonal term of K33 (scale for constrained comps)
       REAL(DOUBLE)                    :: K33_VECS(3,3)      ! Eigenvectors of K33_ROT
       REAL(DOUBLE)                    :: K33_VEC_MAX        ! Max value from one eigenvector (column) of K33_VECS
 
@@ -1533,6 +1534,23 @@ comps6:  DO K=1,2                                          ! K=1 is for translat
                   J2 = J + 3*(K - 1)
                   K33(I,J) = KGRD(I2,J2)
                ENDDO
+            ENDDO
+                                                           ! Components already removed by the user (S-set) or by MPC's (M-set)
+            K33_DIAG_MAX = ZERO                            ! are taken out of the singularity test, which is made on the
+            DO I=1,3                                       ! partition of the remaining components only. Otherwise a singular
+               K33_DIAG_MAX = MAX( K33_DIAG_MAX, DABS(K33(I,I)) )   ! direction that is already constrained (e.g. an inclined rod
+            ENDDO                                          ! whose grid has an SPC on one component) leads to AUTOSPC'ing a
+            IF (K33_DIAG_MAX <= EPS1) K33_DIAG_MAX = ONE   ! free component that has stiffness, losing that load path.
+            DO I=1,3
+               I2 = I + 3*(K - 1)
+               IDOF = ROW_NUM_START + I2 - 1
+               IF ((TDOF(IDOF,M_SET_COL) /= 0) .OR. (TDOF(IDOF,S_SET_COL) /= 0)) THEN
+                  DO J=1,3
+                     K33(I,J) = ZERO
+                     K33(J,I) = ZERO
+                  ENDDO
+                  K33(I,I) = K33_DIAG_MAX                  ! Decoupled, nonsingular placeholder for the constrained component
+               ENDIF
             ENDDO
                                                            ! Get the 3 eigenvalues and eigenvectors of K33
             CALL K33_EIGENS ( K33, K33_LAMBDAS, K33_VECS, INFO )
