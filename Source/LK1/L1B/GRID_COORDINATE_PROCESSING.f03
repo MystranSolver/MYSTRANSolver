@@ -1716,7 +1716,8 @@ big_loop:   DO J=1,NCORD                                   ! Find a CORD1 with a
       USE CONSTANTS_1, ONLY           :  CONV_DEG_RAD
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06, L1B, OP2, SC1
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, DATA_NAM_LEN, FATAL_ERR, MCORD, MRCORD, MGRID, MRGRID, NCORD, NGRID
-      USE PARAMS, ONLY                :  PRTBASIC
+      USE SCONTR, ONLY                :  LDOFG, NSPOINT
+      USE PARAMS, ONLY                :  PRTBASIC, SUPINFO
       USE TIMDAT, ONLY                :  TSEC
       USE MODEL_STUF, ONLY            :  GRID, RGRID, GRID_ID, GRID_SEQ, CORD, RCORD, TN
 
@@ -1752,6 +1753,14 @@ big_loop:   DO J=1,NCORD                                   ! Find a CORD1 with a
 
 ! **********************************************************************************************************************************
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages
+
+! Part 0:
+! -------
+
+! A scalar point may be listed on more than one SPOINT entry (or twice on one): it is one scalar point. Keep its first listing and
+! drop the others, before the check for duplicate grid IDs below (a GRID and an SPOINT with the same ID remain a duplicate).
+
+      CALL MERGE_REPEATED_SPOINTS
 
 ! Part 1:
 ! -------
@@ -2003,6 +2012,76 @@ grid_do: DO I=1,NGRID
 12345 FORMAT(A, A)
 
 ! **********************************************************************************************************************************
+
+      CONTAINS
+
+! ##################################################################################################################################
+
+      SUBROUTINE MERGE_REPEATED_SPOINTS
+
+! Drops the repeated listings of a scalar point (GRID(I,6) == 1), keeping the first, and compacts GRID and RGRID. GRID and RGRID
+! are then reallocated with the new NGRID rows and LGRID (their row count, saved for the later links) set to NGRID: routines take
+! them as explicit-shape arrays of NGRID rows (SORT_GRID_RGRID below), which needs the allocated row count to be NGRID.
+
+      USE SCONTR, ONLY                :  LGRID
+
+      INTEGER(LONG)                   :: K, L, NSP
+      INTEGER(LONG), ALLOCATABLE      :: SP_ID(:), SP_ROW(:), GRID_NEW(:,:)
+      LOGICAL      , ALLOCATABLE      :: DROP(:)
+      REAL(DOUBLE) , ALLOCATABLE      :: RGRID_NEW(:,:)
+
+      NSP = COUNT(GRID(1:NGRID,6) == 1)
+      IF (NSP < 2) RETURN
+      ALLOCATE ( SP_ID(NSP), SP_ROW(NSP), DROP(NGRID) )
+      L = 0
+      DO K=1,NGRID
+         IF (GRID(K,6) /= 1) CYCLE
+         L = L + 1
+         SP_ID(L)  = GRID(K,1)
+         SP_ROW(L) = K
+      ENDDO
+      CALL SORT_INT2 ( SUBR_NAME, 'SPOINT IDS, ROWS', NSP, SP_ID, SP_ROW )
+      DROP = .FALSE.
+      L = 1                                                ! Start of the current run of equal IDs
+      DO K=2,NSP+1
+         IF (K <= NSP) THEN
+            IF (SP_ID(K) == SP_ID(L)) CYCLE
+         ENDIF
+         IF (K - L > 1) THEN                               ! SP_ID(L:K-1) are one scalar point: keep the earliest listing
+            DROP(SP_ROW(L:K-1)) = .TRUE.
+            DROP(MINVAL(SP_ROW(L:K-1))) = .FALSE.
+         ENDIF
+         L = K
+      ENDDO
+      L = 0
+      DO K=1,NGRID
+         IF (DROP(K)) CYCLE
+         L = L + 1
+         IF (L /= K) THEN
+            GRID(L,:)  = GRID(K,:)
+            RGRID(L,:) = RGRID(K,:)
+         ENDIF
+      ENDDO
+      IF (L < NGRID) THEN
+         WRITE(ERR,1347) NGRID - L
+         IF (SUPINFO == 'N') WRITE(F06,1347) NGRID - L
+      ENDIF
+      LDOFG   = LDOFG   - (NGRID - L)                     ! Counted per listing while the Bulk Data was read (1 DOF each)
+      NSPOINT = NSPOINT - (NGRID - L)
+      NGRID = L
+      IF (SIZE(GRID,1) /= NGRID) THEN
+         ALLOCATE ( GRID_NEW(NGRID,SIZE(GRID,2)), RGRID_NEW(NGRID,SIZE(RGRID,2)) )
+         GRID_NEW  = GRID(1:NGRID,:)
+         RGRID_NEW = RGRID(1:NGRID,:)
+         CALL MOVE_ALLOC ( GRID_NEW, GRID )
+         CALL MOVE_ALLOC ( RGRID_NEW, RGRID )
+         LGRID = NGRID
+      ENDIF
+      DEALLOCATE ( SP_ID, SP_ROW, DROP )
+
+ 1347 FORMAT(' *INFORMATION: ',I8,' REPEATED SPOINT LISTINGS WERE MERGED (A SCALAR POINT LISTED MORE THAN ONCE IS ONE POINT)')
+
+      END SUBROUTINE MERGE_REPEATED_SPOINTS
 
       END SUBROUTINE GRID_PROC
 
