@@ -313,8 +313,11 @@ j_do_22: DO IRFORCE = 1,NRFORCE                            ! Process RFORCE card
                   SCALE = RSID(K)
                   FOUND = 'Y'
                                                            ! Ang accel and vel of model
-                  ANG_ACC = 2*PI*SCALE*SCALEF_AAS(IRFORCE)*VECS_BASIC(:,IRFORCE)
-                  ANG_VEL = 2*PI*SCALE*SCALEF_AVS(IRFORCE)*VECS_BASIC(:,IRFORCE)
+                  ANG_ACC = 2*PI*SCALEF_AAS(IRFORCE)*VECS_BASIC(:,IRFORCE)
+                  ANG_VEL = 2*PI*SCALEF_AVS(IRFORCE)*VECS_BASIC(:,IRFORCE)
+                                                           ! The LOAD scale factor scales the load (linear), so it is applied
+                                                           ! to the acceleration below, not to the angular velocity (which
+                                                           ! would scale the centrifugal load by SCALE**2)
                   EXIT
                ENDIF
             ENDDO
@@ -339,8 +342,8 @@ j_do_22: DO IRFORCE = 1,NRFORCE                            ! Process RFORCE card
 
                ! DUM2 is centripetal acceleration which is already consistent with F=-MA.
 
-               ACCEL_I_T1 = DUM2 - DUM3
-               ACCEL_I_R1 = -ANG_ACC
+               ACCEL_I_T1 = SCALE*(DUM2 - DUM3)
+               ACCEL_I_R1 = -SCALE*ANG_ACC
 
                ACID_G = GRID(IGRID,3)                      ! The global coord sys for this grid is ACID_G
                IF (ACID_G /= 0) THEN                       ! ACID_G is not basic so transform coords to global
