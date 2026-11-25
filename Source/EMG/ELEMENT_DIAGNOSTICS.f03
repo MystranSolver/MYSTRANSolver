@@ -45,7 +45,7 @@
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_STRESS_POINTS, NSUB, NTSUB
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
-      USE MODEL_STUF, ONLY            :  CAN_ELEM_TYPE_OFFSET, ELGP, EID, KE, ME, NUM_EMG_FATAL_ERRS,                &
+      USE MODEL_STUF, ONLY            :  CAN_ELEM_TYPE_OFFSET, ELGP, EID, KE, KED, ME, NUM_EMG_FATAL_ERRS,           &
                                          OFFDIS, OFFSET, PPE, PTE, SE1, SE2, SE3, TYPE
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
 
@@ -179,6 +179,16 @@
          DUM_KE = MATMUL(KE1,E)
          KE1 = MATMUL(TRANSPOSE(E),DUM_KE)
          KE(:6*ELGP, :6*ELGP) = KE1
+      ENDIF
+
+! Apply offset to the differential stiffness matrix KED (SOL 105) in the same way as KE. Without this an offset element's
+! geometric stiffness acts at the grid instead of at the offset element (CBAR WA/WB, shell ZOFFS).
+
+      IF (OPT(6) == 'Y') THEN
+         KE1 = KED(:6*ELGP, :6*ELGP)
+         DUM_KE = MATMUL(KE1,E)
+         KE1 = MATMUL(TRANSPOSE(E),DUM_KE)
+         KED(:6*ELGP, :6*ELGP) = KE1
       ENDIF
 
 ! Process offsets
